@@ -149,10 +149,14 @@ class LinuxDesktop{
     if(!entry.implicit){let active=null;try{active=await this.active();}catch{}if(!active||active.id!==entry.id)throw new Error('Focus changed immediately before paste. No keys were sent.');}
     if(generation!==this.cancelled)throw new Error('Paste canceled.');
     const backend=this.keyBackend();
-    if(backend==='xdotool')await this.run('xdotool',['key','--clearmodifiers','ctrl+v']);
-    else if(backend==='wtype')await this.run('wtype',['-M','ctrl','v','-m','ctrl']);
-    else if(backend==='ydotool')await this.run('ydotool',['key',`${KEY_CTRL}:1`,`${KEY_V}:1`,`${KEY_V}:0`,`${KEY_CTRL}:0`]);
-    else throw new Error('Automatic paste needs xdotool (X11), wtype or ydotool (Wayland). The item was copied; paste it manually.');
+    if(!backend)throw new Error('Automatic paste needs xdotool (X11), wtype or ydotool (Wayland). The item was copied; paste it manually.');
+    try{
+      if(backend==='xdotool')await this.run('xdotool',['key','--clearmodifiers','ctrl+v']);
+      else if(backend==='wtype')await this.run('wtype',['-M','ctrl','v','-m','ctrl']);
+      else await this.run('ydotool',['key',`${KEY_CTRL}:1`,`${KEY_V}:1`,`${KEY_V}:0`,`${KEY_CTRL}:0`]);
+    }catch{
+      throw new Error(backend==='ydotool'?'Automatic paste needs the ydotool service (systemctl --user enable --now ydotool). The item was copied; paste it manually.':`${backend} could not send paste. The item was copied; paste it manually.`);
+    }
     return{ok:true,mode:'Paste'};
   }
   cancel(){this.cancelled++;}

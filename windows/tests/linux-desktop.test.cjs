@@ -126,3 +126,17 @@ test('KDE Wayland reads and activates windows through one-shot KWin scripts repo
   assert.ok(calls.some(call=>call[0]==='gdbus'&&call.includes('/Scripting/Script7')));
   active='{b2}';await assert.rejects(value.paste(target),/No keys were sent/);
 });
+
+test('a Wayland watcher that exits (GNOME, no data-control) keeps the sequence alive by polling',async()=>{
+  const {EventEmitter}=require('node:events');const data={'text/plain':'a'},{value}=clipboard('wayland',data);
+  const child=Object.assign(new EventEmitter(),{stdout:new EventEmitter(),kill(){}});
+  const watcher=new ClipboardWatcher(value,{interval:5,spawner:()=>child}).start();
+  child.stdout.emit('data',Buffer.from('changed\n'));assert.equal(watcher.read(),2);
+  child.emit('exit',1);await new Promise(resolve=>setTimeout(resolve,30));data['text/plain']='b';await new Promise(resolve=>setTimeout(resolve,30));watcher.kill();
+  assert.equal(watcher.read(),3);
+});
+
+test('a failed ydotool paste explains how to enable the service',async()=>{
+  const {value}=desktop({WAYLAND_DISPLAY:'w',XDG_CURRENT_DESKTOP:'GNOME'},['ydotool'],key=>key.startsWith('ydotool')?new Error('socket'):'');
+  await assert.rejects(value.paste(await value.capture()),/systemctl --user enable --now ydotool/);
+});

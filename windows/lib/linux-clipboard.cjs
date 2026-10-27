@@ -22,16 +22,15 @@ function backend({environment=process.env,find=name=>which(name,{environment})}=
   if(environment.DISPLAY&&find('xclip'))return'x11';
   return null;
 }
-function run(file,args,{input,maximum=MAXIMUM_BYTES,timeout=5000,detached=false,spawner=spawn}={}){
+function run(file,args,{input,maximum=MAXIMUM_BYTES,timeout=5000}={}){
   return new Promise((resolve,reject)=>{
-    const child=spawner(file,args,{stdio:['pipe','pipe','ignore'],detached});
+    const child=spawn(file,args,{stdio:['pipe','pipe','ignore']});
     const chunks=[];let size=0,failure=null;
     const timer=setTimeout(()=>{failure=new Error('Clipboard helper timed out.');child.kill();},timeout);
     child.stdout.on('data',chunk=>{size+=chunk.length;if(size>maximum){failure=new Error('Clipboard content exceeds the safe size.');child.kill();return;}chunks.push(chunk);});
     child.on('error',error=>{clearTimeout(timer);reject(failure||error);});
     child.on('close',code=>{clearTimeout(timer);if(failure)return reject(failure);if(code!==0)return reject(Object.assign(new Error('Clipboard helper failed.'),{exitCode:code}));resolve(Buffer.concat(chunks));});
     child.stdin.on('error',()=>{});child.stdin.end(input??'');
-    if(detached)child.unref?.();
   });
 }
 function blob(bytes,type){return{type,size:bytes.length,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.length)};}
@@ -91,21 +90,21 @@ class LinuxClipboard{
 // data-control compositors (KDE, wlroots). Other sessions use bounded polling
 // of the native type list and payload digest.
 class ClipboardWatcher{
-  constructor(clipboard,{changed=()=>{},failed=()=>{},interval=750,spawner=spawn}={}){
-    this.clipboard=clipboard;this.changed=changed;this.failed=failed;this.interval=interval;this.spawner=spawner;
+  constructor(clipboard,{changed=()=>{},interval=750,spawner=spawn}={}){
+    this.clipboard=clipboard;this.changed=changed;this.interval=interval;this.spawner=spawner;
     this.sequence=1;this.child=null;this.timer=null;this.signature=null;this.stopped=false;this.polling=false;
   }
   bump(){this.sequence=this.sequence>=0xffffffff?1:this.sequence+1;try{this.changed(this.sequence);}catch{}}
   start(){
     if(this.clipboard.kind==='wayland'){
-      const startedAt=Date.now();
       const child=this.spawner('wl-paste',['--watch','echo','changed'],{stdio:['ignore','pipe','ignore']});this.child=child;
       // The first line reports the selection present at startup, as Windows
       // reports its initial sequence; both admit that clipboard once.
       child.stdout.on('data',chunk=>{for(const line of chunk.toString().split('\n'))if(line.trim()==='changed')this.bump();});
+      // GNOME has no data-control protocol and wl-paste exits at once there.
+      // Any watcher exit keeps the same sequence counter alive by polling.
       child.on('error',()=>{if(this.child===child)this.child=null;if(!this.stopped)this.poll();});
-      // GNOME has no data-control protocol; wl-paste exits at once there.
-      child.on('exit',()=>{if(this.child===child)this.child=null;if(!this.stopped){if(Date.now()-startedAt<5000)this.poll();else this.failed(new Error('Clipboard monitor stopped.'));}});
+      child.on('exit',()=>{if(this.child===child)this.child=null;if(!this.stopped)this.poll();});
     }else this.poll();
     return this;
   }

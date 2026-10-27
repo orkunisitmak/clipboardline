@@ -459,6 +459,7 @@ else app.whenReady().then(async()=>{
   window.webContents.on('render-process-gone',()=>finishShortcutRecording());
   window.webContents.on('did-start-navigation',()=>finishShortcutRecording());
   await window.loadURL(entry);
+  if(linux&&!linux.clipboard.available)notify('Clipboard capture needs wl-clipboard (Wayland) or xclip (X11). Install one and restart ClipBoardLine.');
   monitor=native.monitor(()=>{if(!testMode)void readClipboard();},error=>{monitor?.kill();monitor=null;pasteTargets.clear();if(!closing)notify(error.message+' Falling back to bounded clipboard polling.');},focus=>pasteTargets.observe(focus));
   if(!testMode||testTray){
     if(process.platform==='win32')app.setAppUserModelId('com.clipboardline.desktop.windows');
