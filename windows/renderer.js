@@ -45,7 +45,7 @@ function languageCode(){const configured=state.settings.language||'system',code=
 const t = text => window.clipboardLineTranslations?.[languageCode()]?.[text] || (languageCode()==='tr'?TR[text]:null) || text;
 const esc = value => String(value ?? '').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const attr = esc;
-const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();
+const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 let indexedItems=null,itemIndex=new Map();
 const item = id => {if(indexedItems!==state.items){indexedItems=state.items;itemIndex=new Map(state.items.map(value=>[value.id,value]));}return itemIndex.get(id);};
 const saved = value => value.pinned || value.retainedAt!=null || value.folderIds?.length || value.tags?.length;
