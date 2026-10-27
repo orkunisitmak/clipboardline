@@ -64,13 +64,13 @@ class ReleaseVersionTests(unittest.TestCase):
     def test_lock_root_package_drift_is_rejected(self):
         self.windows()
         self.write("windows/package-lock.json", {"version": "1.7.2", "packages": {"": {"version": "1.7.1"}}})
-        with self.assertRaisesRegex(guard.ReleaseVersionError, 'packages\[""\] version'):
+        with self.assertRaisesRegex(guard.ReleaseVersionError, r'packages\[""\] version'):
             guard.check_release_version(self.root)
 
     def test_missing_lock_root_package_is_rejected(self):
         self.windows()
         self.write("windows/package-lock.json", {"version": "1.7.2", "packages": []})
-        with self.assertRaisesRegex(guard.ReleaseVersionError, 'packages\[""\] version'):
+        with self.assertRaisesRegex(guard.ReleaseVersionError, r'packages\[""\] version'):
             guard.check_release_version(self.root)
 
     def test_public_checkout_must_include_windows(self):

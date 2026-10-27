@@ -32,7 +32,10 @@ class PublicationGuardTests(unittest.TestCase):
     def test_private_artifact_and_symlink_are_rejected(self):
         (self.root / 'credential.p12').write_bytes(b'not a real key')
         (self.root / 'source.txt').write_text('ordinary source')
-        (self.root / 'alias.txt').symlink_to(self.root / 'source.txt')
+        try: (self.root / 'alias.txt').symlink_to(self.root / 'source.txt')
+        except OSError as error:
+            if getattr(error, 'winerror', None) != 1314: raise
+            self.skipTest('Creating symlinks on Windows requires Developer Mode or administrator rights')
         self.assertEqual({f['rule'] for f in scanner.audit(self.root)['findings']}, {'private-artifact', 'source-symlink'})
 
     def test_untracked_source_is_scanned_in_fresh_repository(self):
