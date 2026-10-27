@@ -12,6 +12,7 @@
     "start": "electron .",
     "test": "node --test --test-concurrency=1 tests/*.test.cjs",
     "test:electron": "node tests/electron-smoke.cjs",
+    "test:linux": "node tests/linux-electron-smoke.cjs",
     "dist": "electron-builder --win nsis --x64 --publish never",
     "dist:linux": "electron-builder --linux AppImage deb rpm pacman --x64 --publish never",
     "dist:linux-dir": "electron-builder --linux dir --x64 --publish never"
