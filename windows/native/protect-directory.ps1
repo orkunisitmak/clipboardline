@@ -14,7 +14,11 @@ if(-not $Check){
     $rule=[System.Security.AccessControl.FileSystemAccessRule]::new($identity,[System.Security.AccessControl.FileSystemRights]::FullControl,$inherit,[System.Security.AccessControl.PropagationFlags]::None,[System.Security.AccessControl.AccessControlType]::Allow)
     $acl.AddAccessRule($rule)
   }
-  Set-Acl -LiteralPath $Directory -AclObject $acl
+  try {
+    (Get-Item -LiteralPath $Directory).SetAccessControl($acl)
+  } catch {
+    Set-Acl -LiteralPath $Directory -AclObject $acl
+  }
 }
 $actual=Get-Acl -LiteralPath $Directory
 $principals=@($actual.Access | Where-Object {$_.AccessControlType -eq 'Allow'} | ForEach-Object {$_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value})
