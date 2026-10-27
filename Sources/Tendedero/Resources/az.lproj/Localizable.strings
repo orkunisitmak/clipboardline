@@ -496,3 +496,81 @@
 "Focus previous pane" = "Əvvəlki bölməyə fokuslan";
 
 "Undo Move to Trash" = "Zibil qutusuna köçürməni geri al";
+
+"Access Key ID" = "Giriş açarı ID-si";
+
+"Account ID or HTTPS endpoint" = "Hesab ID-si və ya HTTPS son nöqtəsi";
+
+"Bucket name" = "Bucket adı";
+
+"Cloud upload" = "Buluda yükləmə";
+
+"Cloudflare R2" = "Cloudflare R2";
+
+"Cloudflare R2 connection failed" = "Cloudflare R2 bağlantısı uğursuz oldu";
+
+"Cloudflare R2 endpoint must use HTTPS" = "Cloudflare R2 son nöqtəsi HTTPS istifadə etməlidir";
+
+"Cloudflare R2 rejected the credentials or bucket (%d)" = "Cloudflare R2 etimadnaməni və ya bucket-i rədd etdi (%d)";
+
+"Cloudflare R2 upload failed (%d)" = "Cloudflare R2 yükləməsi uğursuz oldu (%d)";
+
+"Configure Cloudflare R2 in Settings first" = "Əvvəlcə Ayarlarda Cloudflare R2-ni tənzimləyin";
+
+"Connected to Cloudflare R2" = "Cloudflare R2 ilə bağlantı quruldu";
+
+"Connection" = "Bağlantı";
+
+"Copy public link" = "Açıq keçidi kopyala";
+
+"Credentials" = "Etimadnamələr";
+
+"Enter a valid Cloudflare R2 Account ID or HTTPS endpoint" = "Düzgün Cloudflare R2 Hesab ID-si və ya HTTPS son nöqtəsi daxil edin";
+
+"Enter a valid HTTPS public base URL (for example, your r2.dev or custom domain)" = "Düzgün HTTPS açıq baza URL-i daxil edin (məsələn, r2.dev və ya xüsusi domeniniz)";
+
+"Enter a valid R2 bucket name" = "Düzgün R2 bucket adı daxil edin";
+
+"Enter a valid key prefix without '..'" = "'..' olmayan düzgün açar prefiksi daxil edin";
+
+"Enter an R2 Access Key ID" = "R2 Giriş açarı ID-sini daxil edin";
+
+"Enter an R2 Secret Access Key" = "R2 Məxfi giriş açarını daxil edin";
+
+"File is too large to upload (512 MB limit)" = "Fayl yükləmək üçün çox böyükdür (512 MB limiti)";
+
+"Key prefix (optional)" = "Açar prefiksi (istəyə bağlı)";
+
+"Public base URL" = "Açıq baza URL-i";
+
+"Public link copied" = "Açıq keçid kopyalandı";
+
+"Remove secret key" = "Məxfi açarı sil";
+
+"Save secret key" = "Məxfi açarı saxla";
+
+"Secret Access Key" = "Məxfi giriş açarı";
+
+"Secret Access Key could not be saved in Keychain" = "Məxfi giriş açarı Açarlığa saxlanıla bilmədi";
+
+"Stored in Keychain" = "Açarlıqda saxlanılıb";
+
+"Test connection" = "Bağlantını yoxla";
+
+"Upload again to R2" = "Yenidən R2-yə yüklə";
+
+"Upload an item first" = "Əvvəlcə bir element əlavə edin";
+
+"Upload latest item" = "Son elementi yüklə";
+
+"Upload to R2" = "R2-yə yüklə";
+
+"Uploaded — link copied" = "Yükləndi — keçid kopyalandı";
+
+"Uploading to R2…" = "R2-yə yüklənir…";
+
+"Uploads the newest item on the shelves to Cloudflare R2 and copies its public link." = "Rəflərdəki ən yeni elementi Cloudflare R2-yə yükləyir və açıq keçidini mübadilə buferinə kopyalayır.";
+
+"Uploads use your own Cloudflare R2 bucket via S3-compatible HTTPS. After uploading, the public URL is copied to the clipboard." = "Yükləmələr S3 uyğun HTTPS vasitəsilə öz Cloudflare R2 bucket-inizdən istifadə edir. Yükləndikdən sonra açıq URL mübadilə buferinə kopyalanır.";
+
+"Your Secret Access Key is stored in this Mac’s Keychain and is never written to preferences." = "Məxfi giriş açarınız bu Mac-in Açarlığında saxlanılır və heç vaxt seçimlərə yazılmır.";

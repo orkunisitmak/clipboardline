@@ -14,7 +14,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 KINDS = ['image', 'text', 'link']
-FIELDS = {'activeKind', 'focused', 'selected', 'visibleKinds', 'searchEditing'}
+FIELDS = {'activeKind', 'focused', 'selected', 'visibleKinds', 'searchEditing', 'uploaded'}
 ACTIONS = {'open', 'close', 'up', 'down', 'left', 'right', 'toggle', 'openSearch', 'finishSearch', 'remap', 'key'}
 PLATFORMS = {'macos': ('darwin', 'model'), 'windows': ('win32', 'renderer')}
 
@@ -67,6 +67,11 @@ def valid_snapshot(value, aliases):
         return False
     if selected != sorted(set(selected)):
         return False
+    uploaded = value['uploaded']
+    if not isinstance(uploaded, list) or not all(isinstance(item, str) and item in aliases for item in uploaded):
+        return False
+    if uploaded != sorted(set(uploaded)):
+        return False
     focused = value['focused']
     return ((focused is None and selected == []) or
             (isinstance(focused, str) and focused in aliases and selected == [focused] and
@@ -118,11 +123,11 @@ def load_contract(path):
             require(isinstance(step, dict) and isinstance(step.get('action'), str) and step['action'] in ACTIONS and
                     (step['action'] != 'toggle' or step.get('kind') in KINDS), 'Unknown shared fixture action')
             if step['action'] == 'remap':
-                require(step.get('binding') == 'down' and 'key' in step and
+                require(step.get('binding') in {'down', 'upload'} and 'key' in step and
                         (step['key'] is None or isinstance(step['key'], str) and step['key'] in {'', 'KeyX'}),
                         'Unsupported shared shortcut mapping')
             if step['action'] == 'key':
-                require(step.get('code') == 'KeyX', 'Unsupported shared keyboard input')
+                require(step.get('code') in {'KeyX', 'KeyU'}, 'Unsupported shared keyboard input')
             require(valid_snapshot(step.get('expect'), aliases), 'Malformed expected shared state')
             expected[(identifier, index)] = step['expect']
     return contract, hashlib.sha256(data).hexdigest(), expected, aliases_by_scenario

@@ -12,8 +12,9 @@ const KINDS = ['image', 'text', 'link'];
 const DEFAULTS = Object.freeze({
   visibleKinds: KINDS, captureText: false, captureImages: false, captureLinks: true,fetchLinkMetadata:true,
   retentionDays: {image: 30, text: 30, link: 30},
-  shortcuts: {toggle: 'Control+Alt+T', search: 'Control+Alt+S', library:'', copyLatest:'', screenshot: 'Control+Alt+A'},
+  shortcuts: {toggle: 'Control+Alt+T', search: 'Control+Alt+S', library:'', copyLatest:'', uploadLatest:'', screenshot: 'Control+Alt+A'},
   localShortcuts: {},
+  r2AccountId: '', r2AccessKeyId: '', r2Bucket: '', r2PublicBaseUrl: '', r2KeyPrefix: '',
   autoCheckUpdates: true, watchFolders: [], openAfterScreenshot: true,
   theme:'soft', cardSize:'medium', sounds:false, launchAtLogin:false, language:'system',indexImages:true,
   libraryListMode:false,libraryInspectorVisible:true,librarySidebarVisible:true,librarySidebarWidth:220,libraryInspectorWidth:300,
@@ -47,9 +48,12 @@ function settings(patch, previous = DEFAULTS) {
       }
     } else if (key === 'shortcuts') {
       for (const [action, shortcut] of Object.entries(value || {})) {
-        if (!['toggle', 'search', 'library', 'copyLatest', 'screenshot'].includes(action) || typeof shortcut !== 'string' || shortcut.length > 80 || /[\r\n\0]/.test(shortcut)) fail('Invalid shortcut');
+        if (!['toggle', 'search', 'library', 'copyLatest', 'uploadLatest', 'screenshot'].includes(action) || typeof shortcut !== 'string' || shortcut.length > 80 || /[\r\n\0]/.test(shortcut)) fail('Invalid shortcut');
         out.shortcuts[action] = shortcut;
       }
+    } else if (['r2AccountId', 'r2AccessKeyId', 'r2Bucket', 'r2PublicBaseUrl', 'r2KeyPrefix'].includes(key)) {
+      if (typeof value !== 'string' || value.length > 512 || /[\r\n\0]/.test(value)) fail('Invalid R2 preference');
+      out[key] = value.trim();
     } else if (key === 'localShortcuts') {
       for (const [action, shortcut] of Object.entries(value || {})) {
         if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,60}$/.test(action) || ['constructor','prototype','__proto__'].includes(action)) fail('Invalid local shortcut');
@@ -125,6 +129,8 @@ class Store {
     if(item.note!=null)text(item.note,1024*1024,true);
     if(item.retainedAt!=null&&(!Number.isFinite(item.retainedAt)||item.retainedAt<0))fail('Invalid saved timestamp');
     if(item.lastCopiedAt!=null&&(!Number.isFinite(item.lastCopiedAt)||item.lastCopiedAt<0))fail('Invalid copy timestamp');
+    if(item.uploadedUrl!=null&&(typeof item.uploadedUrl!=='string'||item.uploadedUrl.length>2048||!plainURL(item.uploadedUrl)?.startsWith('https://')))fail('Invalid uploaded URL');
+    if(item.uploadedAt!=null&&(!Number.isFinite(item.uploadedAt)||item.uploadedAt<0))fail('Invalid upload timestamp');
     if(item.retainedAt==null&&(item.pinned||item.folderIds.length||item.tags.length))item.retainedAt=item.updatedAt||item.createdAt||this.clock();
     for (const key of ['imageFile', 'renderedFile','thumbnailFile']) if (item[key] && !/^[a-f0-9]{64}\.png$/.test(item[key])) fail('Unsafe managed media path');
     if(item.recording!==undefined&&typeof item.recording!=='boolean')fail('Invalid recording record');
@@ -236,7 +242,7 @@ class Store {
     const expected=this.item(value.id);if(!expected.recording||expected.trashedAt||typeof value.sourceFingerprint!=='string'||(expected.renderedVideoFile||expected.videoFile).slice(0,64)!==value.sourceFingerprint)fail('The recording changed before trimming');
     const assets=await this.recordingAssets(value),item=this.item(value.id);if(!item.recording||item.trashedAt||(item.renderedVideoFile||item.videoFile).slice(0,64)!==value.sourceFingerprint)fail('The recording changed while trimming');
     if(value.signal?.aborted)fail('Video operation canceled');
-    const before=clone(this.data);try{Object.assign(item,assets.details,{renderedVideoFile:assets.videoFile,renderedFile:assets.posterFile,updatedAt:this.clock()});this.persist();return item;}catch(error){this.data=before;throw error;}
+    const before=clone(this.data);try{delete item.uploadedUrl;delete item.uploadedAt;Object.assign(item,assets.details,{renderedVideoFile:assets.videoFile,renderedFile:assets.posterFile,updatedAt:this.clock()});this.persist();return item;}catch(error){this.data=before;throw error;}
   }
   insert(kind, value, extra = {}) {
     if (!KINDS.includes(kind)) fail('Invalid content kind');
@@ -260,6 +266,7 @@ class Store {
       item.folderIds = [...new Set(matching.flatMap(i => i.folderIds))]; item.tags = [...new Set(matching.flatMap(i => i.tags))];
       item.name ||= matching.find(i => i.name)?.name || '';
       item.note ||= matching.find(i => i.note)?.note || '';
+      if(!item.uploadedUrl){const uploaded=matching.find(i=>i.uploadedUrl);if(uploaded){item.uploadedUrl=uploaded.uploadedUrl;item.uploadedAt=uploaded.uploadedAt??now;}}
       const dates=matching.map(i=>i.retainedAt).filter(Number.isFinite);if(dates.length)item.retainedAt=Math.min(...dates);
     }
     this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
@@ -368,8 +375,9 @@ class Store {
       else if(action==='details') {
         if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
         if(payload.note!==undefined)item.note=text(payload.note,1024*1024,true);
-        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=text(payload.text,1024*1024,true);}
+        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');const nextText=text(payload.text,1024*1024,true);if(nextText!==item.text){delete item.uploadedUrl;delete item.uploadedAt;}item.text=nextText;}
       }
+      else if(action==='recordUpload'){const url=plainURL(payload.url);if(!url||!url.startsWith('https://')||url.length>2048)fail('Invalid uploaded URL');item.uploadedUrl=url;item.uploadedAt=now;}
       else if(action==='markCopied'){item.lastCopiedAt=now;item.captureRevision=crypto.randomUUID();}
       else if (action === 'name') { item.name = text(payload.name, 200, true).trim(); item.pinned = true; item.retainedAt??=now; }
       else if (action === 'folder') {
@@ -389,13 +397,13 @@ class Store {
       } else if (action === 'remove') { if (saved(item)) item.hiddenFromShelf = true; else{item.trashedAt = now;item.trashRevision=crypto.randomUUID();} }
       else if (action === 'trash') item.trashedAt = now;
       else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; }
-      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = text(payload.text, 1024 * 1024, true); }
+      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); const nextText = text(payload.text, 1024 * 1024, true); if (nextText !== item.text) { delete item.uploadedUrl; delete item.uploadedAt; } item.text = nextText; }
       else if (action === 'saveImage') {
         if (item.kind !== 'image' || item.recording || typeof payload.dataUrl !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(payload.dataUrl) || payload.dataUrl.length > 90_000_000) fail('Invalid image edit');
         const annotations = payload.annotations ?? []; const crop = payload.crop ?? null;
         if (!Array.isArray(annotations) || annotations.length > 2000 || JSON.stringify(annotations).length > 2_000_000 || (crop !== null && (typeof crop !== 'object' || ['x','y','width','height'].some(k => !Number.isFinite(crop[k])) || crop.x<0 || crop.y<0 || crop.width<=0 || crop.height<=0))) fail('Invalid image edit metadata');
         if(crop){const original=fs.readFileSync(this.mediaPath(item.id,true));if(crop.x+crop.width>original.readUInt32BE(16)||crop.y+crop.height>original.readUInt32BE(20))fail('Crop is outside the original image');}
-        item.renderedFile = this.putPNG(Buffer.from(payload.dataUrl.split(',')[1], 'base64')); item.annotations = clone(annotations); item.crop = clone(crop); item.ocrText = '';
+        item.renderedFile = this.putPNG(Buffer.from(payload.dataUrl.split(',')[1], 'base64')); item.annotations = clone(annotations); item.crop = clone(crop); item.ocrText = ''; delete item.uploadedUrl; delete item.uploadedAt;
       } else if (action === 'delete') { if (!item.trashedAt) fail('Move items to Trash before permanent deletion'); }
       else fail('Unknown library action');
       if(action!=='markCopied')item.updatedAt = now;

@@ -173,6 +173,7 @@ enum HistoryTestRunner {
         let namedPinWorkflow = NameAndPinWorkflowTests()
         let namedShelfLabel = NamedShelfLabelTests()
         let publicUpdates = PublicUpdateChannelTests()
+        let r2Upload = R2UploadTests()
         let cases: [(String, () throws -> Void)] = [
             ("testNativeVisibilityKeepsWindowContentAndHitCoordinatesFixed", shelfPresentation.testNativeVisibilityKeepsWindowContentAndHitCoordinatesFixed),
             ("testRapidVisibilityReversalCannotRunAnEarlierCloseCompletion", shelfPresentation.testRapidVisibilityReversalCannotRunAnEarlierCloseCompletion),
@@ -679,7 +680,12 @@ enum HistoryTestRunner {
             ("testTextKeyboardAndWheelDoNotChangeImageScrollOrTriggerImageActions", textZoom.testTextKeyboardAndWheelDoNotChangeImageScrollOrTriggerImageActions),
             ("testZoomBoundsResetAndInvalidDeltas", textZoom.testZoomBoundsResetAndInvalidDeltas),
             ("testZoomedImageMouseDragPansBothAxesAndClampsWithoutMovingWindow", textZoom.testZoomedImageMouseDragPansBothAxesAndClampsWithoutMovingWindow),
-            ("testPreviewWheelZoomAndResetStayLocal", textZoom.testPreviewWheelZoomAndResetStayLocal)
+            ("testPreviewWheelZoomAndResetStayLocal", textZoom.testPreviewWheelZoomAndResetStayLocal),
+            ("testSigV4MatchesCrossPlatformReferenceVector", r2Upload.testSigV4MatchesCrossPlatformReferenceVector),
+            ("testValidatorNormalizesEndpointsAndRejectsUnsafeInputs", r2Upload.testValidatorNormalizesEndpointsAndRejectsUnsafeInputs),
+            ("testSecretNeverTouchesUserDefaults", r2Upload.testSecretNeverTouchesUserDefaults),
+            ("testCoordinatorUploadsCachesReuploadsAndInvalidatesOnContentEdits", r2Upload.testCoordinatorUploadsCachesReuploadsAndInvalidatesOnContentEdits),
+            ("testUnconfiguredAndMultiSelectionUploadGuards", r2Upload.testUnconfiguredAndMultiSelectionUploadGuards)
         ]
         for (name, test) in cases {
             let before = assertionFailures

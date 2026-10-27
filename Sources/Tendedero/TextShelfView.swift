@@ -120,6 +120,11 @@ struct TextGrabArea: NSViewRepresentable {
         view.menuProvider = {
             let menu = NSMenu()
             menu.addItem(ClosureMenuItem(L("Copy")) { texts.copyAction(id) })
+            let hasUploaded = entry.uploadedURL != nil
+            menu.addItem(ClosureMenuItem(hasUploaded ? L("Copy public link") : L("Upload to R2")) { line.upload(id) })
+            if hasUploaded {
+                menu.addItem(ClosureMenuItem(L("Upload again to R2")) { line.upload(id, forceReupload: true) })
+            }
             menu.addItem(ClosureMenuItem(entry.pinned ? L("Unpin") : L("Pin favorite")) { texts.togglePin(id) })
             menu.addItem(ClosureMenuItem(L("Name and pin…")) { line.onNameAndPinRequested?(id) })
             menu.addItem(ClosureMenuItem(L("Preview")) { line.onTextPreviewRequested?(id) })

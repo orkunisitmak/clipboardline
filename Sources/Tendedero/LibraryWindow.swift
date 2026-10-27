@@ -6,6 +6,39 @@ final class LibraryNativeWindow: NSWindow {
     var onBeforeMouseKeyFocus: (() -> Void)?
     var onCancelKeyboardFocus: (() -> Void)?
     var onSidebarKey: ((NSEvent) -> Bool)?
+    private weak var protectedSearchField: NSSearchField?
+    private var inMakeFirstResponder = false
+    /// macOS 26's SwiftUI-backed NSSearchToolbarItem tears down its collapsed
+    /// button responder asynchronously after beginSearchInteraction(), calling
+    /// makeFirstResponder(nil). Preserve explicit search focus until another
+    /// responder, Escape, click, or explicit endEditing supersedes it.
+    func beginToolbarSearchFocus(for field: NSSearchField) { protectedSearchField = field }
+    func cancelToolbarSearchFocus() { protectedSearchField = nil }
+    override func endEditing(for object: Any?) {
+        if !inMakeFirstResponder { protectedSearchField = nil }
+        super.endEditing(for: object)
+    }
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        if let responder, responder !== self {
+            if let field = protectedSearchField, responder !== field, responder !== field.currentEditor() {
+                protectedSearchField = nil
+            }
+            inMakeFirstResponder = true; defer { inMakeFirstResponder = false }
+            return super.makeFirstResponder(responder)
+        }
+        let wasEditingProtectedSearch: Bool = {
+            guard responder == nil, let field = protectedSearchField else { return false }
+            return firstResponder === field || (field.currentEditor() != nil && firstResponder === field.currentEditor())
+        }()
+        inMakeFirstResponder = true
+        let result = super.makeFirstResponder(responder)
+        inMakeFirstResponder = false
+        if wasEditingProtectedSearch, let field = protectedSearchField,
+           field.window === self, !field.isHiddenOrHasHiddenAncestor {
+            field.selectText(nil)
+        }
+        return result
+    }
     private var editingOrControlFocused: Bool {
         // Native controls own Space/Return/arrows, even with keyboard navigation
         // enabled. A focused button must never copy a selected card behind it.
@@ -69,6 +102,7 @@ final class LibraryNativeWindow: NSWindow {
         splitController = LibrarySplitController(model: model, line: line, actions: self)
         window.contentViewController = splitController
         toolbarController = LibraryToolbarController(model: model, actions: self, split: splitController)
+        toolbarController.searchField.onWillResignSearchFocus = { [weak window] in window?.cancelToolbarSearchFocus() }
         let focusSearch = model.onSearchFocus
         model.onSearchFocus = { [weak self] in self?.cancelDeferredFocus(); focusSearch?() }
         window.toolbar = toolbarController.toolbar; toolbarController.ensureCommandsItem(); toolbarController.refresh()
@@ -81,8 +115,12 @@ final class LibraryNativeWindow: NSWindow {
         model.onFinishEditor = { [weak self] in self?.finishInspectorEditing() ?? false }
         model.onNewFolderRequested = { [weak self] in self?.createFolder() }
         model.onEditPreviewRequested = { [weak self] action, id in _ = self?.performPreviewAction(action, id: id) }
-        if !window.setFrameUsingName("ClipboardLineLibrary") { window.center() }
-        window.setFrameAutosaveName("ClipboardLineLibrary")
+        if store.defaults === UserDefaults.standard {
+            if !window.setFrameUsingName("ClipboardLineLibrary") { window.center() }
+            window.setFrameAutosaveName("ClipboardLineLibrary")
+        } else {
+            window.center()
+        }
         model.onPreview = { [weak self] in self?.previews.show($0) }
         model.onTagRequested = { [weak self] in self?.promptTag() }
         model.onPinToFolderRequested = { [weak self] ids in self?.pinToFolder(ids) }
@@ -123,7 +161,7 @@ final class LibraryNativeWindow: NSWindow {
         if window?.firstResponder === search || (search.currentEditor() != nil && window?.firstResponder === search.currentEditor()) { return .search }
         return .content
     }
-    private func cancelDeferredFocus() { focusGeneration += 1; model.cancelContentFocus() }
+    private func cancelDeferredFocus() { focusGeneration += 1; (window as? LibraryNativeWindow)?.cancelToolbarSearchFocus(); model.cancelContentFocus() }
     func cycleKeyboardPane(reverse: Bool) {
         guard model.flushEdits() else { return }
         cancelDeferredFocus()
@@ -421,6 +459,19 @@ final class LibraryNativeWindow: NSWindow {
                     }
                     if record.kind == .image { Button(L("Open file")) { model.open() } }
                     HStack { Button(L("Copy")) { model.copy() }; Button(record.favorite ? L("Unpin") : L("Pin favorite")) { model.favorite() } }.controlSize(.small)
+                    if record.deletedAt == nil {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if let uploadedURL = record.uploadedURL {
+                                Text(uploadedURL).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                            }
+                            HStack {
+                                Button(record.uploadedURL != nil ? L("Copy public link") : L("Upload to R2")) { model.uploadCurrent(record.id) }
+                                if record.uploadedURL != nil {
+                                    Button(L("Upload again to R2")) { model.uploadCurrent(record.id, forceReupload: true) }
+                                }
+                            }.controlSize(.small)
+                        }
+                    }
                     Divider()
                     VStack(alignment: .leading, spacing: 8) {
                         Text(L("Folders")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)

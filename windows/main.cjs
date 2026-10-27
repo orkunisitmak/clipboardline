@@ -1,5 +1,5 @@
 'use strict';
-const {app,BrowserWindow,ipcMain,clipboard,ClipboardItem,nativeImage,protocol,net,Tray,Menu,Notification,powerMonitor,globalShortcut,screen,desktopCapturer,dialog,shell} = require('electron');
+const {app,BrowserWindow,ipcMain,clipboard,ClipboardItem,nativeImage,protocol,net,Tray,Menu,Notification,powerMonitor,globalShortcut,screen,desktopCapturer,dialog,shell,safeStorage} = require('electron');
 // Electron's protocol.handle and net.fetch construct these globals lazily.
 // Finish Node/Undici initialization before renderer/protocol callbacks can
 // re-enter it during the first managed image request in an installed build.
@@ -31,6 +31,7 @@ const {ImageSearch,modelPaths}=require('./lib/image-search.cjs');
 const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
+const {isR2Configured,testR2Connection,uploadR2Object,httpsR2Transport,FileR2SecretStore,MemoryR2SecretStore}=require('./lib/r2.cjs');
 const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
 const testMode = process.argv.includes('--test-mode');
 const testFolder = process.argv.find(value=>value.startsWith('--test-data='))?.slice('--test-data='.length);
@@ -53,7 +54,8 @@ const copyMarker = crypto.randomBytes(16);
 const pending = new Map();
 const ocrJobs=new Map(),ocrQueue=[];let indexing=false;
 const mediaDiagnostics=[];
-let imageSearch,imageSearchTimer,dragFiles,mediaJobs;
+let imageSearch,imageSearchTimer,dragFiles,mediaJobs,r2Secrets=null,r2Transport=httpsR2Transport;
+const activeUploads=new Set();
 const recordingTrims=new Map();
 function cancelRecordingTrims(){for(const controller of recordingTrims.values())controller.abort();}
 function cancelNativePaste(){native.cancelPaste();cancelFileCopies();}
@@ -70,7 +72,7 @@ async function readSemanticImage(id){
  const resized=image.getSize();return{bitmap:image.toBitmap(),width:resized.width,height:resized.height};
 }
 
-function state(result,{surfaceOnly=false}={}) { const light=surfaceOnly&&lastBroadcastLibraryRevision===store.revision;return {...(light?{surfaceOnly:true}:store.publicState()),libraryRevision:store.revision,version:app.getVersion(),build:BUILD_NUMBER,platform:process.platform,development,view,windowMode:view==='shelves'?'overlay':'normal',windowMaximized:window?.isMaximized()||false,windowVisible:desiredVisible&&(window?.isVisible()||false),shortcutRecordingToken:shortcutRecording?.token||null,message:message||store.privacyWarning||'',viewEvent,imageSearch:{...(imageSearch?.state||{available:false,indexing:false,pending:0,revision:0})},update:{...updates.state},...(result===undefined?{}:{result})}; }
+function state(result,{surfaceOnly=false}={}) { const light=surfaceOnly&&lastBroadcastLibraryRevision===store.revision,hasSecret=Boolean(r2Secrets?.hasSecret());return {...(light?{surfaceOnly:true}:store.publicState()),libraryRevision:store.revision,version:app.getVersion(),build:BUILD_NUMBER,platform:process.platform,development,view,windowMode:view==='shelves'?'overlay':'normal',windowMaximized:window?.isMaximized()||false,windowVisible:desiredVisible&&(window?.isVisible()||false),shortcutRecordingToken:shortcutRecording?.token||null,r2HasSecret:hasSecret,r2Configured:Boolean(store&&isR2Configured(store.data.settings,hasSecret)),message:message||store.privacyWarning||'',viewEvent,imageSearch:{...(imageSearch?.state||{available:false,indexing:false,pending:0,revision:0})},update:{...updates.state},...(result===undefined?{}:{result})}; }
 function broadcast({surfaceOnly=false}={}) {
   // Visibility and native bounds do not change library content. Retain the
   // renderer's existing rows instead of cloning and sending the full history
@@ -199,16 +201,16 @@ async function writeClipboard(selected) {
   const values=selected.filter(item=>item.kind!=='image').map(item=>item.kind==='link'?item.url:item.text);
   if(images.some(item=>item.recording)){
     await copyFiles({files:images.map(item=>store.mediaPath(item.id)),marker:copyMarker.toString('base64'),text:values.join('\n\n')});
-    ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
+    ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;{const copied=selected.filter(item=>store.data.items.includes(item)).map(item=>item.id);if(copied.length)store.markCopied(copied);}return;
   }
   if(images.length>1){
     await native.copyImages({files:images.map(item=>store.mediaPath(item.id)),marker:copyMarker.toString('base64'),text:values.join('\n\n')});
-    ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
+    ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;{const copied=selected.filter(item=>store.data.items.includes(item)).map(item=>item.id);if(copied.length)store.markCopied(copied);}return;
   }
   const data={'web application/x.clipboardline':new Blob([copyMarker])};if(values.length)data['text/plain']=new Blob([values.join('\n\n')],{type:'text/plain'});
   if(images.length){const image=nativeImage.createFromPath(store.mediaPath(images[0].id));if(image.isEmpty())throw new Error('Image unavailable');data['image/png']=new Blob([image.toPNG()],{type:'image/png'});}
   await clipboard.write([new ClipboardItem(data)]);
-  ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));
+  ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;{const copied=selected.filter(item=>store.data.items.includes(item)).map(item=>item.id);if(copied.length)store.markCopied(copied);}
 }
 async function copy(payload,paste=false) {
   if(pastePromise)return pastePromise;
@@ -234,6 +236,46 @@ async function copy(payload,paste=false) {
   if(store.data.settings.sounds)shell.beep();
   if(payload.keepOpen&&!paste){notify('Copied');return;}
   await hide();
+}
+async function uploadItem(id,{force=false}={}){
+  const [selectedItem]=store.selected(ids([id]));
+  if(selectedItem.trashedAt)throw new Error('Restore this item first.');
+  const lang=store.data.settings.language==='system'?app.getLocale():store.data.settings.language;
+  if(!force&&selectedItem.uploadedUrl){
+    await writeClipboard([{kind:'link',url:selectedItem.uploadedUrl}]);
+    if(store.data.settings.sounds)shell.beep();
+    message=translated(lang,'Public link copied');
+    return{id:selectedItem.id,url:selectedItem.uploadedUrl,cached:true};
+  }
+  const secretAccessKey=r2Secrets?.getSecret()||'';
+  if(!secretAccessKey||!isR2Configured(store.data.settings,true))throw new Error(translated(lang,'Configure Cloudflare R2 in Settings first'));
+  if(activeUploads.has(selectedItem.id))return{id:selectedItem.id,url:selectedItem.uploadedUrl||'',busy:true};
+  activeUploads.add(selectedItem.id);
+  try{
+    let body,extension,snapshot;
+    if(selectedItem.kind==='image'){
+      const file=store.mediaPath(selectedItem.id);extension=path.extname(file).toLowerCase()||'.png';
+      const stat=await fs.promises.lstat(file);if(!stat.isFile()||stat.isSymbolicLink())throw new Error('Media unavailable');
+      if(stat.size>512*1024*1024)throw new Error(translated(lang,'File is too large to upload (512 MB limit)'));
+      snapshot=selectedItem.recording?(selectedItem.renderedVideoFile||selectedItem.videoFile):(selectedItem.renderedFile||selectedItem.imageFile);
+      body=await fs.promises.readFile(file);
+    }else if(selectedItem.kind==='link'){extension='.txt';snapshot=selectedItem.url;body=Buffer.from(selectedItem.url,'utf8');}
+    else{extension='.txt';snapshot=selectedItem.text;body=Buffer.from(selectedItem.text,'utf8');}
+    const uploaded=await uploadR2Object(store.data.settings,secretAccessKey,{body,extension},{transport:r2Transport});
+    const current=store.data.items.find(entry=>entry.id===selectedItem.id);
+    const currentSnapshot=current&&(current.kind==='image'?(current.recording?(current.renderedVideoFile||current.videoFile):(current.renderedFile||current.imageFile)):current.kind==='link'?current.url:current.text);
+    if(current&&!current.trashedAt&&currentSnapshot===snapshot)store.modify('recordUpload',{id:selectedItem.id,url:uploaded.url});
+    await writeClipboard([{kind:'link',url:uploaded.url}]);
+    if(store.data.settings.sounds)shell.beep();
+    message=translated(lang,'Uploaded — link copied');
+    return{id:selectedItem.id,url:uploaded.url,cached:false};
+  }finally{activeUploads.delete(selectedItem.id);}
+}
+async function uploadLatest(){
+  const lang=store.data.settings.language==='system'?app.getLocale():store.data.settings.language;
+  const latest=store.data.items.filter(item=>!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];
+  if(!latest)throw new Error(translated(lang,'Upload an item first'));
+  const res=await uploadItem(latest.id);broadcast();return res;
 }
 async function importFile(file) {
   const stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink())throw new Error('Select a regular file.');
@@ -300,6 +342,7 @@ function configureShortcuts(previousPreferences=null) {
     toggle:()=>desiredVisible?hide():show('shelves'),
     search:()=>show('shelves',{search:true}),library:()=>show('library'),
     copyLatest:async()=>{const image=store.data.items.filter(item=>item.kind==='image'&&!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];if(image){await writeClipboard([image]);notify('Copied');if(store.data.settings.sounds)shell.beep();}},
+    uploadLatest,
     screenshot:capture
   },{failed:error=>notify(error.message)});
   const rejected=shortcutRegistry.update(store.data.settings.shortcuts);
@@ -357,6 +400,11 @@ async function command(action,payload={}) {
   else if(action==='searchImages'){if(!imageSearch)throw new Error('Offline image search is unavailable.');result=await imageSearch.search(payload.query,payload.eligibleIds);}
   else if(action==='ocr')result=await ocr(payload.id);
   else if(action==='copyOCR'){const recognized=await ocr(payload.id);if(!recognized.text.trim())throw new Error('No text found in this image.');await writeClipboard([{kind:'text',text:recognized.text}]);result=recognized;notify('Recognized text copied');}
+  else if(action==='uploadItem')result=await uploadItem(payload.id,{force:payload.force===true});
+  else if(action==='uploadLatest')result=await uploadLatest();
+  else if(action==='setR2Secret'){if(typeof payload.secret!=='string'||!payload.secret.trim()||payload.secret.length>512||/[\r\n\0]/.test(payload.secret))throw new Error('Enter an R2 Secret Access Key');r2Secrets.setSecret(payload.secret.trim());result={saved:true};}
+  else if(action==='clearR2Secret'){r2Secrets.clearSecret();result={saved:false};}
+  else if(action==='testR2Connection'){const secret=typeof payload.secret==='string'&&payload.secret.trim()?payload.secret.trim():r2Secrets?.getSecret()||'';const candidate={...store.data.settings,...(payload.config&&typeof payload.config==='object'?payload.config:{})};await testR2Connection(candidate,secret,{transport:r2Transport});message=translated(store.data.settings.language==='system'?app.getLocale():store.data.settings.language,'Connected to Cloudflare R2');result={connected:true};}
   else if(action==='export'){
     const selected=store.selected(ids(payload.ids));if(!selected.length)throw new Error('Select an item first');
     const response=await dialog.showOpenDialog(window,{properties:['openDirectory','createDirectory']});if(response.filePaths[0]){
@@ -404,7 +452,7 @@ function appIcon(){
 }
 if(!app.requestSingleInstanceLock())app.quit();
 else app.whenReady().then(async()=>{
-  store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
+  store=new Store(app.getPath('userData'));r2Secrets=testMode&&!safeStorage?.isEncryptionAvailable?.()?new MemoryR2SecretStore():new FileR2SecretStore(store.directory,safeStorage);mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
   updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!development&&!testMode&&store.data.settings.autoCheckUpdates});
   const searchPaths=modelPaths({packaged:app.isPackaged,resourcesPath:process.resourcesPath,sourceDirectory:__dirname});
   let ortModule=null,runtimeDirectory=null;try{ortModule=require.resolve('onnxruntime-web/wasm').replace(/app[.]asar([\\/])/,'app.asar.unpacked$1');runtimeDirectory=path.dirname(ortModule);}catch{}
@@ -463,7 +511,7 @@ else app.whenReady().then(async()=>{
   }
   await show('shelves');
   // Test hooks are main-process only and require an explicit isolated data path.
-  if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
+  if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,uploadItem,uploadLatest,getR2Secrets:()=>r2Secrets,setR2Transport:fn=>{r2Transport=fn||httpsR2Transport;},getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
 app.on('second-instance',()=>{if(window)void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});

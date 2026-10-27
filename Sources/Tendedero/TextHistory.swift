@@ -11,10 +11,12 @@ final class TextHistory: ObservableObject {
         var pinned: Bool
         /// User label; the clipboard value remains in `text` unchanged.
         var title: String? = nil
+        var uploadedURL: String? = nil
 
         static func == (lhs: Entry, rhs: Entry) -> Bool {
             lhs.id == rhs.id && lhs.capturedAt == rhs.capturedAt && lhs.pinned == rhs.pinned
-                && lhs.title == rhs.title && lhs.text.utf8.elementsEqual(rhs.text.utf8)
+                && lhs.title == rhs.title && lhs.uploadedURL == rhs.uploadedURL
+                && lhs.text.utf8.elementsEqual(rhs.text.utf8)
         }
     }
     @Published private(set) var entries: [Entry] = [] { didSet { invalidateDisplayProjection() } }
@@ -99,7 +101,7 @@ final class TextHistory: ObservableObject {
     private func reloadFromLibrary() {
         guard let library else { return }
         do {
-            let updated = try library.shelfItems(.text).map { Entry(id: $0.id, text: $0.text ?? "", capturedAt: $0.createdAt, pinned: $0.favorite, title: $0.title.isEmpty ? nil : $0.title) }
+            let updated = try library.shelfItems(.text).map { Entry(id: $0.id, text: $0.text ?? "", capturedAt: $0.createdAt, pinned: $0.favorite, title: $0.title.isEmpty ? nil : $0.title, uploadedURL: $0.uploadedURL) }
             if updated != entries { entries = updated; sanitizeFocus() }
         }
         catch { notice = L("Library could not be saved or opened") }

@@ -10,19 +10,21 @@ final class ImageHistory {
         var pinned: Bool
         var originalPath: String?
         var title: String?
+        var uploadedURL: String?
         var url: URL { URL(fileURLWithPath: path) }
         var exportFileName: String { HistoryFiles.exportName(for: url, originalPath: originalPath) }
 
-        init(path: String, capturedAt: Date, pinned: Bool = false, originalPath: String? = nil, id: UUID = UUID(), title: String? = nil) {
+        init(path: String, capturedAt: Date, pinned: Bool = false, originalPath: String? = nil, id: UUID = UUID(), title: String? = nil, uploadedURL: String? = nil) {
             self.id = id
             self.path = path
             self.capturedAt = capturedAt
             self.pinned = pinned
             self.originalPath = originalPath
             self.title = title
+            self.uploadedURL = uploadedURL
         }
 
-        private enum CodingKeys: String, CodingKey { case id, path, capturedAt, pinned, originalPath, title }
+        private enum CodingKeys: String, CodingKey { case id, path, capturedAt, pinned, originalPath, title, uploadedURL }
         init(from decoder: Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
             id = try values.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -31,6 +33,7 @@ final class ImageHistory {
             pinned = try values.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
             originalPath = try values.decodeIfPresent(String.self, forKey: .originalPath)
             title = try values.decodeIfPresent(String.self, forKey: .title)
+            uploadedURL = try values.decodeIfPresent(String.self, forKey: .uploadedURL)
         }
     }
 
@@ -49,7 +52,7 @@ final class ImageHistory {
             if let library {
                 return ((try? library.shelfItems(.image)) ?? []).compactMap { item in
                     guard let path = item.path else { return nil }
-                    return Entry(path: path, capturedAt: item.createdAt, pinned: item.favorite, originalPath: item.originalPath, id: item.id, title: item.title.isEmpty ? nil : item.title)
+                    return Entry(path: path, capturedAt: item.createdAt, pinned: item.favorite, originalPath: item.originalPath, id: item.id, title: item.title.isEmpty ? nil : item.title, uploadedURL: item.uploadedURL)
                 }
             }
             return legacyEntries

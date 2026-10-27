@@ -26,6 +26,12 @@
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
+      },
+      {
+        "id": "r2-secret-storage",
+        "macos": "Cloudflare R2 Secret Access Key is stored in the user's macOS Keychain via SecItem.",
+        "windows": "Cloudflare R2 Secret Access Key is encrypted with Windows DPAPI via Electron safeStorage in userData.",
+        "reason": "Each operating system provides its own user-scoped credential vault; neither platform writes the secret to plaintext preferences or library files."
       }
     ]
   },
@@ -130,7 +136,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -146,7 +153,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -162,7 +170,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -176,7 +185,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -192,7 +202,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -218,7 +229,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -233,7 +245,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -248,7 +261,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -276,7 +290,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -292,7 +307,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -322,7 +338,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -350,7 +367,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -366,7 +384,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -382,7 +401,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -398,7 +418,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -414,7 +435,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -430,7 +452,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -446,7 +469,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -462,7 +486,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -478,7 +503,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -494,7 +520,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -510,7 +537,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -540,7 +568,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -556,7 +585,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -572,7 +602,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -588,7 +619,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -604,7 +636,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -620,7 +653,8 @@
               "image",
               "text"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -635,7 +669,8 @@
               "image",
               "text"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -659,7 +694,8 @@
             "visibleKinds": [
               "image"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -673,7 +709,8 @@
             "visibleKinds": [
               "image"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -689,7 +726,8 @@
               "image",
               "text"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -704,7 +742,8 @@
               "image",
               "text"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -721,7 +760,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -737,7 +777,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -765,7 +806,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -781,7 +823,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -797,7 +840,8 @@
               "image",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -825,7 +869,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -841,7 +886,8 @@
               "text",
               "link"
             ],
-            "searchEditing": true
+            "searchEditing": true,
+            "uploaded": []
           }
         },
         {
@@ -857,7 +903,8 @@
               "text",
               "link"
             ],
-            "searchEditing": true
+            "searchEditing": true,
+            "uploaded": []
           }
         },
         {
@@ -873,7 +920,8 @@
               "text",
               "link"
             ],
-            "searchEditing": true
+            "searchEditing": true,
+            "uploaded": []
           }
         },
         {
@@ -889,7 +937,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -905,7 +954,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -931,7 +981,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -945,7 +996,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -959,7 +1011,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -987,7 +1040,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1005,7 +1059,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1021,7 +1076,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1038,7 +1094,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1056,7 +1113,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1073,7 +1131,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1089,7 +1148,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1107,7 +1167,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1123,7 +1184,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1139,7 +1201,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1157,7 +1220,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1173,7 +1237,8 @@
               "text",
               "link"
             ],
-            "searchEditing": true
+            "searchEditing": true,
+            "uploaded": []
           }
         },
         {
@@ -1190,7 +1255,8 @@
               "text",
               "link"
             ],
-            "searchEditing": true
+            "searchEditing": true,
+            "uploaded": []
           }
         },
         {
@@ -1206,7 +1272,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1223,7 +1290,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -1251,7 +1319,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1267,7 +1336,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1283,7 +1353,8 @@
               "text",
               "link"
             ],
-            "searchEditing": true
+            "searchEditing": true,
+            "uploaded": []
           }
         },
         {
@@ -1297,7 +1368,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1313,7 +1385,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1327,7 +1400,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1343,7 +1417,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1357,7 +1432,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1373,7 +1449,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1387,7 +1464,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1403,7 +1481,8 @@
               "text",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         }
       ]
@@ -1429,7 +1508,8 @@
               "image",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1444,7 +1524,8 @@
               "image",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1457,7 +1538,8 @@
               "image",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1472,7 +1554,8 @@
               "image",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1485,7 +1568,8 @@
               "image",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
           }
         },
         {
@@ -1500,7 +1584,223 @@
               "image",
               "link"
             ],
-            "searchEditing": false
+            "searchEditing": false,
+            "uploaded": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "upload-shortcut-and-remapping",
+      "itemSet": "standard",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i1",
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "uploaded": []
+          }
+        },
+        {
+          "action": "key",
+          "code": "KeyU",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i1",
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "uploaded": [
+              "i1"
+            ]
+          }
+        },
+        {
+          "action": "down",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "uploaded": [
+              "i1"
+            ]
+          }
+        },
+        {
+          "action": "remap",
+          "binding": "upload",
+          "key": "",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "uploaded": [
+              "i1"
+            ]
+          }
+        },
+        {
+          "action": "key",
+          "code": "KeyU",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "uploaded": [
+              "i1"
+            ]
+          }
+        },
+        {
+          "action": "remap",
+          "binding": "upload",
+          "key": "KeyX",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "uploaded": [
+              "i1"
+            ]
+          }
+        },
+        {
+          "action": "key",
+          "code": "KeyX",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "uploaded": [
+              "i1",
+              "t1"
+            ]
+          }
+        },
+        {
+          "action": "remap",
+          "binding": "upload",
+          "key": null,
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "uploaded": [
+              "i1",
+              "t1"
+            ]
+          }
+        },
+        {
+          "action": "right",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t2",
+            "selected": [
+              "t2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "uploaded": [
+              "i1",
+              "t1"
+            ]
+          }
+        },
+        {
+          "action": "key",
+          "code": "KeyU",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t2",
+            "selected": [
+              "t2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "uploaded": [
+              "i1",
+              "t1",
+              "t2"
+            ]
           }
         }
       ]

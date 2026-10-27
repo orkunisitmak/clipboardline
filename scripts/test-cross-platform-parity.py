@@ -127,6 +127,11 @@ class CrossPlatformParityTests(unittest.TestCase):
         self.reports['macos']['observations'][0]['actual']['assumedSuccess'] = True
         self.rejected()
 
+    def test_malformed_uploaded_snapshot_is_rejected(self):
+        for bad in [['not-an-item'], ['t1', 'i1'], ['i1', 'i1'], 'i1']:
+            self.reports['windows']['observations'][0]['actual']['uploaded'] = bad
+            self.rejected()
+
     def test_missing_both_platform_default_is_rejected(self):
         self.contract['policy']['defaultPlatforms'] = ['macos']
         self.contract_path.write_text(json.dumps(self.contract))

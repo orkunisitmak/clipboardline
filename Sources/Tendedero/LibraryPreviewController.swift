@@ -101,7 +101,7 @@ import Combine
             let preview = LinkPreview(record: record, keyboardBindings: model.keyboardBindings, window: reusable); link = preview; controls = preview.controls
             preview.onKey = { [weak self] in self?.handle($0) ?? false }; preview.onClose = { [weak self] in self?.didClose(token) }; wireMouseFocus(preview.window); preview.show()
         }
-        controls.onMove = { [weak self] in self?.move($0) }; controls.onCopy = { [weak self] in self?.copy() }; controls.onPin = { [weak self] in self?.pin() }
+        controls.onMove = { [weak self] in self?.move($0) }; controls.onCopy = { [weak self] in self?.copy() }; controls.onUpload = { [weak self] in self?.upload() }; controls.onPin = { [weak self] in self?.pin() }
         controls.onCommands = { [weak model] in model?.onCommandsRequested?() }
         updateControls()
     }
@@ -154,6 +154,10 @@ import Combine
         model.copyCurrent(id)
         if model.copiedIDs.contains(id) { text?.flashCopied(); link?.flashCopied(); image?.controls.position.stringValue = L("Copied") }
     }
+    private func upload() {
+        guard flush(), let id = currentID else { return }
+        model.uploadCurrent(id)
+    }
     private func pin() { guard flush(), let id = currentID else { return }; model.perform { try model.store.toggleFavorite([id]) }; updateControls() }
     private func updateControls() {
         guard let id = currentID, let record = try? model.store.item(id) else { return }
@@ -162,7 +166,8 @@ import Combine
         link?.replace(record)
         if let base = record.markupSourceURL, let rendered = record.fileURL { image?.updateMarkupSource(base, renderedURL: rendered) }
         let position = "\(index != nil ? String(currentIndex + 1) : "—") / \(model.ids.count)"
-        image?.controls.update(position: position, pinned: record.favorite); text?.controls.update(position: position, pinned: record.favorite); link?.controls.update(position: position, pinned: record.favorite)
+        let uploaded = record.uploadedURL != nil
+        image?.controls.update(position: position, pinned: record.favorite, uploaded: uploaded); text?.controls.update(position: position, pinned: record.favorite, uploaded: uploaded); link?.controls.update(position: position, pinned: record.favorite, uploaded: uploaded)
     }
     private func handle(_ event: NSEvent) -> Bool {
         if image?.isMarkupEditing != true, text?.isEditing != true,
@@ -178,6 +183,7 @@ import Combine
         guard let action = model.keyboardBindings.action(for: event, in: context) else { return false }
         switch action {
         case .paste: if flush(), let id = currentID { model.onPasteRequested?([id]) }
+        case .upload: upload()
         case .finishEditing: if model.keyboardBindings.matches(.paste, event: event), flush(), let id = currentID { model.onPasteRequested?([id]) } else { return false }
         case .copyImageText: if let id = currentID { model.onImageTextCopyRequested?(id) }
         case .commandPalette: model.onCommandsRequested?()

@@ -39,11 +39,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         super.init()
     }
 
-    init(line: Line, clipboardSource: (any ClipboardSource)? = nil, watchesFiles: Bool = true, copyPasteboard: NSPasteboard? = nil, directPaste: DirectPasteCoordinator? = nil, ownsKeyboardFocus: (@MainActor () -> Bool)? = nil) {
+    init(line: Line, clipboardSource: (any ClipboardSource)? = nil, watchesFiles: Bool = true, copyPasteboard: NSPasteboard? = nil, directPaste: DirectPasteCoordinator? = nil, r2: R2UploadCoordinator? = nil, ownsKeyboardFocus: (@MainActor () -> Bool)? = nil) {
         self.line = line
         startupError = nil
         isolatedCopyBoard = copyPasteboard
         self.directPaste = directPaste ?? DirectPasteCoordinator()
+        self.injectedR2Coordinator = r2
         self.ownsKeyboardFocus = ownsKeyboardFocus ?? { NSApp?.keyWindow != nil }
         self.clipboardSource = clipboardSource; self.watchesFiles = watchesFiles
         super.init()
@@ -75,9 +76,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var signalSources: [DispatchSourceSignal] = []
     private var hotKey: HotKey?
     private var copyHotKey: HotKey?
+    private var uploadHotKey: HotKey?
     private var libraryHotKey: HotKey?
     private var searchHotKey: HotKey?
     private let directPaste: DirectPasteCoordinator
+    private var injectedR2Coordinator: R2UploadCoordinator?
+    private(set) lazy var r2Coordinator: R2UploadCoordinator = injectedR2Coordinator ?? R2UploadCoordinator(
+        store: line.library,
+        defaults: line.defaults,
+        secrets: watchesFiles ? KeychainR2SecretStore() : InMemoryR2SecretStore(),
+        writeLink: { [weak self] url in
+            ClipboardTransfer.write(ClipboardTransfer.linkItems([url.absoluteString]), to: self?.isolatedCopyBoard ?? .general)
+        }
+    )
     private var pasteFocusHandoffDepth = 0
     private lazy var imageTextCopy: ImageTextCopy? = line.library.map { store in
         ImageTextCopy(store: store, writeText: { [weak self] text in
@@ -220,6 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         line.onNameAndPinRequested = { [weak self] id in self?.showNameAndPin(id) }
         line.onNameAndPinBatchRequested = { [weak self] ids in self?.showNameAndPin(ids) }
         line.onPasteRequested = { [weak self] ids in self?.pasteItems(ids) }
+        line.onUploadRequested = { [weak self] id, force in self?.uploadItem(id, forceReupload: force) }
         line.onTagRequested = { [weak self] ids in self?.showTagPicker(ids) }
         line.onImageTextCopyRequested = { [weak self] id in self?.copyImageText(id) }
         line.onCommandsRequested = { [weak self] in self?.showCommands(origin: .line) }
@@ -251,6 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         registerShortcut()
 
         registerCopyShortcut(line.copyLatestShortcut, persist: false)
+        registerUploadShortcut(line.uploadLatestShortcut, persist: false)
         registerLibraryShortcut(line.libraryShortcut, persist: false)
         if watchesFiles { registerSearchShortcut(line.globalSearchShortcut, persist: false) }
         setUpStatusItem()
@@ -327,7 +340,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         appUpdates.stopAutomaticChecks()
         if let updateWakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(updateWakeObserver) }
-        directPaste.cancel(); imageTextCopy?.cancel()
+        directPaste.cancel(); imageTextCopy?.cancel(); r2Coordinator.cancelAll()
         imageSearch?.stop()
         _ = preview?.flushEdits(); _ = textPreview?.flushEdits()
         _ = libraryController?.flush(); metadataService?.stop()
@@ -830,7 +843,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
               Shortcut.current == nil || hotKey?.isRegistered == true,
               line.globalSearchShortcut == nil || searchHotKey?.isRegistered == true,
               line.libraryShortcut == nil || libraryHotKey?.isRegistered == true,
-              line.copyLatestShortcut == nil || copyHotKey?.isRegistered == true else { return }
+              line.copyLatestShortcut == nil || copyHotKey?.isRegistered == true,
+              line.uploadLatestShortcut == nil || uploadHotKey?.isRegistered == true else { return }
         if line.notice == shortcutRestoreWarning { line.notice = nil }
         shortcutRestoreWarning = nil; settingsController?.model.shortcutWarning = nil
     }
@@ -1001,7 +1015,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard startupError == nil else { showStartupFailure(); return }
         capturePasteTarget()
         if settingsController == nil {
-            let model = SettingsModel(line: line, allowsSystemChanges: watchesFiles, updates: appUpdates)
+            let model = SettingsModel(line: line, allowsSystemChanges: watchesFiles, updates: appUpdates, r2: r2Coordinator)
             model.shortcutWarning = shortcutRestoreWarning
             model.onCommands = { [weak self] in self?.showCommands(origin: .application) }
             model.setSize = { [weak self] in self?.setSize($0) }
@@ -1017,6 +1031,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             model.recordLibraryShortcut = { [weak self] in self?.recordLibraryShortcut() }
             model.setSearchShortcut = { [weak self] in self?.registerSearchShortcut($0) }
             model.recordSearchShortcut = { [weak self] in self?.recordSearchShortcut() }
+            model.setUploadShortcut = { [weak self] in self?.registerUploadShortcut($0) }
+            model.recordUploadShortcut = { [weak self] in self?.recordUploadShortcut() }
             model.requestPastePermission = { [weak self] in self?.showPastePermission() }
             model.recordContextShortcut = { [weak self] in self?.recordContextShortcut($0) }
             model.openLibrary = { [weak self] in self?.showLibrary() }
@@ -1064,6 +1080,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             controller.onRefreshLink = { [weak self] in self?.metadataService?.request([$0], force: true) }
             controller.model.onVisibleLinks = { [weak self] in self?.metadataService?.request($0) }
             controller.model.onPasteRequested = { [weak self] in self?.pasteItems($0) }
+            controller.model.onUploadRequested = { [weak self] id, force in self?.uploadItem(id, forceReupload: force) }
             controller.model.onImageTextCopyRequested = { [weak self] in self?.copyImageText($0) }
             controller.model.onCommandsRequested = { [weak self] in self?.showCommands() }
             libraryController = controller
@@ -1210,9 +1227,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func wirePreviewControls(_ controls: PreviewControls, session: ShelfPreviewSession) {
         controls.onCommands = { [weak self] in self?.showCommands(origin: .shelfPreview) }
-        controls.update(position: session.position, pinned: session.pinned)
+        controls.update(position: session.position, pinned: session.pinned, uploaded: session.uploadedURL != nil)
         controls.onMove = { [weak self] in self?.movePreview(session, delta: $0) }
         controls.onCopy = { [weak self] in self?.copyPreview(session) }
+        controls.onUpload = { [weak self] in self?.uploadPreview(session) }
         controls.onPin = { [weak self] in self?.pinPreview(session) }
     }
     private func movePreview(_ session: ShelfPreviewSession, delta: Int) {
@@ -1247,10 +1265,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                 guard self?.previewSession === session, session.shelf == .images,
                       session.currentID == copiedID, self?.line.copiedID != copiedID else { return }
-                self?.preview?.controls.update(position: session.position, pinned: session.pinned)
+                self?.preview?.controls.update(position: session.position, pinned: session.pinned, uploaded: session.uploadedURL != nil)
             }
         }
         return true
+    }
+    private func uploadPreview(_ session: ShelfPreviewSession) {
+        guard emptyPreview == nil, flushPreviewEdits(), let id = actionablePreviewID else { return }
+        uploadItem(id)
     }
     private func pinPreview(_ session: ShelfPreviewSession) {
         guard emptyPreview == nil, session.hasCurrentItem || actionablePreviewID == session.currentID, flushPreviewEdits() else { return }
@@ -1308,10 +1330,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if previewDisplayedID != session.currentID {
                 textPreview?.replaceText(text)
             }
-            textPreview?.controls.update(position: session.position, pinned: session.pinned)
+            textPreview?.controls.update(position: session.position, pinned: session.pinned, uploaded: session.uploadedURL != nil)
         } else if session.shelf == .links {
             guard let record = session.linkRecord else { closePreview(); return }
-            linkPreview?.replace(record); linkPreview?.controls.update(position: session.position, pinned: session.pinned)
+            linkPreview?.replace(record); linkPreview?.controls.update(position: session.position, pinned: session.pinned, uploaded: session.uploadedURL != nil)
         } else {
             guard let url = session.url else { closePreview(); return }
             // Moving a favorite to managed storage keeps the current zoom and pan.
@@ -1322,7 +1344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let record = try? line.library?.item(session.currentID), let base = record.markupSourceURL, let rendered = record.fileURL {
                 preview?.updateMarkupSource(base, renderedURL: rendered)
             }
-            preview?.controls.update(position: session.position, pinned: session.pinned)
+            preview?.controls.update(position: session.position, pinned: session.pinned, uploaded: session.uploadedURL != nil)
         }
         previewDisplayedID = session.currentID
     }
@@ -1341,6 +1363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let action = line.keyboardBindings.action(for: event, in: context) else { return false }
         switch action {
         case .paste: if let id = actionablePreviewID { pasteItems([id]) }
+        case .upload: uploadPreview(session)
         case .finishEditing:
             if line.keyboardBindings.matches(.paste, event: event), let id = actionablePreviewID { pasteItems([id]) }
             else { return false }
@@ -1630,12 +1653,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let records = (try? line.library?.records(snapshot.ids)) ?? []
         let record = records.count == 1 ? records.first : nil
         value.kind = record?.kind
+        value.uploadedURL = record?.uploadedURL
         value.hasFile = record?.fileURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
         value.isRecording = record?.fileURL.map(isRecordingFile) ?? false
         value.isDeleted = !records.isEmpty && records.allSatisfy { $0.deletedAt != nil }
         value.allPinned = !records.isEmpty && records.allSatisfy(\.favorite)
         value.hasLatestImage = line.newestID != nil
+        value.hasAnyItem = !line.items.isEmpty || !line.texts.entries.isEmpty || !line.links.entries.isEmpty
+            || ((try? line.library?.query(LibraryQuery(scope: .recent, sort: .newest), limit: 1).isEmpty == false) ?? false)
         value.globalToggleHint = Shortcut.current?.display ?? ""; value.copyLatestHint = line.copyLatestShortcut?.title ?? ""
+        value.uploadLatestHint = line.uploadLatestShortcut?.title ?? ""
         value.canUndoShelfRemoval = line.library?.canUndoShelfRemoval == true
         value.canUndoLibraryTrash = line.library?.canUndoTrash == true
         value.activeFavorites = snapshot.inLibrary ? libraryController?.model.showingPinnedOnly == true : line.activeFavoritesOnly
@@ -1718,6 +1745,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .search: actionBarLibrary(from: snapshot)?.model.onSearchFocus?()
         case .library: showLibrary()
         case .paste: pasteItems(snapshot.ids)
+        case .upload: if let id = snapshot.singleID { uploadItem(id) }
         case .copy:
             do {
                 guard let store = line.library, !snapshot.ids.isEmpty else { return }
@@ -1812,9 +1840,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch action {
         case .settings: showSettings()
         case .clearUnsavedHistory: confirmClearHistory()
-        case .settingsGeneral, .settingsHistory, .settingsSources, .settingsShortcuts, .settingsAbout:
+        case .settingsGeneral, .settingsHistory, .settingsSources, .settingsCloud, .settingsShortcuts, .settingsAbout:
             showSettings()
-            settingsController?.model.section = action == .settingsGeneral ? .general : action == .settingsHistory ? .history : action == .settingsSources ? .sources : action == .settingsShortcuts ? .shortcuts : .about
+            settingsController?.model.section = action == .settingsGeneral ? .general : action == .settingsHistory ? .history : action == .settingsSources ? .sources : action == .settingsCloud ? .cloud : action == .settingsShortcuts ? .shortcuts : .about
         case .editDetails:
             guard let id = snapshot.singleID else { return }
             library()?.revealItemDetails(id)
@@ -1867,6 +1895,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .trimVideo:
             if let id = snapshot.singleID, line.items.contains(where: { $0.id == id }) { line.markup(id) }
             else if let id = snapshot.singleID, let store = line.library { Trim.shared.edit(id, store: store, size: NSSize(width: 720, height: 450)) }
+        case .reuploadToR2: if let id = snapshot.singleID { uploadItem(id, forceReupload: true) }
         case .resetZoom: markup(.resetZoom)
         case .markupUndo: markup(.undo)
         case .markupRedo: markup(.redo)
@@ -1877,6 +1906,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .markupStyles: markup(.styles)
         case .toggleLine: toggle()
         case .copyLatestImage: copyLatest()
+        case .uploadLatestItem: uploadLatest()
         case .openScreenshotsFolder: NSWorkspace.shared.open(watcher?.folder ?? line.historyFiles.inbox)
         case .checkUpdates: showUpdateSettings(); appUpdates.manualCheck()
         case .installUpdate:
@@ -1912,6 +1942,83 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         catch { reportActionStatus(error.localizedDescription) }
     }
     private func copyLatest() { if let id = line.newestID { line.copy(id) } }
+
+    func uploadItem(_ id: UUID, forceReupload: Bool = false) {
+        guard flushPreviewEdits(), libraryController?.flush() ?? true else { return }
+        let needsNetwork = forceReupload || ((try? line.library?.item(id))?.uploadedURL == nil)
+        if needsNetwork, r2Coordinator.isConfigured {
+            reportActionStatus(L("Uploading to R2…"))
+        }
+        r2Coordinator.upload(id, forceReupload: forceReupload) { [weak self] outcome in
+            self?.handleUploadOutcome(outcome, emptyMessage: L("Select one item first"))
+        }
+    }
+
+    func uploadLatest() {
+        guard flushPreviewEdits(), libraryController?.flush() ?? true else { return }
+        if r2Coordinator.isConfigured {
+            reportActionStatus(L("Uploading to R2…"))
+        }
+        r2Coordinator.uploadLatest { [weak self] outcome in
+            self?.handleUploadOutcome(outcome, emptyMessage: L("No items in this view"))
+        }
+    }
+
+    private func handleUploadOutcome(_ outcome: R2UploadCoordinator.Outcome, emptyMessage: String) {
+        switch outcome {
+        case .uploaded:
+            line.playFeedbackSound()
+            if let session = previewSession { updatePreview(session) }
+            reportActionStatus(L("Uploaded — link copied"))
+        case .copiedExisting:
+            line.playFeedbackSound()
+            if let session = previewSession { updatePreview(session) }
+            reportActionStatus(L("Public link copied"))
+        case .notConfigured:
+            reportActionStatus(L("Configure Cloudflare R2 in Settings first"))
+            if watchesFiles {
+                showSettings()
+                settingsController?.model.section = .cloud
+            }
+        case .unavailable:
+            reportActionStatus(emptyMessage)
+        case let .failed(message):
+            reportActionStatus(message)
+        }
+    }
+
+    private func registerUploadShortcut(_ value: KeyShortcut?, persist: Bool = true) {
+        defer { clearResolvedShortcutWarning() }
+        guard let value else {
+            uploadHotKey?.invalidate(); uploadHotKey = nil
+            if persist { line.saveUploadLatestShortcut(nil) }
+            return
+        }
+        guard value.isValid else { return }
+        if uploadHotKey?.isRegistered == true && value == line.uploadLatestShortcut { return }
+        let replacement = HotKey(keyCode: value.keyCode, modifiers: value.modifiers) { [weak self] in self?.uploadLatest() }
+        guard replacement.isRegistered else {
+            line.notice = L("Shortcut unavailable; the previous shortcut is kept")
+            return
+        }
+        uploadHotKey?.invalidate(); uploadHotKey = replacement
+        if persist { line.saveUploadLatestShortcut(value) }
+        settingsController?.model.refresh()
+    }
+
+    private func recordUploadShortcut() {
+        shortcutRecorder?.window.close()
+        let recorder = ShortcutRecorder(); shortcutRecorder = recorder
+        recorder.onRestoreFailure = { [weak self] in self?.reportShortcutRestoreFailure() }
+        recorder.window.title = L("Upload latest item")
+        recorder.onFinish = { [weak self] value in
+            self?.shortcutRecorder = nil
+            if let value { self?.registerUploadShortcut(value) }
+            self?.settingsController?.model.refresh()
+            if self?.isRevealed == true { self?.focusLine() }
+        }
+        recorder.show()
+    }
     private func registerLibraryShortcut(_ value: KeyShortcut?, persist: Bool = true) {
         defer { clearResolvedShortcutWarning() }
         guard value != nil else { libraryHotKey?.invalidate(); libraryHotKey = nil; if persist { line.saveLibraryShortcut(nil) }; return }

@@ -152,7 +152,7 @@ fileprivate struct LibraryCardState: Equatable {
     func refresh() {
         guard isViewLoaded, !applyingSnapshot else { return }
         refreshPassCount += 1
-        shortcutHint = model.keyboardBindings.hint([.copy, .pin])
+        shortcutHint = model.keyboardBindings.hint([.copy, .upload, .pin])
         refreshing = true; defer { refreshing = false }
         updateLayout()
         if dataSource == nil || previousIDs != model.ids {
@@ -194,6 +194,7 @@ fileprivate struct LibraryCardState: Equatable {
                 } else { selected = self.model.select(id, preservingSelection: true) }
                 if selected { _ = self.focusContent() }
             }, onCopy: { [weak self] in guard let self else { return }; if self.model.selectedIDs.contains(id) || self.model.select(id) { self.model.copy() } },
+            onUpload: { [weak self] in guard let self else { return }; if self.model.select(id) { self.model.uploadCurrent(id) } },
             onPin: { [weak self] in guard let self else { return }; if self.model.selectedIDs.contains(id) || self.model.select(id) { self.model.favorite() } },
             onPreview: { [weak self] in guard let self else { return }; if !self.model.selectedIDs.contains(id) { _ = self.model.select(id) }; self.model.onPreview?(id) },
             dragItems: { [weak self] in self?.model.dragItems(id) ?? [] })
@@ -267,6 +268,7 @@ private struct LibraryCard: View {
     let copied: Bool
     let onSelect: (NSEvent.ModifierFlags) -> Void
     let onCopy: () -> Void
+    let onUpload: () -> Void
     let onPin: () -> Void
     let onPreview: () -> Void
     let dragItems: () -> [ShelfDragItem]
@@ -276,7 +278,7 @@ private struct LibraryCard: View {
         Group {
             if let record {
                 if list {
-                    HStack(spacing: 14) { media(record).frame(width: 96, height: 64).clipShape(RoundedRectangle(cornerRadius: 8)); title(record).padding(.trailing, 68); Spacer() }.padding(10)
+                    HStack(spacing: 14) { media(record).frame(width: 96, height: 64).clipShape(RoundedRectangle(cornerRadius: 8)); title(record).padding(.trailing, 94); Spacer() }.padding(10)
                 } else {
                     VStack(alignment: .leading, spacing: 10) {
                         media(record).frame(maxWidth: .infinity).frame(height: 120).clipped().clipShape(RoundedRectangle(cornerRadius: 10))
@@ -307,7 +309,7 @@ private struct LibraryCard: View {
     private func title(_ record: LibraryRecord) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(record.displayTitle.isEmpty ? L("Untitled note") : record.displayTitle).font(.system(size: 12, weight: .semibold)).lineLimit(list ? 1 : 2)
-            HStack(spacing: 5) { Image(systemName: shelf.icon); Text(record.kind == .link ? record.author ?? record.linkURL?.host ?? shelf.title : shelf.title); if record.favorite { Image(systemName: "pin.fill").foregroundStyle(.tint) } }
+            HStack(spacing: 5) { Image(systemName: shelf.icon); Text(record.kind == .link ? record.author ?? record.linkURL?.host ?? shelf.title : shelf.title); if record.favorite { Image(systemName: "pin.fill").foregroundStyle(.tint) }; if record.uploadedURL != nil { Image(systemName: "link.icloud").foregroundStyle(.tint) } }
                 .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             if !tagLabel.isEmpty { Text(tagLabel).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).help(tagLabel) }
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -315,6 +317,9 @@ private struct LibraryCard: View {
     private func actions(_ record: LibraryRecord) -> some View {
         HStack(spacing: 4) {
             Button(action: onCopy) { Image(systemName: "doc.on.doc").frame(width: 23, height: 23) }.help(L("Copy") + " · " + keyboardBindings.title(.copy))
+            if record.deletedAt == nil {
+                Button(action: onUpload) { Image(systemName: record.uploadedURL != nil ? "link.icloud" : "icloud.and.arrow.up").foregroundStyle(record.uploadedURL != nil ? Color.accentColor : Color.primary).frame(width: 23, height: 23) }.help((record.uploadedURL != nil ? L("Copy public link") : L("Upload to R2")) + " · " + keyboardBindings.title(.upload))
+            }
             Button(action: onPin) { Image(systemName: record.favorite ? "pin.fill" : "pin").foregroundStyle(record.favorite ? Color.accentColor : Color.primary).frame(width: 23, height: 23) }.help(L("Pin favorite") + " · " + keyboardBindings.title(.pin))
         }.buttonStyle(.plain).padding(3).background(.regularMaterial, in: Capsule()).opacity(hovering || focused ? 1 : 0).allowsHitTesting(hovering || focused)
     }

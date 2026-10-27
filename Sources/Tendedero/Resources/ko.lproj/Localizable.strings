@@ -496,3 +496,81 @@
 "Focus previous pane" = "이전 패널로 포커스 이동";
 
 "Undo Move to Trash" = "휴지통으로 이동 실행 취소";
+
+"Access Key ID" = "액세스 키 ID";
+
+"Account ID or HTTPS endpoint" = "계정 ID 또는 HTTPS 엔드포인트";
+
+"Bucket name" = "버킷 이름";
+
+"Cloud upload" = "클라우드 업로드";
+
+"Cloudflare R2" = "Cloudflare R2";
+
+"Cloudflare R2 connection failed" = "Cloudflare R2 연결에 실패했습니다";
+
+"Cloudflare R2 endpoint must use HTTPS" = "Cloudflare R2 엔드포인트는 HTTPS를 사용해야 합니다";
+
+"Cloudflare R2 rejected the credentials or bucket (%d)" = "Cloudflare R2에서 자격 증명 또는 버킷을 거부했습니다 (%d)";
+
+"Cloudflare R2 upload failed (%d)" = "Cloudflare R2 업로드에 실패했습니다 (%d)";
+
+"Configure Cloudflare R2 in Settings first" = "먼저 설정에서 Cloudflare R2를 구성하세요";
+
+"Connected to Cloudflare R2" = "Cloudflare R2에 연결되었습니다";
+
+"Connection" = "연결";
+
+"Copy public link" = "공개 링크 복사";
+
+"Credentials" = "자격 증명";
+
+"Enter a valid Cloudflare R2 Account ID or HTTPS endpoint" = "유효한 Cloudflare R2 계정 ID 또는 HTTPS 엔드포인트를 입력하세요";
+
+"Enter a valid HTTPS public base URL (for example, your r2.dev or custom domain)" = "유효한 HTTPS 공개 기본 URL을 입력하세요(예: r2.dev 또는 사용자 지정 도메인)";
+
+"Enter a valid R2 bucket name" = "유효한 R2 버킷 이름을 입력하세요";
+
+"Enter a valid key prefix without '..'" = "'..'이 없는 유효한 키 접두사를 입력하세요";
+
+"Enter an R2 Access Key ID" = "R2 액세스 키 ID를 입력하세요";
+
+"Enter an R2 Secret Access Key" = "R2 비밀 액세스 키를 입력하세요";
+
+"File is too large to upload (512 MB limit)" = "파일이 너무 커서 업로드할 수 없습니다(512MB 제한)";
+
+"Key prefix (optional)" = "키 접두사(선택 사항)";
+
+"Public base URL" = "공개 기본 URL";
+
+"Public link copied" = "공개 링크가 복사되었습니다";
+
+"Remove secret key" = "비밀 키 제거";
+
+"Save secret key" = "비밀 키 저장";
+
+"Secret Access Key" = "비밀 액세스 키";
+
+"Secret Access Key could not be saved in Keychain" = "비밀 액세스 키를 키체인에 저장할 수 없습니다";
+
+"Stored in Keychain" = "키체인에 저장됨";
+
+"Test connection" = "연결 테스트";
+
+"Upload again to R2" = "R2에 다시 업로드";
+
+"Upload an item first" = "먼저 업로드할 항목을 캡처하세요";
+
+"Upload latest item" = "최신 항목 업로드";
+
+"Upload to R2" = "R2에 업로드";
+
+"Uploaded — link copied" = "업로드됨 — 링크가 복사되었습니다";
+
+"Uploading to R2…" = "R2에 업로드하는 중…";
+
+"Uploads the newest item on the shelves to Cloudflare R2 and copies its public link." = "선반의 최신 항목을 Cloudflare R2에 업로드하고 공개 링크를 복사합니다.";
+
+"Uploads use your own Cloudflare R2 bucket via S3-compatible HTTPS. After uploading, the public URL is copied to the clipboard." = "업로드는 S3 호환 HTTPS를 통해 사용자의 Cloudflare R2 버킷을 사용합니다. 업로드 후 공개 URL이 클립보드에 복사됩니다.";
+
+"Your Secret Access Key is stored in this Mac’s Keychain and is never written to preferences." = "비밀 액세스 키는 이 Mac의 키체인에 저장되며 환경설정에 기록되지 않습니다.";

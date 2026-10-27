@@ -496,3 +496,81 @@
 "Focus previous pane" = "聚焦上一个面板";
 
 "Undo Move to Trash" = "撤销移到废纸篓";
+
+"Access Key ID" = "访问密钥 ID";
+
+"Account ID or HTTPS endpoint" = "账户 ID 或 HTTPS 端点";
+
+"Bucket name" = "存储桶名称";
+
+"Cloud upload" = "云端上传";
+
+"Cloudflare R2" = "Cloudflare R2";
+
+"Cloudflare R2 connection failed" = "Cloudflare R2 连接失败";
+
+"Cloudflare R2 endpoint must use HTTPS" = "Cloudflare R2 端点必须使用 HTTPS";
+
+"Cloudflare R2 rejected the credentials or bucket (%d)" = "Cloudflare R2 拒绝了凭据或存储桶 (%d)";
+
+"Cloudflare R2 upload failed (%d)" = "Cloudflare R2 上传失败 (%d)";
+
+"Configure Cloudflare R2 in Settings first" = "请先在设置中配置 Cloudflare R2";
+
+"Connected to Cloudflare R2" = "已连接到 Cloudflare R2";
+
+"Connection" = "连接";
+
+"Copy public link" = "复制公开链接";
+
+"Credentials" = "凭据";
+
+"Enter a valid Cloudflare R2 Account ID or HTTPS endpoint" = "请输入有效的 Cloudflare R2 账户 ID 或 HTTPS 端点";
+
+"Enter a valid HTTPS public base URL (for example, your r2.dev or custom domain)" = "请输入有效的 HTTPS 公开基础 URL（例如您的 r2.dev 或自定义域名）";
+
+"Enter a valid R2 bucket name" = "请输入有效的 R2 存储桶名称";
+
+"Enter a valid key prefix without '..'" = "请输入不包含 '..' 的有效键前缀";
+
+"Enter an R2 Access Key ID" = "请输入 R2 访问密钥 ID";
+
+"Enter an R2 Secret Access Key" = "请输入 R2 秘密访问密钥";
+
+"File is too large to upload (512 MB limit)" = "文件过大，无法上传（上限 512 MB）";
+
+"Key prefix (optional)" = "键前缀（可选）";
+
+"Public base URL" = "公开基础 URL";
+
+"Public link copied" = "已复制公开链接";
+
+"Remove secret key" = "移除秘密密钥";
+
+"Save secret key" = "保存秘密密钥";
+
+"Secret Access Key" = "秘密访问密钥";
+
+"Secret Access Key could not be saved in Keychain" = "无法将秘密访问密钥保存到钥匙串";
+
+"Stored in Keychain" = "已存储在钥匙串中";
+
+"Test connection" = "测试连接";
+
+"Upload again to R2" = "重新上传到 R2";
+
+"Upload an item first" = "请先复制一个可上传的项目";
+
+"Upload latest item" = "上传最新项目";
+
+"Upload to R2" = "上传到 R2";
+
+"Uploaded — link copied" = "已上传 — 链接已复制";
+
+"Uploading to R2…" = "正在上传到 R2…";
+
+"Uploads the newest item on the shelves to Cloudflare R2 and copies its public link." = "将置物架上的最新项目上传到 Cloudflare R2 并复制其公开链接。";
+
+"Uploads use your own Cloudflare R2 bucket via S3-compatible HTTPS. After uploading, the public URL is copied to the clipboard." = "上传通过兼容 S3 的 HTTPS 使用您自己的 Cloudflare R2 存储桶。上传完成后，公开 URL 会复制到剪贴板。";
+
+"Your Secret Access Key is stored in this Mac’s Keychain and is never written to preferences." = "您的秘密访问密钥存储在此 Mac 的钥匙串中，绝不会写入偏好设置。";

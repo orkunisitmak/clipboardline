@@ -18,6 +18,7 @@ final class SettingsModel: ObservableObject {
     let line: Line
     let allowsSystemChanges: Bool
     let updates: AppUpdateController
+    let r2: R2UploadCoordinator
     @Published var updatesRequest = 0
     @Published var section: SettingsSection = .general
     @Published var shortcutWarning: String?
@@ -31,6 +32,8 @@ final class SettingsModel: ObservableObject {
     var recordLibraryShortcut: () -> Void = {}
     var setSearchShortcut: (KeyShortcut?) -> Void = { _ in }
     var recordSearchShortcut: () -> Void = {}
+    var setUploadShortcut: (KeyShortcut?) -> Void = { _ in }
+    var recordUploadShortcut: () -> Void = {}
     var requestPastePermission: () -> Void = {}
     var recordContextShortcut: (KeyboardAction) -> Void = { _ in }
     var openLibrary: () -> Void = {}
@@ -49,9 +52,11 @@ final class SettingsModel: ObservableObject {
     private let pastePermissionGranted: () -> Bool
 
     init(line: Line, allowsSystemChanges: Bool = true, languageDefaults: UserDefaults = .standard, updates: AppUpdateController? = nil,
-         pastePermissionGranted: @escaping () -> Bool = { AXIsProcessTrusted() }) {
+         r2: R2UploadCoordinator? = nil, pastePermissionGranted: @escaping () -> Bool = { AXIsProcessTrusted() }) {
         self.line = line; self.allowsSystemChanges = allowsSystemChanges
         self.updates = updates ?? AppUpdateController(enabled: allowsSystemChanges)
+        self.r2 = r2 ?? R2UploadCoordinator(store: line.library, defaults: line.defaults,
+            secrets: allowsSystemChanges ? KeychainR2SecretStore() : InMemoryR2SecretStore())
         self.languageDefaults = languageDefaults; launchLanguage = LanguagePreferences.selection(languageDefaults)
         self.pastePermissionGranted = pastePermissionGranted
     }
@@ -119,13 +124,14 @@ final class SettingsWindowController: NSWindowController {
 }
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case general, history, sources, shortcuts, updates, about
+    case general, history, sources, cloud, shortcuts, updates, about
     var id: Self { self }
     var title: String {
         switch self {
         case .general: L("General")
         case .history: L("History")
         case .sources: L("Sources")
+        case .cloud: L("Cloud upload")
         case .shortcuts: L("Keyboard shortcuts")
         case .updates: L("Updates")
         case .about: L("About")
@@ -136,6 +142,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .general: "slider.horizontal.3"
         case .history: "clock.arrow.circlepath"
         case .sources: "tray.and.arrow.down"
+        case .cloud: "icloud.and.arrow.up"
         case .shortcuts: "keyboard"
         case .updates: "arrow.triangle.2.circlepath"
         case .about: "info.circle"
@@ -183,6 +190,7 @@ private struct SettingsView: View {
                     case .general: general
                     case .history: history
                     case .sources: sources
+                    case .cloud: CloudUploadSettingsView(r2: model.r2)
                     case .shortcuts: shortcuts
                     case .updates: AppUpdatesView(updates: model.updates)
                     case .about: about
@@ -340,6 +348,14 @@ private struct SettingsView: View {
                 }
                 Button(L("Record shortcut…"), action: model.recordCopyShortcut)
             }
+            Section(L("Upload latest item")) {
+                LabeledContent(L("Shortcut")) { Text(line.uploadLatestShortcut?.title ?? L("Off")).monospaced() }
+                HStack {
+                    Button(L("Record shortcut…"), action: model.recordUploadShortcut)
+                    Button(L("Off")) { model.setUploadShortcut(nil); model.refresh() }
+                }
+                Text(L("Uploads the newest item on the shelves to Cloudflare R2 and copies its public link.")).font(.caption).foregroundStyle(.secondary)
+            }
             Section(L("Browsing shortcuts")) {
                 Text(L("Single keys work while browsing the line, Library or a preview. Typing and standard editing shortcuts stay with the editor.")).font(.caption).foregroundStyle(.secondary)
                 shortcutRow(.library)
@@ -394,6 +410,78 @@ private struct SettingsView: View {
             }
             Section {
                 Button(L("Check upstream releases…")) { NSWorkspace.shared.open(AppDelegate.updatesURL) }
+            }
+        }
+    }
+}
+
+@MainActor
+private struct CloudUploadSettingsView: View {
+    @ObservedObject var r2: R2UploadCoordinator
+    @State private var draftSecret = ""
+    @State private var secretError: String?
+
+    private func field(_ get: @escaping (R2Configuration) -> String, _ set: @escaping (inout R2Configuration, String) -> Void) -> Binding<String> {
+        Binding(
+            get: { get(r2.configuration) },
+            set: { value in
+                var next = r2.configuration
+                set(&next, value)
+                r2.saveConfiguration(next)
+            }
+        )
+    }
+
+    var body: some View {
+        Section {
+            TextField(L("Account ID or HTTPS endpoint"), text: field({ $0.accountId }, { $0.accountId = $1 }))
+            TextField(L("Bucket name"), text: field({ $0.bucket }, { $0.bucket = $1 }))
+            TextField(L("Public base URL"), text: field({ $0.publicBaseUrl }, { $0.publicBaseUrl = $1 }))
+            TextField(L("Key prefix (optional)"), text: field({ $0.keyPrefix }, { $0.keyPrefix = $1 }))
+        } header: { Text(L("Cloudflare R2")) } footer: {
+            Text(L("Uploads use your own Cloudflare R2 bucket via S3-compatible HTTPS. After uploading, the public URL is copied to the clipboard."))
+        }
+        Section {
+            TextField(L("Access Key ID"), text: field({ $0.accessKeyId }, { $0.accessKeyId = $1 }))
+            SecureField(L("Secret Access Key"), text: $draftSecret).textFieldStyle(.roundedBorder)
+            HStack {
+                Button(L("Save secret key")) {
+                    do { try r2.saveSecret(draftSecret); draftSecret = ""; secretError = nil }
+                    catch { secretError = error.localizedDescription }
+                }.disabled(draftSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button(L("Remove secret key")) {
+                    do { try r2.clearSecret(); draftSecret = ""; secretError = nil }
+                    catch { secretError = error.localizedDescription }
+                }.disabled(!r2.hasSavedSecret)
+                if r2.hasSavedSecret {
+                    Label(L("Stored in Keychain"), systemImage: "checkmark.shield")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if let secretError {
+                Text(secretError).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+            }
+        } header: { Text(L("Credentials")) } footer: {
+            Text(L("Your Secret Access Key is stored in this Mac’s Keychain and is never written to preferences."))
+        }
+        Section(L("Connection")) {
+            HStack {
+                Button(L("Test connection")) {
+                    let trimmed = draftSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        do { try r2.saveSecret(trimmed); draftSecret = ""; secretError = nil }
+                        catch { secretError = error.localizedDescription; return }
+                    }
+                    r2.testConnection()
+                }.disabled(r2.testingConnection)
+                if r2.testingConnection { ProgressView().controlSize(.small) }
+            }
+            if let status = r2.connectionStatus {
+                Label(status, systemImage: "checkmark.circle.fill")
+                    .font(.caption).foregroundStyle(.green)
+            }
+            if let error = r2.connectionError {
+                Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
         }
     }

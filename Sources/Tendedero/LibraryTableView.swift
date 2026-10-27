@@ -193,6 +193,13 @@ private final class LibraryNativeTable: NSTableView {
         let menu = NSMenu()
         menu.addItem(ClosureMenuItem(L("Preview")) { [weak model] in model?.onPreview?(id) })
         menu.addItem(ClosureMenuItem(L("Copy")) { [weak model] in model?.copy() })
+        if model.query.scope != .trash && model.actionIDs.count == 1 {
+            let hasUploaded = (try? model.store.item(id))?.uploadedURL != nil
+            menu.addItem(ClosureMenuItem(hasUploaded ? L("Copy public link") : L("Upload to R2")) { [weak model] in model?.uploadCurrent(id) })
+            if hasUploaded {
+                menu.addItem(ClosureMenuItem(L("Upload again to R2")) { [weak model] in model?.uploadCurrent(id, forceReupload: true) })
+            }
+        }
         menu.addItem(ClosureMenuItem(L("Pin favorite")) { [weak model] in model?.favorite() })
         if model.query.scope != .trash {
             menu.addItem(ClosureMenuItem(L("Name and pin…")) { [weak model] in model?.onNameAndPinRequested?(id) })

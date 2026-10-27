@@ -496,3 +496,81 @@
 "Focus previous pane" = "前のペインにフォーカス";
 
 "Undo Move to Trash" = "ゴミ箱への移動を取り消す";
+
+"Access Key ID" = "アクセスキー ID";
+
+"Account ID or HTTPS endpoint" = "アカウント ID または HTTPS エンドポイント";
+
+"Bucket name" = "バケット名";
+
+"Cloud upload" = "クラウドアップロード";
+
+"Cloudflare R2" = "Cloudflare R2";
+
+"Cloudflare R2 connection failed" = "Cloudflare R2 への接続に失敗しました";
+
+"Cloudflare R2 endpoint must use HTTPS" = "Cloudflare R2 エンドポイントは HTTPS を使用する必要があります";
+
+"Cloudflare R2 rejected the credentials or bucket (%d)" = "Cloudflare R2 が認証情報またはバケットを拒否しました (%d)";
+
+"Cloudflare R2 upload failed (%d)" = "Cloudflare R2 へのアップロードに失敗しました (%d)";
+
+"Configure Cloudflare R2 in Settings first" = "先に設定で Cloudflare R2 を構成してください";
+
+"Connected to Cloudflare R2" = "Cloudflare R2 に接続しました";
+
+"Connection" = "接続";
+
+"Copy public link" = "公開リンクをコピー";
+
+"Credentials" = "認証情報";
+
+"Enter a valid Cloudflare R2 Account ID or HTTPS endpoint" = "有効な Cloudflare R2 アカウント ID または HTTPS エンドポイントを入力してください";
+
+"Enter a valid HTTPS public base URL (for example, your r2.dev or custom domain)" = "有効な HTTPS 公開ベース URL（r2.dev またはカスタムドメインなど）を入力してください";
+
+"Enter a valid R2 bucket name" = "有効な R2 バケット名を入力してください";
+
+"Enter a valid key prefix without '..'" = "'..' を含まない有効なキープレフィックスを入力してください";
+
+"Enter an R2 Access Key ID" = "R2 アクセスキー ID を入力してください";
+
+"Enter an R2 Secret Access Key" = "R2 シークレットアクセスキーを入力してください";
+
+"File is too large to upload (512 MB limit)" = "ファイルが大きすぎてアップロードできません（上限 512 MB）";
+
+"Key prefix (optional)" = "キープレフィックス（任意）";
+
+"Public base URL" = "公開ベース URL";
+
+"Public link copied" = "公開リンクをコピーしました";
+
+"Remove secret key" = "シークレットキーを削除";
+
+"Save secret key" = "シークレットキーを保存";
+
+"Secret Access Key" = "シークレットアクセスキー";
+
+"Secret Access Key could not be saved in Keychain" = "シークレットアクセスキーをキーチェーンに保存できませんでした";
+
+"Stored in Keychain" = "キーチェーンに保存済み";
+
+"Test connection" = "接続をテスト";
+
+"Upload again to R2" = "R2 に再アップロード";
+
+"Upload an item first" = "先にアップロードする項目を保存してください";
+
+"Upload latest item" = "最新の項目をアップロード";
+
+"Upload to R2" = "R2 にアップロード";
+
+"Uploaded — link copied" = "アップロード完了 — リンクをコピーしました";
+
+"Uploading to R2…" = "R2 にアップロード中…";
+
+"Uploads the newest item on the shelves to Cloudflare R2 and copies its public link." = "シェルフ上の最新項目を Cloudflare R2 にアップロードし、公開リンクをコピーします。";
+
+"Uploads use your own Cloudflare R2 bucket via S3-compatible HTTPS. After uploading, the public URL is copied to the clipboard." = "アップロードには S3 互換 HTTPS 経由でご自身の Cloudflare R2 バケットを使用します。完了後、公開 URL がクリップボードにコピーされます。";
+
+"Your Secret Access Key is stored in this Mac’s Keychain and is never written to preferences." = "シークレットアクセスキーはこの Mac のキーチェーンに保存され、環境設定には一切書き込まれません。";

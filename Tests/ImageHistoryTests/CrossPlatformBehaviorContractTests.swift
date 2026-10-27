@@ -8,6 +8,11 @@ import XCTest
 /// Runs the shared product contract against the real Mac model and key router.
 /// Synthetic data only: no AX queries, windows, system pasteboard or posted keys.
 @MainActor final class CrossPlatformBehaviorContractTests: HistoryTestCase {
+    private struct ContractR2Transport: R2HTTPTransport {
+        func send(url: URL, method: String, headers: [String: String], body: Data?) async throws -> (status: Int, body: Data) {
+            (200, Data())
+        }
+    }
     private var checkout: URL {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     }
@@ -33,15 +38,17 @@ import XCTest
         guard process.terminationStatus == 0 else { throw CocoaError(.fileReadUnknown) }
         return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    private func snapshot(_ line: Line, aliases: [UUID: String]) -> [String: Any] {
+    private func snapshot(_ line: Line, store: LibraryStore, aliases: [UUID: String]) -> [String: Any] {
         let focused: UUID?
         switch line.activeShelf { case .images: focused = line.focusedID; case .texts: focused = line.texts.focusedID; case .links: focused = line.links.focusedID }
         let selected = line.selectedIDs.union(line.texts.selectedIDs).union(line.links.selectedIDs)
+        let uploaded = aliases.compactMap { id, alias in ((try? store.item(id))?.uploadedURL != nil) ? alias : nil }.sorted()
         return ["activeKind": line.activeShelf.libraryKind.rawValue,
                 "focused": focused.map { aliases[$0] ?? "unexpected-id" } as Any? ?? NSNull(),
                 "selected": selected.map { aliases[$0] ?? "unexpected-id" }.sorted(),
                 "visibleKinds": line.presentation.shelves.map { $0.libraryKind.rawValue },
-                "searchEditing": line.searchEditingShelf != nil]
+                "searchEditing": line.searchEditingShelf != nil,
+                "uploaded": uploaded]
     }
     func testSharedShelfBehaviorContract() throws {
         let data = try Data(contentsOf: checkout.appendingPathComponent("contracts/shelf-behavior.json"))
@@ -70,6 +77,13 @@ import XCTest
             }
             let line = Line(defaults: fixture.defaults, inbox: fixture.inbox, now: { fixture.date }, breeze: false,
                 copyImage: { _ in }, copyText: { _ in }, library: store)
+            let secrets = InMemoryR2SecretStore(initial: String(repeating: "s", count: 24))
+            let coordinator = R2UploadCoordinator(store: store, defaults: fixture.defaults, secrets: secrets,
+                transport: ContractR2Transport(), writeLink: { _ in true })
+            coordinator.saveConfiguration(R2Configuration(
+                accountId: "test-account", accessKeyId: "test-access-key", bucket: "test-bucket",
+                publicBaseUrl: "https://cdn.example.com", keyPrefix: "clips"))
+            line.onUploadRequested = { targetID, force in coordinator.upload(targetID, forceReupload: force) }
             let visible = try required(scenario["visibleKinds"], [String].self).map { try shelf($0) }
             line.setPresentation(try XCTUnwrap(ShelfPresentation.containing(Set(visible))), requestFocus: false)
             for kind in try required(scenario["pinnedOnlyKinds"], [String].self) {
@@ -89,8 +103,15 @@ import XCTest
                         try line.keyboardBindings.set(value.isEmpty ? [] : [KeyShortcut(keyCode: 7, modifiers: 0, keyLabel: "X")], for: action)
                     }
                 case "key":
-                    guard try required(step["code"], String.self) == "KeyX" else { throw CocoaError(.coderReadCorrupt) }
-                    _ = keyboard.handle(try key(7, characters: "x"))
+                    let event: NSEvent
+                    switch try required(step["code"], String.self) {
+                    case "KeyX": event = try key(7, characters: "x")
+                    case "KeyU": event = try key(32, characters: "u")
+                    default: throw CocoaError(.coderReadCorrupt)
+                    }
+                    _ = keyboard.handle(event)
+                    let deadline = Date().addingTimeInterval(3)
+                    while !coordinator.uploadingIDs.isEmpty, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.005)) }
                 case "up": _ = keyboard.handle(try key(126))
                 case "down": _ = keyboard.handle(try key(125))
                 case "left": _ = keyboard.handle(try key(123))
@@ -103,7 +124,7 @@ import XCTest
                     while line.shelfSearchIsSearching, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.005)) }
                 default: throw CocoaError(.coderReadCorrupt)
                 }
-                let actual = snapshot(line, aliases: aliases), expected = try required(step["expect"], [String: Any].self)
+                let actual = snapshot(line, store: store, aliases: aliases), expected = try required(step["expect"], [String: Any].self)
                 observations.append(["scenarioId": id, "step": index, "actual": actual])
                 let matches = NSDictionary(dictionary: actual).isEqual(to: expected)
                 if !matches { errors.append("\(id):\(index)") }

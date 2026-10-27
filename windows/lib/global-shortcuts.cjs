@@ -1,5 +1,5 @@
 'use strict';
-const ACTIONS=['toggle','search','library','copyLatest','screenshot'];
+const ACTIONS=['toggle','search','library','copyLatest','uploadLatest','screenshot'];
 
 // Only registrations owned by this instance are released. A recording lease
 // suspends OS interception itself, so an existing combination reaches its field.

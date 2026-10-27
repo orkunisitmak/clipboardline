@@ -23,15 +23,15 @@ enum ActionBarAction: Equatable {
 }
 
 enum ActionBarMenuAction: String, CaseIterable {
-    case settings, settingsGeneral, settingsHistory, settingsSources, settingsShortcuts, settingsAbout, clearUnsavedHistory
+    case settings, settingsGeneral, settingsHistory, settingsSources, settingsCloud, settingsShortcuts, settingsAbout, clearUnsavedHistory
     case newNote, newFolder, newSubfolder, renameFolder, removeFolder, renameTag, removeTag, retain, restore, editDetails
     case scopeSaved, scopeFavorites, scopeUnorganized, scopeRecent, scopeTrash
     case grid, list, toggleSidebar, toggleInspector, toggleFullscreen, filters, clearFilters
     case sortNewest, sortOldest, sortTitle, sortTitleDescending, sortCopied, sortRelevance
     case searchAll, searchText, searchVisual, daysAny, days7, days30
-    case refreshLink, openFile, quickLook, revealFile, saveToDesktop, takeDownLeft, takeDownRight, trimVideo
+    case refreshLink, openFile, quickLook, revealFile, saveToDesktop, takeDownLeft, takeDownRight, trimVideo, reuploadToR2
     case resetZoom, markupUndo, markupRedo, markupDelete, markupClear, markupSave, markupFinish, markupStyles
-    case toggleLine, copyLatestImage, openScreenshotsFolder, checkUpdates, installUpdate, upstreamReleases, quit
+    case toggleLine, copyLatestImage, uploadLatestItem, openScreenshotsFolder, checkUpdates, installUpdate, upstreamReleases, quit
 }
 
 @MainActor enum ActionBarCatalog {
@@ -40,11 +40,13 @@ enum ActionBarMenuAction: String, CaseIterable {
         var origin: Origin = .line
         var selectedCount = 0
         var kind: LibraryKind?
+        var uploadedURL: String?
         var hasFile = false
         var isRecording = false
         var isDeleted = false
         var allPinned = false
         var hasItems = false
+        var hasAnyItem = false
         var hasLatestImage = false
         var canUndoShelfRemoval = false
         var canUndoLibraryTrash = false
@@ -62,6 +64,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         var canInstallUpdate = false
         var globalToggleHint = ""
         var copyLatestHint = ""
+        var uploadLatestHint = ""
         var visibleShelves = Set<Shelf>()
         var libraryScope: LibraryQuery.Scope = .saved
         var collections = [LibraryCollection]()
@@ -96,13 +99,13 @@ enum ActionBarMenuAction: String, CaseIterable {
         var result = [Entry]()
         // Frequently used operations lead the unfiltered list. Every other
         // browsing shortcut remains discoverable, including navigation.
-        let leading: [KeyboardAction] = [.searchShelf, .library, .copy, .paste, .preview, .pin, .pinToFolder, .nameAndPin,
+        let leading: [KeyboardAction] = [.searchShelf, .library, .copy, .paste, .upload, .preview, .pin, .pinToFolder, .nameAndPin,
             .tag, .cropImage, .markupMarker, .markup, .editText, .copyImageText, .pinnedOnly]
         let keyboard = leading + KeyboardAction.allCases.filter { ![.commandPalette, .newNote, .newFolder].contains($0) && !leading.contains($0) }
         for action in keyboard {
             let availability = keyboardAvailability(action, c)
             let metadata = keyboardMetadata(action)
-            let title = action == .searchShelf ? L("Search contents") : action == .search ? L("Search library") : action == .pin && c.allPinned ? L("Unpin") : action.title
+            let title = action == .searchShelf ? L("Search contents") : action == .search ? L("Search library") : action == .pin && c.allPinned ? L("Unpin") : action == .upload && c.uploadedURL != nil ? L("Copy public link") : action.title
             let semantic = ActionBarAction.keyboard(action)
             let scope = keyboardScope(action, c)
             result.append(Entry(action: semantic, command: .init(id: semantic.id, title: title,
@@ -180,6 +183,9 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .copy, .paste, .preview, .pin, .pinToFolder, .nameAndPin, .tag:
             if action == .paste && c.isTextEditing { return (false, L("Finish editing first")) }
             return require(selected, L("Select an item first"))
+        case .upload:
+            if c.isTextEditing { return (false, L("Finish editing first")) }
+            return require(c.singleSelection && !c.isDeleted, L("Select one item first"))
         case .open: return require(c.isLink, L("Select a link first"))
         case .cropImage, .markup, .markupSelect, .markupPen, .markupMarker, .markupRectangle, .markupEllipse, .markupArrow, .markupLine, .markupText, .copyImageText:
             return require(c.isImage, L("Select one image first"))
@@ -292,6 +298,7 @@ enum ActionBarMenuAction: String, CaseIterable {
 
     private static func keyboardActive(_ action: KeyboardAction, _ c: Context) -> Bool {
         switch action {
+        case .upload: c.singleSelection && c.uploadedURL != nil
         case .pin: c.allPinned && c.hasSelection
         case .pinnedOnly: c.activeFavorites
         case .toggleImages: c.visibleShelves.contains(.images)
@@ -314,6 +321,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .library: return (L("Library"), "square.grid.2x2", ["library", "open", "kütüphane", "aç"])
         case .copy: return (selection, "doc.on.doc", ["copy", "clipboard", "kopyala", "pano"])
         case .paste: return (selection, "arrow.down.doc", ["paste", "previous app", "yapıştır", "uygulama"])
+        case .upload: return (selection, "icloud.and.arrow.up", ["upload", "cloud", "r2", "cloudflare", "share", "public link", "url", "yükle", "bulut", "paylaş", "bağlantı"])
         case .preview: return (selection, "eye", ["preview", "space", "önizleme", "büyüt"])
         case .pin: return (organization, "pin", ["pin", "unpin", "favorite", "favourite", "sabitle", "favori", "kaldır"])
         case .pinToFolder: return (organization, "folder", ["pin", "folder", "sabitle", "klasör"])
@@ -392,6 +400,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .takeDownLeft: return require(!c.isLibrary && c.singleSelection && c.kind == .image && c.canTakeDownLeft, L("No items to the left"))
         case .takeDownRight: return require(!c.isLibrary && c.singleSelection && c.kind == .image && c.canTakeDownRight, L("No items to the right"))
         case .trimVideo: return require(c.singleSelection && c.kind == .image && c.hasFile && c.isRecording && !c.isDeleted, L("Select a video first"))
+        case .reuploadToR2: return require(c.singleSelection && !c.isDeleted && c.uploadedURL != nil, L("Upload an item first"))
         case .resetZoom, .markupStyles: return require(c.isImage, L("Select one image first"))
         case .markupUndo: return require((c.isMarkupEditing || (c.isPreview && c.isImage)) && c.canUndoMarkup, L("Nothing to undo"))
         case .markupRedo: return require((c.isMarkupEditing || (c.isPreview && c.isImage)) && c.canRedoMarkup, L("Nothing to redo"))
@@ -399,10 +408,11 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .markupClear: return require(c.isMarkupEditing && c.hasAnnotations, L("No annotations to clear"))
         case .markupSave, .markupFinish: return require(c.isMarkupEditing, L("Start image markup first"))
         case .copyLatestImage: return require(c.hasLatestImage, L("No images on the line"))
+        case .uploadLatestItem: return require(c.hasAnyItem, L("No items in this view"))
         case .checkUpdates: return require(c.canCheckUpdates, L("Update checks unavailable"))
         case .installUpdate: return require(c.canInstallUpdate, L("No update available"))
         case .clearUnsavedHistory: return require(c.libraryAvailable, L("Library unavailable"))
-        case .settings, .settingsGeneral, .settingsHistory, .settingsSources, .settingsShortcuts, .settingsAbout,
+        case .settings, .settingsGeneral, .settingsHistory, .settingsSources, .settingsCloud, .settingsShortcuts, .settingsAbout,
              .toggleLine, .openScreenshotsFolder, .upstreamReleases, .quit: return (true, "")
         }
     }
@@ -413,6 +423,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .quit: return "⌘Q"
         case .toggleLine: return c.globalToggleHint
         case .copyLatestImage: return c.copyLatestHint
+        case .uploadLatestItem: return c.uploadLatestHint
         case .markupUndo: return c.isMarkupEditing || (c.isPreview && c.canUndoMarkup) ? "⌘Z" : ""
         case .markupRedo: return c.isMarkupEditing || (c.isPreview && c.canRedoMarkup) ? "⇧⌘Z" : ""
         case .markupDelete: return c.isMarkupEditing ? "⌫ / ⌦" : ""
@@ -458,6 +469,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .settingsHistory: return (L("History") + " · " + L("Settings"), app, "clock.arrow.circlepath", ["history", "retention", "days", "time", "geçmiş", "süre", "gün"])
         case .clearUnsavedHistory: return (L("Clear unsaved copies…"), app, "trash", ["history", "clear", "cleanup", "unsaved", "geçmiş", "temizle", "kaydedilmemiş"])
         case .settingsSources: return (L("Sources") + " · " + L("Settings"), app, "tray.and.arrow.down", ["sources", "capture", "clipboard", "screenshots", "watch folder", "kaynak", "yakala", "pano", "ekran görüntüsü", "izle"])
+        case .settingsCloud: return (L("Cloud upload") + " · " + L("Settings"), app, "icloud.and.arrow.up", ["cloud", "upload", "r2", "cloudflare", "bucket", "bulut", "yükleme", "depolama"])
         case .settingsShortcuts: return (L("Keyboard shortcuts") + " · " + L("Settings"), app, "keyboard", ["keyboard", "shortcut", "keys", "remap", "accessibility", "klavye", "kısayol", "tuş", "erişilebilirlik"])
         case .settingsAbout: return (L("About") + " · " + L("Settings"), app, "info.circle", ["about", "version", "updates", "hakkında", "sürüm", "güncelleme"])
         case .newNote: return (L("New note"), library, "square.and.pencil", ["new", "note", "text", "yeni", "not", "metin"])
@@ -502,6 +514,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .takeDownLeft: return (L("Take down everything to the left"), L("Selected item"), "arrow.left.to.line", ["remove", "left", "take down", "kaldır", "sol", "askıdan indir"])
         case .takeDownRight: return (L("Take down everything to the right"), L("Selected item"), "arrow.right.to.line", ["remove", "right", "take down", "kaldır", "sağ", "askıdan indir"])
         case .trimVideo: return (L("Trim video"), L("Selected item"), "scissors", ["trim", "video", "recording", "cut", "kırp", "kes", "kayıt"])
+        case .reuploadToR2: return (L("Upload again to R2"), L("Selected item"), "arrow.clockwise.icloud", ["reupload", "upload again", "r2", "cloudflare", "new link", "tekrar yükle", "yeniden yükle", "yeni bağlantı"])
         case .resetZoom: return (L("Reset zoom"), markup, "arrow.counterclockwise", ["reset", "zoom", "fit", "sıfırla", "yakınlaştır", "sığdır"])
         case .markupUndo: return (L("Undo") + " · " + L("Image markup"), markup, "arrow.uturn.backward", ["undo", "markup", "annotation", "geri al", "işaretleme"])
         case .markupRedo: return (L("Redo") + " · " + L("Image markup"), markup, "arrow.uturn.forward", ["redo", "markup", "annotation", "yinele", "işaretleme"])
@@ -512,6 +525,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .markupStyles: return (L("Annotation style"), markup, "slider.horizontal.3", ["style", "color", "width", "fill", "font", "annotation", "stil", "renk", "kalınlık", "dolgu", "yazı", "işaretleme"])
         case .toggleLine: return (L("Show line"), app, "rectangle.3.group", ["show", "hide", "shelf", "line", "göster", "gizle", "askı"])
         case .copyLatestImage: return (L("Copy latest image"), app, "doc.on.doc", ["copy", "latest", "image", "kopyala", "son", "görsel"])
+        case .uploadLatestItem: return (L("Upload latest item"), app, "icloud.and.arrow.up", ["upload", "latest", "newest", "r2", "cloudflare", "son öğe", "yükle", "bulut"])
         case .openScreenshotsFolder: return (L("Open screenshots folder"), app, "folder", ["screenshots", "folder", "open", "ekran görüntüsü", "klasör", "aç"])
         case .checkUpdates: return (L("Check for updates…"), app, "arrow.clockwise", ["check", "update", "release", "kontrol", "güncelleme", "sürüm"])
         case .installUpdate: return (L("Install update…"), app, "arrow.down.circle", ["install", "update", "download", "yükle", "güncelleme", "indir"])

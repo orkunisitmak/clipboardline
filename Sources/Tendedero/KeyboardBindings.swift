@@ -7,7 +7,7 @@ enum KeyboardAction: String, CaseIterable, Identifiable {
     case copy, paste, selectAll, pin, pinnedOnly, preview, close, switchShelf, toggleShelves, export, trash
     case library, search, allTypes, images, texts, links, tag, open, editText, finishEditing
     case removeFromLine, undoRemoveFromLine, toggleLinks, toggleTexts, toggleImages, pinToFolder, searchShelf
-    case copyImageText, commandPalette, nameAndPin
+    case copyImageText, commandPalette, nameAndPin, upload
     case focusNextPane, focusPreviousPane, undoTrash, newNote, newFolder
     case markup, cropImage, markupSelect, markupPen, markupMarker, markupRectangle, markupEllipse, markupArrow, markupLine, markupText
     case select1, select2, select3, select4, select5, select6, select7, select8, select9
@@ -54,6 +54,7 @@ enum KeyboardAction: String, CaseIterable, Identifiable {
         case .search: L("Search this view"); case .allTypes: L("All types"); case .images: L("Images"); case .texts: L("Texts"); case .links: L("Links")
         case .tag: L("Add tag…"); case .open: L("Open in browser"); case .editText: L("Edit text"); case .finishEditing: L("Finish editing")
         case .paste: L("Paste into previous app")
+        case .upload: L("Upload to R2")
         case .copyImageText: L("Copy text from image")
         case .commandPalette: L("Actions")
         case .markup: L("Image markup")
@@ -121,6 +122,7 @@ enum KeyboardAction: String, CaseIterable, Identifiable {
         case .open: [key(31,"O",cmdKey)]
         case .editText: [key(14,"E")]; case .finishEditing: [key(36,"↩",cmdKey),key(76,"↩",cmdKey)]
         case .paste: [key(36,"↩",cmdKey),key(76,"↩",cmdKey)]
+        case .upload: [key(32,"U")]
         case .copyImageText: [key(8,"C",cmdKey | shiftKey)]
         case .commandPalette: [key(40,"K",cmdKey)]
         case .markup: [key(46,"M")]

@@ -496,3 +496,81 @@
 "Focus previous pane" = "Focar painel anterior";
 
 "Undo Move to Trash" = "Desfazer mover para o Lixo";
+
+"Access Key ID" = "ID da chave de acesso";
+
+"Account ID or HTTPS endpoint" = "ID da conta ou endpoint HTTPS";
+
+"Bucket name" = "Nome do bucket";
+
+"Cloud upload" = "Envio para a nuvem";
+
+"Cloudflare R2" = "Cloudflare R2";
+
+"Cloudflare R2 connection failed" = "Falha na conexão com o Cloudflare R2";
+
+"Cloudflare R2 endpoint must use HTTPS" = "O endpoint do Cloudflare R2 deve usar HTTPS";
+
+"Cloudflare R2 rejected the credentials or bucket (%d)" = "O Cloudflare R2 rejeitou as credenciais ou o bucket (%d)";
+
+"Cloudflare R2 upload failed (%d)" = "Falha no envio para o Cloudflare R2 (%d)";
+
+"Configure Cloudflare R2 in Settings first" = "Configure o Cloudflare R2 nos Ajustes primeiro";
+
+"Connected to Cloudflare R2" = "Conectado ao Cloudflare R2";
+
+"Connection" = "Conexão";
+
+"Copy public link" = "Copiar link público";
+
+"Credentials" = "Credenciais";
+
+"Enter a valid Cloudflare R2 Account ID or HTTPS endpoint" = "Insira um ID da conta Cloudflare R2 ou endpoint HTTPS válido";
+
+"Enter a valid HTTPS public base URL (for example, your r2.dev or custom domain)" = "Insira uma URL base pública HTTPS válida (por exemplo, seu domínio r2.dev ou personalizado)";
+
+"Enter a valid R2 bucket name" = "Insira um nome de bucket R2 válido";
+
+"Enter a valid key prefix without '..'" = "Insira um prefixo de chave válido sem '..'";
+
+"Enter an R2 Access Key ID" = "Insira um ID da chave de acesso do R2";
+
+"Enter an R2 Secret Access Key" = "Insira uma chave de acesso secreta do R2";
+
+"File is too large to upload (512 MB limit)" = "O arquivo é grande demais para enviar (limite de 512 MB)";
+
+"Key prefix (optional)" = "Prefixo de chave (opcional)";
+
+"Public base URL" = "URL base pública";
+
+"Public link copied" = "Link público copiado";
+
+"Remove secret key" = "Remover chave secreta";
+
+"Save secret key" = "Salvar chave secreta";
+
+"Secret Access Key" = "Chave de acesso secreta";
+
+"Secret Access Key could not be saved in Keychain" = "Não foi possível salvar a chave de acesso secreta nas Chaves";
+
+"Stored in Keychain" = "Salva nas Chaves";
+
+"Test connection" = "Testar conexão";
+
+"Upload again to R2" = "Enviar novamente para o R2";
+
+"Upload an item first" = "Capture um item primeiro para enviar";
+
+"Upload latest item" = "Enviar item mais recente";
+
+"Upload to R2" = "Enviar para o R2";
+
+"Uploaded — link copied" = "Enviado — link copiado";
+
+"Uploading to R2…" = "Enviando para o R2…";
+
+"Uploads the newest item on the shelves to Cloudflare R2 and copies its public link." = "Envia o item mais recente das prateleiras para o Cloudflare R2 e copia o link público.";
+
+"Uploads use your own Cloudflare R2 bucket via S3-compatible HTTPS. After uploading, the public URL is copied to the clipboard." = "Os envios usam seu próprio bucket do Cloudflare R2 via HTTPS compatível com S3. Após o envio, a URL pública é copiada para a área de transferência.";
+
+"Your Secret Access Key is stored in this Mac’s Keychain and is never written to preferences." = "Sua chave de acesso secreta é armazenada nas Chaves deste Mac e nunca é gravada nas preferências.";

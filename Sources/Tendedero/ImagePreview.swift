@@ -68,6 +68,7 @@ enum ImageMarkupCommand: CaseIterable, Equatable {
         canvas.image = image; canvas.imageScaling = .scaleAxesIndependently; canvas.zoomScroll = scroll
         canvas.setAccessibilityLabel(L("Image preview")); scroll.documentView = canvas
         let menu = NSMenu()
+        menu.addItem(ClosureMenuItem(L("Upload to R2")) { [weak self] in self?.controls.onUpload() })
         menu.addItem(ClosureMenuItem(L("Markup image")) { [weak self] in self?.beginMarkup() })
         menu.addItem(ClosureMenuItem(L("Crop image")) { [weak self] in self?.beginCrop() })
         menu.addItem(ClosureMenuItem(L("Reset zoom")) { [weak scroll] in scroll?.resetZoom() })

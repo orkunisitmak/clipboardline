@@ -29,14 +29,19 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
  const document={body:new Element('body'),activeElement:null,querySelectorAll(){return[];},getElementById(id){if(!nodes.has(id))nodes.set(id,id==='markup-canvas'?new Canvas(id):new Element(id));return nodes.get(id);},createElement(tag){return tag==='canvas'?new Canvas():new Element();},querySelector(){return null;},addEventListener(name,listener){if(!listeners.has(name))listeners.set(name,[]);listeners.get(name).push(listener);}};
  const image='00000000-0000-4000-8000-000000000001',text1='00000000-0000-4000-8000-000000000002',text2='00000000-0000-4000-8000-000000000003',link='00000000-0000-4000-8000-000000000004';
  const base=(id,kind,createdAt,extra)=>({id,kind,createdAt,updatedAt:createdAt,name:'',title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,...extra});
- const state={items:[base(image,'image',1000,{name:'Synthetic image',...(imageDocument?{annotations:[],crop:null}:{}),mediaUrl:'appmedia://media/'+image,originalMediaUrl:'appmedia://media/'+image+'/original'}),base(text1,'text',900,{text:'Text one'}),base(text2,'text',800,{text:'Text two'}),base(link,'link',700,{url:'https://example.com/reference',title:'Reference link'})],folders:[],settings:{visibleKinds:['image','text','link'],retentionDays:{image:30,text:30,link:30},shortcuts:{toggle:'Control+Alt+Space',search:'Control+Alt+S'},localShortcuts:{},language:'en',theme:'soft',cardSize:'medium'},view:'shelves',version:'1.7.0',windowVisible:initialVisible,canUndo:false,canUndoTrash:false,libraryRevision:0};
+ const state={items:[base(image,'image',1000,{name:'Synthetic image',...(imageDocument?{annotations:[],crop:null}:{}),mediaUrl:'appmedia://media/'+image,originalMediaUrl:'appmedia://media/'+image+'/original'}),base(text1,'text',900,{text:'Text one'}),base(text2,'text',800,{text:'Text two'}),base(link,'link',700,{url:'https://example.com/reference',title:'Reference link'})],folders:[],settings:{visibleKinds:['image','text','link'],retentionDays:{image:30,text:30,link:30},shortcuts:{toggle:'Control+Alt+Space',search:'Control+Alt+S'},localShortcuts:{},language:'en',theme:'soft',cardSize:'medium'},view:'shelves',version:'1.7.0',windowVisible:initialVisible,canUndo:false,canUndoTrash:false,r2Configured:true,r2HasSecret:true,libraryRevision:0};
  let subscriber,removed=[],trashRemoved=[],cleanupFailures=0,editFailures=0,delayedReply=null,releaseInitialState,deferredImageBroadcast=null,pendingImageBroadcast=null;
  const clone=value=>structuredClone(value);
  const api={emit(patch){Object.assign(state,patch);subscriber?.(clone(state));},surface(patch){Object.assign(state,patch);subscriber?.({surfaceOnly:true,...clone(patch)});},state:async()=>{const initial=clone(state);if(deferInitialState)await new Promise(resolve=>{releaseInitialState=resolve;});return initial;},subscribe(fn){subscriber=fn;return()=>{};},async command(action,payload={}){commands.push({action,payload:clone(payload)});const selected=state.items.filter(item=>(payload.ids||[payload.id]).includes(item.id));
   let cleanupError,trashResult;if(action==='cleanup'){if(cleanupFailures){cleanupFailures--;cleanupError='Permanent deletion cleanup is still pending.';}else state.needsDeletionCleanup=false;}
-  if(action==='editText'){if(editFailures){editFailures--;cleanupError='Synthetic draft write failure';}else selected.forEach(item=>item.text=payload.text);}
+  if(action==='editText'){if(editFailures){editFailures--;cleanupError='Synthetic draft write failure';}else selected.forEach(item=>{if(item.text!==payload.text){delete item.uploadedUrl;delete item.uploadedAt;}item.text=payload.text;});}
   if(action==='setSettings'){const patch=payload.patch||{},localShortcuts={...state.settings.localShortcuts,...patch.localShortcuts};for(const [action,value]of Object.entries(localShortcuts))if(value===null)delete localShortcuts[action];state.settings={...state.settings,...patch,localShortcuts};}
-  if(action==='saveImage')selected.forEach(item=>{item.crop=clone(payload.crop);item.annotations=clone(payload.annotations);});
+  if(action==='saveImage')selected.forEach(item=>{item.crop=clone(payload.crop);item.annotations=clone(payload.annotations);delete item.uploadedUrl;delete item.uploadedAt;});
+  if(action==='uploadItem'){let cached=false;selected.forEach(item=>{if(!payload.force&&item.uploadedUrl)cached=true;else{item.uploadedUrl='https://cdn.example.com/'+item.id;item.uploadedAt=Date.now();}});trashResult={cached};}
+  if(action==='uploadLatest'){const latest=state.items.filter(item=>!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];if(latest){const cached=!!latest.uploadedUrl;if(!cached){latest.uploadedUrl='https://cdn.example.com/'+latest.id;latest.uploadedAt=Date.now();}trashResult={cached,url:latest.uploadedUrl};}}
+  if(action==='setR2Secret'){state.r2HasSecret=true;state.r2Configured=Boolean(state.settings.r2AccountId&&state.settings.r2AccessKeyId&&state.settings.r2Bucket&&state.settings.r2PublicBaseUrl);}
+  if(action==='clearR2Secret'){state.r2HasSecret=false;state.r2Configured=false;}
+  if(action==='testR2Connection'){trashResult={ok:true};}
   if(action==='pin')selected.forEach(item=>item.pinned=typeof payload.value==='boolean'?payload.value:!item.pinned);
   if(action==='name')selected.forEach(item=>{item.name=payload.name;item.pinned=true;});
   if(action==='remove'){removed=selected.map(clone);selected.forEach(item=>{if(item.pinned)item.hiddenFromShelf=true;else item.trashedAt=Date.now();});state.canUndo=true;}
@@ -348,7 +353,7 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
    else if(step.action==='finishSearch')await f.key('Enter',{target:editor});
    else throw new Error('Unsupported shared contract action: '+step.action);
    await f.ready();
-   const actual={activeKind:activeKind(f),focused:aliases.get(focusedCard(f))||null,selected:selectedCards(f).map(id=>aliases.get(id)||id).sort(),visibleKinds:[...f.main.matchAll(/<section class="shelf(?: active-shelf)?\s*" data-shelf="([^"]+)"/g)].map(match=>match[1]),searchEditing:/class="search-hud"/.test(f.main)};
+   const actual={activeKind:activeKind(f),focused:aliases.get(focusedCard(f))||null,selected:selectedCards(f).map(id=>aliases.get(id)||id).sort(),visibleKinds:[...f.main.matchAll(/<section class="shelf(?: active-shelf)?\s*" data-shelf="([^"]+)"/g)].map(match=>match[1]),searchEditing:/class="search-hud"/.test(f.main),uploaded:f.state.items.filter(value=>value.uploadedUrl).map(value=>aliases.get(value.id)||value.id).sort()};
    observations.push({scenarioId:scenario.id,step:index,actual});
    try{assert.deepEqual(actual,step.expect);}catch(error){errors.push(scenario.id+' step '+index+': '+error.message);}
   }
@@ -708,4 +713,30 @@ test('IME composing Enter Escape and arrows stay native in Library search, text 
 
 test('an old shortcut save completion cannot close a newer recorder or release its owned global-shortcut lease',async()=>{
  const f=fixture();await f.ready();await f.api.command('settings');await f.ready();await f.click('record-local',{keyAction:'pin'});await f.ready();await f.key('KeyO');const release=f.deferReply('setSettings');await f.click('confirm-modal');await f.key('Escape');await f.click('record-local',{keyAction:'copy'});await f.ready();const begin=f.commands.filter(value=>value.action==='beginShortcutRecording').at(-1);assert.ok(begin);release();await f.ready();assert.match(f.overlay,/Record shortcut/);assert.equal(f.commands.some(value=>value.action==='endShortcutRecording'&&value.payload.token===begin.payload.token),false);await f.key('Escape');assert.equal(f.commands.some(value=>value.action==='endShortcutRecording'&&value.payload.token===begin.payload.token),true);
+});
+
+test('Cloudflare R2 upload shortcut caches public link, skips multi-selection, redirects when unconfigured, and manages settings',async()=>{
+ const f=fixture();await f.ready();
+ // Single-selection KeyU uploads and caches URL; second KeyU copies cached link.
+ await f.key('KeyU');assert.equal(f.state.items[0].uploadedUrl,'https://cdn.example.com/'+f.image);assert.match(f.nodes.get('toast').textContent,/Uploaded — link copied/);
+ await f.key('KeyU');assert.match(f.nodes.get('toast').textContent,/Public link copied/);
+ assert.equal(f.commands.filter(value=>value.action==='uploadItem').length,2);
+
+ // Multi-selection KeyU is a safe no-op.
+ await f.key('ArrowDown');await f.key('ArrowRight',{shift:true});assert.equal(selectedCards(f).length,2);
+ const beforeMulti=f.commands.filter(value=>value.action==='uploadItem').length;
+ await f.key('KeyU');assert.equal(f.commands.filter(value=>value.action==='uploadItem').length,beforeMulti);
+
+ // Unconfigured single-selection KeyU navigates to Settings -> Cloud upload.
+ await f.key('ArrowLeft');assert.equal(selectedCards(f).length,1);
+ f.api.emit({r2Configured:false,r2HasSecret:false});await f.ready();
+ await f.key('KeyU');assert.equal(f.state.view,'settings');assert.match(f.main,/Account ID or HTTPS endpoint/);assert.match(f.nodes.get('toast').textContent,/Configure Cloudflare R2 in Settings first/);
+
+ // Saving secret, testing connection, and clearing secret dispatch IPC commands.
+ await f.input('r2-secret-key','s'.repeat(24));await f.click('save-r2-secret');
+ assert.equal(f.commands.some(value=>value.action==='setR2Secret'),true);
+ await f.click('test-r2-connection');
+ assert.equal(f.commands.some(value=>value.action==='testR2Connection'),true);
+ await f.click('clear-r2-secret');
+ assert.equal(f.commands.some(value=>value.action==='clearR2Secret'),true);
 });

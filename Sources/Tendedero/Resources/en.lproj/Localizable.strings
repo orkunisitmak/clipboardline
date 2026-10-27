@@ -496,3 +496,81 @@
 "Focus previous pane" = "Focus previous pane";
 
 "Undo Move to Trash" = "Undo Move to Trash";
+
+"Access Key ID" = "Access Key ID";
+
+"Account ID or HTTPS endpoint" = "Account ID or HTTPS endpoint";
+
+"Bucket name" = "Bucket name";
+
+"Cloud upload" = "Cloud upload";
+
+"Cloudflare R2" = "Cloudflare R2";
+
+"Cloudflare R2 connection failed" = "Cloudflare R2 connection failed";
+
+"Cloudflare R2 endpoint must use HTTPS" = "Cloudflare R2 endpoint must use HTTPS";
+
+"Cloudflare R2 rejected the credentials or bucket (%d)" = "Cloudflare R2 rejected the credentials or bucket (%d)";
+
+"Cloudflare R2 upload failed (%d)" = "Cloudflare R2 upload failed (%d)";
+
+"Configure Cloudflare R2 in Settings first" = "Configure Cloudflare R2 in Settings first";
+
+"Connected to Cloudflare R2" = "Connected to Cloudflare R2";
+
+"Connection" = "Connection";
+
+"Copy public link" = "Copy public link";
+
+"Credentials" = "Credentials";
+
+"Enter a valid Cloudflare R2 Account ID or HTTPS endpoint" = "Enter a valid Cloudflare R2 Account ID or HTTPS endpoint";
+
+"Enter a valid HTTPS public base URL (for example, your r2.dev or custom domain)" = "Enter a valid HTTPS public base URL (for example, your r2.dev or custom domain)";
+
+"Enter a valid R2 bucket name" = "Enter a valid R2 bucket name";
+
+"Enter a valid key prefix without '..'" = "Enter a valid key prefix without '..'";
+
+"Enter an R2 Access Key ID" = "Enter an R2 Access Key ID";
+
+"Enter an R2 Secret Access Key" = "Enter an R2 Secret Access Key";
+
+"File is too large to upload (512 MB limit)" = "File is too large to upload (512 MB limit)";
+
+"Key prefix (optional)" = "Key prefix (optional)";
+
+"Public base URL" = "Public base URL";
+
+"Public link copied" = "Public link copied";
+
+"Remove secret key" = "Remove secret key";
+
+"Save secret key" = "Save secret key";
+
+"Secret Access Key" = "Secret Access Key";
+
+"Secret Access Key could not be saved in Keychain" = "Secret Access Key could not be saved in Keychain";
+
+"Stored in Keychain" = "Stored in Keychain";
+
+"Test connection" = "Test connection";
+
+"Upload again to R2" = "Upload again to R2";
+
+"Upload an item first" = "Upload an item first";
+
+"Upload latest item" = "Upload latest item";
+
+"Upload to R2" = "Upload to R2";
+
+"Uploaded — link copied" = "Uploaded — link copied";
+
+"Uploading to R2…" = "Uploading to R2…";
+
+"Uploads the newest item on the shelves to Cloudflare R2 and copies its public link." = "Uploads the newest item on the shelves to Cloudflare R2 and copies its public link.";
+
+"Uploads use your own Cloudflare R2 bucket via S3-compatible HTTPS. After uploading, the public URL is copied to the clipboard." = "Uploads use your own Cloudflare R2 bucket via S3-compatible HTTPS. After uploading, the public URL is copied to the clipboard.";
+
+"Your Secret Access Key is stored in this Mac’s Keychain and is never written to preferences." = "Your Secret Access Key is stored in this Mac’s Keychain and is never written to preferences.";

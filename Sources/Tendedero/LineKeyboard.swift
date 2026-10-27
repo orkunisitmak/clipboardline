@@ -65,6 +65,7 @@ final class LineKeyboard {
     @discardableResult func perform(_ action: KeyboardAction, event: NSEvent? = nil) -> Bool {
         switch action {
         case .paste: line.onPasteRequested?(line.activeActionIDs)
+        case .upload: if line.activeActionIDs.count == 1, let id = line.activeActionIDs.first { line.upload(id) }
         case .tag: if !line.activeActionIDs.isEmpty { line.onTagRequested?(line.activeActionIDs) }
         case .copyImageText: if line.activeShelf == .images, let id = line.focusedID { line.onImageTextCopyRequested?(id) }
         case .commandPalette: line.onCommandsRequested?()

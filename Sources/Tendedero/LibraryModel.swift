@@ -43,6 +43,7 @@ import Combine
     var onNameAndPinRequested: ((UUID) -> Void)?
     var onNameAndPinBatchRequested: (([UUID]) -> Void)?
     var onPasteRequested: (([UUID]) -> Void)?
+    var onUploadRequested: ((UUID, Bool) -> Void)?
     var onImageTextCopyRequested: ((UUID) -> Void)?
     var onCommandsRequested: (() -> Void)?
     var onSelectionReveal: ((UUID) -> Void)?
@@ -355,6 +356,12 @@ import Combine
         copyRecords(actionIDs, to: board ?? copyPasteboard)
     }
     func copyCurrent(_ id: UUID) { guard flushEdits() else { return }; copyRecords([id], to: copyPasteboard) }
+    func uploadCurrent(_ id: UUID? = nil, forceReupload: Bool = false) {
+        guard query.scope != .trash, flushEdits() else { return }
+        let target = id ?? (actionIDs.count == 1 ? actionIDs.first : nil)
+        guard let target else { return }
+        onUploadRequested?(target, forceReupload)
+    }
     func dragItems(_ id: UUID) -> [ShelfDragItem] {
         guard flushEdits(), selectedIDs.contains(id) || select(id) else { return [] }
         do { return try LibraryTransfer.dragItems(store.records(actionIDs), store: store) }
@@ -458,6 +465,7 @@ import Combine
     @discardableResult func perform(_ action: KeyboardAction) -> Bool {
         switch action {
         case .paste: if flushEdits() { onPasteRequested?(actionIDs) }
+        case .upload: uploadCurrent()
         case .copyImageText: if let focusedID { onImageTextCopyRequested?(focusedID) }
         case .commandPalette: cancelContentFocus(); onCommandsRequested?()
         case .focusNextPane: cancelContentFocus(); onFocusNextPane?()

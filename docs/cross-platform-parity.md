@@ -15,12 +15,12 @@ Never silently remove one platform from `defaultPlatforms`.
 
 Fresh installations use Control+Option+T on Mac and Control+Alt+T on Windows
 for the shelf toggle, and Control+Option/Alt+S for shared search. Existing saved
-Windows Control+Alt+Space or other custom choices remain unchanged. Global
-Library and copy-latest-image shortcuts are configurable and off by default on
-both platforms. Windows also keeps its configurable screenshot shortcut.
-Settings can record or switch off each global action. A rejected replacement
-keeps any previously working registration; copy-latest preserves the external
-application's focus and copies the rendered image without opening the shelves.
+Windows Control+Alt+Space or other custom choices remain unchanged. Global Library, copy-latest-image and upload-latest-to-R2 shortcuts are
+configurable and off by default on both platforms. Windows also keeps its
+configurable screenshot shortcut. Settings can record or switch off each global
+action. A rejected replacement keeps any previously working registration;
+copy-latest and upload-latest preserve the external application's focus and act
+without opening the shelves.
 
 ## Executable shelf contract
 
@@ -29,10 +29,11 @@ versioned behavioral specification. Its synthetic items use portable aliases and
 are listed newest first. Every step contains an expected active row, focused
 item, complete selection, visible rows and native search-editing state.
 
-The current eleven scenarios (62 observations per platform) cover one selected image on opening, reopening,
+The current twelve scenarios (68 observations per platform) cover one selected image on opening, reopening,
 hidden/empty/filtered image fallback, column-preserving vertical navigation and
 clamping, hidden/empty row skipping, horizontal navigation, adding and hiding
-rows, search caret keys, empty shelves, remapping, disabling and restoring defaults.
+rows, search caret keys, empty shelves, R2 upload shortcut/remapping/multi-selection
+safety, remapping, disabling and restoring defaults.
 A future user-visible change must add
 or amend the relevant scenarios and both adapters in the same change. Extend the
 contract's scope as the product grows; passing the current shelf scenarios is not

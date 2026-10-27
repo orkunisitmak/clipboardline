@@ -496,3 +496,81 @@
 "Focus previous pane" = "Önceki bölmeye odaklan";
 
 "Undo Move to Trash" = "Çöp’e taşımayı geri al";
+
+"Access Key ID" = "Access Key ID";
+
+"Account ID or HTTPS endpoint" = "Hesap ID’si veya HTTPS uç noktası";
+
+"Bucket name" = "Bucket adı";
+
+"Cloud upload" = "Buluta yükleme";
+
+"Cloudflare R2" = "Cloudflare R2";
+
+"Cloudflare R2 connection failed" = "Cloudflare R2 bağlantısı başarısız oldu";
+
+"Cloudflare R2 endpoint must use HTTPS" = "Cloudflare R2 uç noktası HTTPS kullanmalıdır";
+
+"Cloudflare R2 rejected the credentials or bucket (%d)" = "Cloudflare R2 kimlik bilgilerini veya bucket’ı reddetti (%d)";
+
+"Cloudflare R2 upload failed (%d)" = "Cloudflare R2 yüklemesi başarısız oldu (%d)";
+
+"Configure Cloudflare R2 in Settings first" = "Önce Ayarlar’dan Cloudflare R2’yi yapılandırın";
+
+"Connected to Cloudflare R2" = "Cloudflare R2 bağlantısı başarılı";
+
+"Connection" = "Bağlantı";
+
+"Copy public link" = "Açık bağlantıyı kopyala";
+
+"Credentials" = "Kimlik bilgileri";
+
+"Enter a valid Cloudflare R2 Account ID or HTTPS endpoint" = "Geçerli bir Cloudflare R2 Hesap ID’si veya HTTPS uç noktası girin";
+
+"Enter a valid HTTPS public base URL (for example, your r2.dev or custom domain)" = "Geçerli bir HTTPS açık temel URL’si girin (örneğin r2.dev veya özel alan adınız)";
+
+"Enter a valid R2 bucket name" = "Geçerli bir R2 bucket adı girin";
+
+"Enter a valid key prefix without '..'" = "'..' içermeyen geçerli bir anahtar öneki girin";
+
+"Enter an R2 Access Key ID" = "Bir R2 Access Key ID girin";
+
+"Enter an R2 Secret Access Key" = "Bir R2 Secret Access Key girin";
+
+"File is too large to upload (512 MB limit)" = "Dosya yüklemek için çok büyük (512 MB sınırı)";
+
+"Key prefix (optional)" = "Anahtar öneki (isteğe bağlı)";
+
+"Public base URL" = "Açık temel URL";
+
+"Public link copied" = "Açık bağlantı kopyalandı";
+
+"Remove secret key" = "Gizli anahtarı kaldır";
+
+"Save secret key" = "Gizli anahtarı kaydet";
+
+"Secret Access Key" = "Secret Access Key";
+
+"Secret Access Key could not be saved in Keychain" = "Secret Access Key Anahtarlık’a kaydedilemedi";
+
+"Stored in Keychain" = "Anahtarlık’ta kayıtlı";
+
+"Test connection" = "Bağlantıyı test et";
+
+"Upload again to R2" = "R2’ye yeniden yükle";
+
+"Upload an item first" = "Önce yüklenecek bir öğe kopyalayın";
+
+"Upload latest item" = "Son öğeyi yükle";
+
+"Upload to R2" = "R2’ye yükle";
+
+"Uploaded — link copied" = "Yüklendi — bağlantı kopyalandı";
+
+"Uploading to R2…" = "R2’ye yükleniyor…";
+
+"Uploads the newest item on the shelves to Cloudflare R2 and copies its public link." = "Askılardaki en yeni öğeyi Cloudflare R2’ye yükler ve açık bağlantısını panoya kopyalar.";
+
+"Uploads use your own Cloudflare R2 bucket via S3-compatible HTTPS. After uploading, the public URL is copied to the clipboard." = "Yüklemeler S3 uyumlu HTTPS üzerinden kendi Cloudflare R2 bucket’ınızı kullanır. Yükleme tamamlandığında açık URL panoya kopyalanır.";
+
+"Your Secret Access Key is stored in this Mac’s Keychain and is never written to preferences." = "Secret Access Key bu Mac’in Anahtarlık’ında saklanır ve tercihlere asla yazılmaz.";

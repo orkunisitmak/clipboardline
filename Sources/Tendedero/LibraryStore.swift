@@ -45,6 +45,8 @@ struct LibraryRecord: Codable, Equatable, Identifiable {
     var author: String?
     var metadataState = "pending"
     var metadataAttemptedAt: Date?
+    var uploadedURL: String?
+    var uploadedAt: Date?
     var displayTitle: String {
         if !title.isEmpty { return title }
         if kind == .link, let metadataTitle, !metadataTitle.isEmpty { return metadataTitle }
@@ -335,7 +337,7 @@ extension String {
         // A personal label supplements the recognizable source filename.
         // Index its basename only; private directory names are not content.
         let imageName = item.kind == .image ? (item.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? item.fileURL?.lastPathComponent ?? "") : ""
-        let content = [item.displayTitle,imageName,item.metadataTitle ?? "",item.text ?? "",item.note,item.originalURL ?? "",tagNames].joined(separator: " ").libraryFolded
+        let content = [item.displayTitle,imageName,item.metadataTitle ?? "",item.text ?? "",item.note,item.originalURL ?? "",item.uploadedURL ?? "",tagNames].joined(separator: " ").libraryFolded
         try db.execute("INSERT INTO items VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,created=excluded.created,updated=excluded.updated,copied=excluded.copied,retained=excluded.retained,favorite=excluded.favorite,shelf=excluded.shelf,deleted=excluded.deleted,path=excluded.path,normalized=excluded.normalized,domain=excluded.domain,sort_title=excluded.sort_title,search=excluded.search,payload=excluded.payload", [
             .text(item.id.uuidString), .text(item.kind.rawValue), .real(item.createdAt.timeIntervalSince1970), .real(item.updatedAt.timeIntervalSince1970),
             item.lastCopiedAt.map { .real($0.timeIntervalSince1970) } ?? .null, item.retainedAt.map { .real($0.timeIntervalSince1970) } ?? .null,
@@ -477,6 +479,7 @@ extension String {
                 if let retained = duplicate.retainedAt { current.retainedAt = current.retainedAt.map { min($0, retained) } ?? retained }
                 if current.title.isEmpty, !duplicate.title.isEmpty { current.title = duplicate.title }
                 if current.note.isEmpty, !duplicate.note.isEmpty { current.note = duplicate.note }
+                if current.uploadedURL == nil, let url = duplicate.uploadedURL { current.uploadedURL = url; current.uploadedAt = duplicate.uploadedAt }
                 try db.execute("INSERT OR IGNORE INTO item_collections(item,collection) SELECT ?,collection FROM item_collections WHERE item=?", [.text(current.id.uuidString), .text(id.uuidString)])
                 try db.execute("INSERT OR IGNORE INTO item_tags(item,tag) SELECT ?,tag FROM item_tags WHERE item=?", [.text(current.id.uuidString), .text(id.uuidString)])
                 duplicate.deletedAt = date; duplicate.onShelf = false; duplicate.updatedAt = date; duplicate.trashRevision = UUID()
@@ -485,7 +488,12 @@ extension String {
                 canonical = current
             }
             var result = canonical ?? LibraryRecord(id: UUID(), kind: .text, createdAt: date, updatedAt: date)
-            if let canonical { textFileRollback = try rewriteMaterializedText(canonical, to: text) }
+            if let canonical {
+                textFileRollback = try rewriteMaterializedText(canonical, to: text)
+                if Data((canonical.text ?? "").utf8) != Data(text.utf8) {
+                    result.uploadedURL = nil; result.uploadedAt = nil
+                }
+            }
             var orderedDate = date
             if case let .real(front)? = try db.rows("SELECT created FROM items WHERE kind='text' AND shelf=1 AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1").first?["created"] {
                 // Reusing a stable ID also reuses its rowid. An equal clock
@@ -562,6 +570,7 @@ extension String {
                 value.originalPath = value.originalPath ?? source.path
                 value.path = rendered.path; value.markupBasePath = base.path; value.imageMarkup = document
             }
+            value.uploadedURL = nil; value.uploadedAt = nil
             value.updatedAt = now()
             try db.transaction {
                 try put(value)
@@ -669,6 +678,7 @@ extension String {
         let previousPath = value.path
         value.recordingOriginalPath = value.recordingOriginalPath ?? context.snapshot.path
         value.originalPath = value.originalPath ?? context.source.path
+        value.uploadedURL = nil; value.uploadedAt = nil
         value.path = context.output.path; value.updatedAt = now()
         try db.transaction {
             try put(value)
@@ -686,6 +696,9 @@ extension String {
         guard var value = try item(id) else { throw HistoryFiles.Failure.unsafeFile }
         let previous = value
         try transform(&value); value.updatedAt = now()
+        if value.kind == .text, Data((previous.text ?? "").utf8) != Data((value.text ?? "").utf8) {
+            value.uploadedURL = nil; value.uploadedAt = nil
+        }
         if previous.deletedAt == nil, value.deletedAt != nil { value.trashRevision = UUID() }
         else if previous.deletedAt != nil, value.deletedAt == nil { value.trashRevision = nil }
         if value.retainedAt != nil { try ensureOwned(&value) }
@@ -886,6 +899,18 @@ extension String {
     }
     func restore(_ ids: [UUID]) throws { try mutate(ids) { $0.deletedAt = nil; $0.onShelf = true; $0.trashRevision = nil }; invalidateShelfUndo(ids) }
     func markCopied(_ ids: [UUID]) throws { try mutate(ids) { $0.lastCopiedAt = self.now(); $0.captureRevision = UUID() } }
+    func recordUpload(_ id: UUID, url: String) throws {
+        guard let parsed = URL(string: url), parsed.scheme?.lowercased() == "https",
+              url.utf8.count <= 2048,
+              var value = try item(id), value.deletedAt == nil else {
+            throw HistoryFiles.Failure.unsafeFile
+        }
+        value.uploadedURL = url
+        value.uploadedAt = now()
+        try db.transaction { try put(value) }
+        invalidateTrashUndo([id])
+        changed([id])
+    }
     func prune() throws {
         var expired = [LibraryRecord]()
         for kind in LibraryKind.allCases {

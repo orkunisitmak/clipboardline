@@ -15,20 +15,21 @@ struct Pegged: Identifiable, Equatable {
     var managedCopy = false
     var originalPath: String?
     var title: String?
+    var uploadedURL: String?
     /// Every photo hangs a little crooked, like on a real line.
     let tilt = Double.random(in: -2.5...2.5)
     var falling = false
     /// Still flying in from where it was captured; the card waits hidden.
     var flying = false
-    init(id: UUID = UUID(), url: URL, thumb: NSImage?, pinned: Bool = false, managedCopy: Bool = false, originalPath: String? = nil, title: String? = nil) {
+    init(id: UUID = UUID(), url: URL, thumb: NSImage?, pinned: Bool = false, managedCopy: Bool = false, originalPath: String? = nil, title: String? = nil, uploadedURL: String? = nil) {
         self.id = id; self.url = url; self.thumb = thumb; self.pinned = pinned; self.managedCopy = managedCopy; self.originalPath = originalPath
-        self.title = title
+        self.title = title; self.uploadedURL = uploadedURL
     }
     /// A screen recording rather than a screenshot.
     var isRecording: Bool { isRecordingFile(url) }
 
     static func == (a: Pegged, b: Pegged) -> Bool {
-        a.id == b.id && a.url == b.url && a.pinned == b.pinned && a.title == b.title && a.falling == b.falling && a.flying == b.flying && a.thumb === b.thumb
+        a.id == b.id && a.url == b.url && a.pinned == b.pinned && a.title == b.title && a.uploadedURL == b.uploadedURL && a.falling == b.falling && a.flying == b.flying && a.thumb === b.thumb
     }
 }
 
@@ -540,6 +541,7 @@ final class Line: ObservableObject {
     var onImageMarkupRequested: ((UUID) -> Void)?
     var onFlushPreview: () -> Bool = { true }
     var onImageTextCopyRequested: ((UUID) -> Void)?
+    var onUploadRequested: ((UUID, Bool) -> Void)?
     var onCommandsRequested: (() -> Void)?
     var onPinToFolderRequested: (([UUID]) -> Void)?
     var onNameAndPinRequested: ((UUID) -> Void)?
@@ -557,7 +559,7 @@ final class Line: ObservableObject {
     private(set) var viewportWidth: CGFloat = 1024
     private let history: ImageHistory
     var historyFiles: HistoryFiles { history.files }
-    private let defaults: UserDefaults
+    let defaults: UserDefaults
     let thumbnails = ThumbnailStore()
     private var arrivalIDs = Set<UUID>()
     private var lastThumbnailIDs = Set<UUID>()
@@ -834,6 +836,13 @@ final class Line: ObservableObject {
         if let value, value.isValid, let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: "libraryShortcut") }
         else if value == nil { defaults.removeObject(forKey: "libraryShortcut") }
     }
+    var uploadLatestShortcut: KeyShortcut? {
+        guard let data = defaults.data(forKey: "uploadLatestShortcut"), let value = try? JSONDecoder().decode(KeyShortcut.self, from: data), value.isValid else { return nil }; return value
+    }
+    func saveUploadLatestShortcut(_ value: KeyShortcut?) {
+        if let value, value.isValid, let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: "uploadLatestShortcut") }
+        else if value == nil { defaults.removeObject(forKey: "uploadLatestShortcut") }
+    }
 
     var soundOn: Bool {
         get { !defaults.bool(forKey: "soundOff") }
@@ -862,7 +871,7 @@ final class Line: ObservableObject {
         texts = TextHistory(defaults: defaults, folder: inbox.appendingPathComponent("Texts"), now: now, moveToTrash: moveToTrash, copyText: copyText, library: library, pruneOnLoad: pruneOnLoad)
         links = LinkHistory(store: library, copy: copyText)
         history = ImageHistory(defaults: defaults, inbox: inbox, now: now, moveToTrash: moveToTrash, pruneOnLoad: pruneOnLoad, library: library)
-        items = history.entries.map { Pegged(id: $0.id, url: $0.url, thumb: nil, pinned: $0.pinned, managedCopy: history.files.isAppCopy($0.url), originalPath: $0.originalPath, title: $0.title) }
+        items = history.entries.map { Pegged(id: $0.id, url: $0.url, thumb: nil, pinned: $0.pinned, managedCopy: history.files.isAppCopy($0.url), originalPath: $0.originalPath, title: $0.title, uploadedURL: $0.uploadedURL) }
         thumbnails.onLoad = { [weak self] in self?.refreshThumbnails(force: true) }
         refreshThumbnails()
         if let library { librarySubscription = library.$revision.dropFirst().sink { [weak self, weak library] _ in if library?.changedKinds.contains(.image) == true { self?.reloadFromLibrary() } } }
@@ -1130,7 +1139,7 @@ final class Line: ObservableObject {
         let updated = history.entries.map { entry in
             var item = previous[entry.id] ?? Pegged(id: entry.id, url: entry.url, thumb: nil)
             item.url = entry.url; item.pinned = entry.pinned; item.originalPath = entry.originalPath
-            item.title = entry.title
+            item.title = entry.title; item.uploadedURL = entry.uploadedURL
             item.managedCopy = history.files.isAppCopy(entry.url)
             return item
         }
@@ -1159,6 +1168,15 @@ final class Line: ObservableObject {
     }
 
     // MARK: Helpers
+
+    func upload(_ id: UUID, forceReupload: Bool = false) {
+        guard onFlushPreview() else { return }
+        onUploadRequested?(id, forceReupload)
+    }
+
+    func playFeedbackSound(_ name: String = "Tink", volume: Float = 0.35) {
+        play(name, volume: volume)
+    }
 
     private func play(_ name: String, volume: Float) {
         guard soundOn, let sound = NSSound(named: name)?.copy() as? NSSound else { return }

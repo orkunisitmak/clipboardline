@@ -71,6 +71,11 @@ struct GrabArea: NSViewRepresentable {
             menu.addItem(ClosureMenuItem(item.pinned ? L("Unpin") : L("Pin favorite")) { line.pinFromUI(id) })
             menu.addItem(ClosureMenuItem(L("Name and pin…")) { line.onNameAndPinRequested?(id) })
             menu.addItem(ClosureMenuItem(L("Copy")) { line.copyAction(id) })
+            let hasUploaded = item.uploadedURL != nil
+            menu.addItem(ClosureMenuItem(hasUploaded ? L("Copy public link") : L("Upload to R2")) { line.upload(id) })
+            if hasUploaded {
+                menu.addItem(ClosureMenuItem(L("Upload again to R2")) { line.upload(id, forceReupload: true) })
+            }
             menu.addItem(ClosureMenuItem(L("Open")) { line.open(id) })
             menu.addItem(ClosureMenuItem(L("Quick Look")) { line.quickLook(id) })
             if !isRecording {

@@ -5,6 +5,7 @@ import SwiftUI
 /// before the next key event, without a delayed SwiftUI FocusState update.
 @MainActor final class LibrarySearchTextField: NSSearchField, NSSearchFieldDelegate {
     private weak var model: LibraryModel?
+    var onWillResignSearchFocus: (() -> Void)?
     init(model: LibraryModel) {
         self.model = model
         super.init(frame: .zero)
@@ -30,6 +31,7 @@ import SwiftUI
         let editor = currentEditor()
         guard window.firstResponder === self || (editor != nil && window.firstResponder === editor) else { return false }
         guard (editor as? NSTextView)?.hasMarkedText() != true else { return false }
+        onWillResignSearchFocus?()
         guard model?.focusContent() == true else { return true }
         if window.firstResponder === self || (editor != nil && window.firstResponder === editor) { window.makeFirstResponder(nil) }
         return true

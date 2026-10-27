@@ -222,6 +222,9 @@ svg.rope path, svg.line path { fill: none; stroke: #a3a3a9; stroke-width: 1.1; v
 .setting-row strong { display: block; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
 .setting-row small { display: block; max-width: 470px; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .setting-row > button, .setting-row > select { flex: 0 0 auto; max-width: 50%; min-height: 25px; font-size: 11px; }
+.setting-row > input:not([type="checkbox"]):not([type="color"]), .setting-row > .r2-secret-controls { flex: 0 1 340px; width: 340px; max-width: 55%; font-size: 11px; }
+.r2-secret-controls { display: flex; align-items: center; gap: 6px; }
+.r2-secret-controls > input { flex: 1 1 auto; min-width: 110px; font-size: 11px; }
 .setting-row > input[type="checkbox"] { position: relative; appearance: none; width: 28px; height: 17px; margin: 0; padding: 0; border: 1px solid #ffffff18; border-radius: 999px; background: #68686d; cursor: pointer; }
 .setting-row > input[type="checkbox"]:before { content: ""; position: absolute; top: 1px; left: 1px; width: 13px; height: 13px; border-radius: 50%; background: #fafafa; box-shadow: 0 1px 2px #0003; }
 .setting-row > input[type="checkbox"]:checked { background: #1689f7; }

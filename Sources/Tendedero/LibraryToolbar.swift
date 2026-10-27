@@ -26,6 +26,8 @@ import SwiftUI
     private struct MenuState: Equatable {
         let sort: LibraryQuery.Sort
         let hasSelection: Bool
+        let singleSelection: Bool
+        let uploaded: Bool
         let trash: Bool
         let pinnedOnly: Bool
         let folders: [LibraryCollection]
@@ -36,7 +38,7 @@ import SwiftUI
         searchField = LibrarySearchTextField(model: model)
         super.init()
         toolbar.delegate = self; toolbar.displayMode = .iconOnly
-        toolbar.allowsUserCustomization = true; toolbar.autosavesConfiguration = true
+        toolbar.allowsUserCustomization = true; toolbar.autosavesConfiguration = model.store.defaults === UserDefaults.standard
         model.onSearchFocus = { [weak self] in self?.focusSearch() }
         subscription = model.objectWillChange.sink { [weak self] _ in
             guard let self, !self.refreshPending else { return }; self.refreshPending = true
@@ -95,7 +97,9 @@ import SwiftUI
         if window.title != model.title { window.title = model.title }
         let subtitle = model.loading ? L("Loading…") : String(format: L("%d items"), model.ids.count)
         if window.subtitle != subtitle { window.subtitle = subtitle }
-        let state = MenuState(sort: model.query.sort, hasSelection: !model.selectedIDs.isEmpty || model.focusedID != nil, trash: model.query.scope == .trash, pinnedOnly: model.showingPinnedOnly, folders: model.collections)
+        let singleID = model.actionIDs.count == 1 ? model.actionIDs.first : nil
+        let uploaded = singleID.flatMap { try? model.store.item($0)?.uploadedURL } != nil
+        let state = MenuState(sort: model.query.sort, hasSelection: !model.selectedIDs.isEmpty || model.focusedID != nil, singleSelection: singleID != nil, uploaded: uploaded, trash: model.query.scope == .trash, pinnedOnly: model.showingPinnedOnly, folders: model.collections)
         let menusChanged = menuState != state; menuState = state
         if searchField.stringValue != model.search { searchField.stringValue = model.search }
         for item in toolbar.items {
@@ -125,6 +129,8 @@ import SwiftUI
     }
     private func focusSearch() {
         if !toolbar.items.contains(where: { $0.itemIdentifier == Self.searchID }) { toolbar.insertItem(withItemIdentifier: Self.searchID, at: toolbar.items.count) }
+        if searchField.stringValue != model.search { searchField.stringValue = model.search }
+        (actions?.window as? LibraryNativeWindow)?.beginToolbarSearchFocus(for: searchField)
         (toolbar.items.first(where: { $0.itemIdentifier == Self.searchID }) as? NSSearchToolbarItem)?.beginSearchInteraction()
         searchField.selectText(nil)
     }
@@ -143,6 +149,14 @@ import SwiftUI
         }
         let hasSelection = !model.selectedIDs.isEmpty || model.focusedID != nil
         add(L("Copy"), enabled: hasSelection) { [weak model] in model?.copy() }
+        if model.query.scope != .trash {
+            let singleID = model.actionIDs.count == 1 ? model.actionIDs.first : nil
+            let hasUploaded = singleID.flatMap { try? model.store.item($0)?.uploadedURL } != nil
+            add(hasUploaded ? L("Copy public link") : L("Upload to R2"), enabled: singleID != nil) { [weak model] in model?.uploadCurrent() }
+            if hasUploaded {
+                add(L("Upload again to R2"), enabled: true) { [weak model] in model?.uploadCurrent(forceReupload: true) }
+            }
+        }
         add(L("Save to library"), enabled: hasSelection) { [weak model] in model?.retain() }
         add(L("Show pinned items")) { [weak model] in model?.togglePinnedOnly() }
         menu.items.last?.state = model.showingPinnedOnly ? .on : .off

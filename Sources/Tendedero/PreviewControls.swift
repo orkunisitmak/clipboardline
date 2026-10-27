@@ -55,18 +55,21 @@ final class ActionPreviewPanel: NSPanel {
 @MainActor
 final class PreviewControls: NSVisualEffectView {
     let position = NSTextField(labelWithString: "")
+    let uploadButton: NSButton
     let pinButton: NSButton
     let editButton: NSButton?
     let markupButton: NSButton?
     let actionsButton: NSButton
     var onMove: (Int) -> Void = { _ in }
     var onCopy: () -> Void = {}
+    var onUpload: () -> Void = {}
     var onPin: () -> Void = {}
     var onEdit: () -> Void = {}
     var onClose: () -> Void = {}
     var onMarkup: () -> Void = {}
     var onCommands: () -> Void = {}
     var keyboardBindings = KeyboardBindings(defaults: .standard) { didSet { refreshCommandsHint() } }
+    private var isUploaded = false
     private let stack = NSStackView()
     private let accessorySeparator = NSBox()
     private var accessoryWidth: NSLayoutConstraint?
@@ -107,6 +110,7 @@ final class PreviewControls: NSVisualEffectView {
     }
 
     init(editable: Bool = false, markup: Bool = false) {
+        uploadButton = Self.button("icloud.and.arrow.up", L("Upload to R2"))
         pinButton = Self.button("pin", L("Pin favorite"))
         markupButton = markup ? Self.button("pencil.tip.crop.circle", L("Markup image")) : nil
         actionsButton = Self.button("command", L("Actions"))
@@ -124,7 +128,7 @@ final class PreviewControls: NSVisualEffectView {
         position.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         position.alignment = .center
         position.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        var views: [NSView] = [previous, position, next, copy, pinButton]
+        var views: [NSView] = [previous, position, next, copy, uploadButton, pinButton]
         if let editButton { views.append(editButton) }
         if let markupButton { views.append(markupButton) }
         views.append(actionsButton)
@@ -141,7 +145,7 @@ final class PreviewControls: NSVisualEffectView {
             position.widthAnchor.constraint(greaterThanOrEqualToConstant: 46)])
         fixedControlsWidth = CGFloat(views.count - 1) * 5 + 16 + views.filter { $0 !== position }.reduce(0) { $0 + max(26, $1.fittingSize.width) }
         for (button, action) in [(previous, #selector(previousItem)), (next, #selector(nextItem)),
-            (copy, #selector(copyItem)), (pinButton, #selector(pinItem)), (close, #selector(closePreview))] {
+            (copy, #selector(copyItem)), (uploadButton, #selector(uploadItem)), (pinButton, #selector(pinItem)), (close, #selector(closePreview))] {
             button.target = self; button.action = action
         }
         editButton?.target = self; editButton?.action = #selector(editText)
@@ -160,7 +164,8 @@ final class PreviewControls: NSVisualEffectView {
         button.heightAnchor.constraint(equalToConstant: 26).isActive = true
         return button
     }
-    func update(position: String, pinned: Bool) {
+    func update(position: String, pinned: Bool, uploaded: Bool = false) {
+        isUploaded = uploaded
         refreshCommandsHint()
         self.position.stringValue = position
         pinButton.image = NSImage(systemSymbolName: pinned ? "pin.fill" : "pin", accessibilityDescription: pinned ? L("Unpin") : L("Pin favorite"))
@@ -171,6 +176,12 @@ final class PreviewControls: NSVisualEffectView {
     private func refreshCommandsHint() {
         let hint = keyboardBindings.title(.commandPalette)
         actionsButton.toolTip = L("Actions") + (hint.isEmpty ? "" : " · " + hint)
+        let uploadLabel = isUploaded ? L("Copy public link") : L("Upload to R2")
+        let uploadHint = keyboardBindings.title(.upload)
+        uploadButton.image = NSImage(systemSymbolName: isUploaded ? "link.icloud" : "icloud.and.arrow.up", accessibilityDescription: uploadLabel)
+        uploadButton.contentTintColor = isUploaded ? .controlAccentColor : .labelColor
+        uploadButton.setAccessibilityLabel(uploadLabel)
+        uploadButton.toolTip = uploadLabel + (uploadHint.isEmpty ? "" : " · " + uploadHint)
     }
     func setEditing(_ editing: Bool) {
         editButton?.title = editing ? L("Done") : L("Edit text")
@@ -182,6 +193,7 @@ final class PreviewControls: NSVisualEffectView {
     @objc private func previousItem() { onMove(-1) }
     @objc private func nextItem() { onMove(1) }
     @objc private func copyItem() { onCopy() }
+    @objc private func uploadItem() { onUpload() }
     @objc private func pinItem() { onPin() }
     @objc private func editText() { onEdit() }
     @objc private func closePreview() { onClose() }

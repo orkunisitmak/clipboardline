@@ -21,6 +21,11 @@ final class ShelfPreviewSession {
         case .links: line.links.entries.first { $0.id == currentID }?.favorite == true
         case .images: line.items.first { $0.id == currentID }?.pinned == true }
     }
+    var uploadedURL: String? {
+        switch shelf { case .texts: line.texts.entries.first { $0.id == currentID }?.uploadedURL
+        case .links: line.links.entries.first { $0.id == currentID }?.uploadedURL
+        case .images: line.items.first { $0.id == currentID }?.uploadedURL }
+    }
     var text: String? { line.texts.entries.first { $0.id == currentID }?.text }
     var url: URL? { line.items.first { $0.id == currentID }?.url }
     var linkRecord: LibraryRecord? { line.links.entries.first { $0.id == currentID } }
