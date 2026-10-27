@@ -14,7 +14,7 @@ const DEFAULTS = Object.freeze({
   retentionDays: {image: 30, text: 30, link: 30},
   shortcuts: {toggle: 'Control+Alt+T', search: 'Control+Alt+S', library:'', copyLatest:'', screenshot: 'Control+Alt+A'},
   localShortcuts: {},
-  autoCheckUpdates: true, watchFolders: [], openAfterScreenshot: true,
+  autoCheckUpdates: true, watchFolders: [], capturedImageOpens: 'crop',
   theme:'soft', cardSize:'medium', sounds:false, launchAtLogin:false, language:'system',indexImages:true,
   libraryListMode:false,libraryInspectorVisible:true,librarySidebarVisible:true,librarySidebarWidth:220,libraryInspectorWidth:300,
   libraryListColumns:{title:300,kind:80,tags:150,created:130},recentPinFolderIds:[]
@@ -34,9 +34,14 @@ function settings(patch, previous = DEFAULTS) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) fail('Invalid settings');
   const out = clone(previous);
   for (const [key, value] of Object.entries(patch)) {
-    if (['captureText', 'captureImages', 'captureLinks', 'fetchLinkMetadata','autoCheckUpdates', 'openAfterScreenshot','sounds','launchAtLogin','indexImages','libraryListMode','libraryInspectorVisible','librarySidebarVisible'].includes(key)) {
+    if (['captureText', 'captureImages', 'captureLinks', 'fetchLinkMetadata','autoCheckUpdates','sounds','launchAtLogin','indexImages','libraryListMode','libraryInspectorVisible','librarySidebarVisible'].includes(key)) {
       if (typeof value !== 'boolean') fail('Invalid preference');
       out[key] = value;
+    } else if (key === 'capturedImageOpens') {
+      if (!['crop', 'preview', 'shelf', 'off'].includes(value)) fail('Invalid preference');
+      out[key] = value;
+    } else if (key === 'openAfterScreenshot') {
+      // Legacy boolean kept loadable for old stores; migrated below.
     } else if (key === 'visibleKinds') {
       if (!Array.isArray(value) || value.some(k => !KINDS.includes(k))) fail('Invalid visible shelves');
       out[key] = [...new Set(value)];
@@ -76,6 +81,9 @@ function settings(patch, previous = DEFAULTS) {
       out.watchFolders = [...new Set(value)];
     } else fail('Unknown preference');
   }
+  // Legacy stores only had the openAfterScreenshot boolean; an opted-out user
+  // must not start seeing captured images open automatically.
+  if (!Object.hasOwn(patch, 'capturedImageOpens') && patch.openAfterScreenshot === false && previous === DEFAULTS) out.capturedImageOpens = 'off';
   return out;
 }
 function trashUndoFingerprint(item){return crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex');}

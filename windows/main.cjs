@@ -27,6 +27,7 @@ const {DragFiles}=require('./lib/drag-files.cjs');
 const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
 const {Updates,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
 const {GlobalShortcuts}=require('./lib/global-shortcuts.cjs');
+const {capturedImageEvent}=require('./lib/captured-image.cjs');
 const {ImageSearch,modelPaths}=require('./lib/image-search.cjs');
 const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
@@ -174,7 +175,9 @@ async function readClipboard() {
     const item=store.insert(content.kind,content.value);broadcast();
     if(item.kind==='link')void enrich(item.id);
     if(item.kind==='image'){queueOCR(item.id);refreshImageSearch();}
-    if(item.kind==='image'&&store.data.settings.openAfterScreenshot&&!desiredVisible)await show('shelves',{selectId:item.id,kind:'image'});
+    const capturedEvent=capturedImageEvent(store.data.settings,item);
+    if(capturedEvent&&!desiredVisible)await show('shelves',capturedEvent);
+    else if(capturedEvent&&view==='shelves'){viewEvent={...capturedEvent,serial:crypto.randomUUID()};broadcast();}
   }catch(error){notify('Clipboard capture: '+error.message);}finally{capturing=false;if(pendingClipboard){pendingClipboard=false;queueMicrotask(()=>void readClipboard());}}
 }
 async function enrich(id,{refresh=false}={}) {
@@ -253,8 +256,9 @@ async function importFile(file) {
 async function capture() {
   const wasVisible=window.isVisible();visibilityGeneration++;desiredVisible=false;shelfMotion.cancel();if(wasVisible)window.hide();viewEvent=null;broadcast({surfaceOnly:true});await shelfMotion.request('reset');
   try{
-    // Capture only after the shelf window has left the compositor.
-    await new Promise(resolve=>setTimeout(resolve,150));
+    // Capture only after the shelf window has left the compositor; a window
+    // that was already hidden has nothing to fade out.
+    if(wasVisible)await new Promise(resolve=>setTimeout(resolve,150));
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
     const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw new Error('Screen capture is unavailable');
@@ -280,7 +284,7 @@ async function recognize(id,quiet=false) {
 }
 function configureWatchers() {
   for(const watcher of watchers)watcher.close();watchers=[];
-  for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(()=>{});}catch{}},700));});watcher.on('error',()=>{});watchers.push(watcher);}catch{}}
+  for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();const capturedEvent=capturedImageEvent(store.data.settings,record);if(capturedEvent)void show('shelves',capturedEvent);}).catch(()=>{});}catch{}},700));});watcher.on('error',()=>{});watchers.push(watcher);}catch{}}
 }
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){
