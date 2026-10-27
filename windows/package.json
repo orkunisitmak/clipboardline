@@ -1,16 +1,19 @@
 {
   "name": "clipboardline-desktop",
   "version": "1.7.8",
-  "description": "Keyboard-first local clipboard shelves and saved library for Windows",
+  "description": "Keyboard-first local clipboard shelves and saved library for Windows and Linux",
   "author": "ClipBoardLine contributors",
   "license": "MIT",
+  "homepage": "https://github.com/orkunisitmak/clipboardline",
   "private": true,
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
     "test": "node --test --test-concurrency=1 tests/*.test.cjs",
     "test:electron": "node tests/electron-smoke.cjs",
-    "dist": "electron-builder --win nsis --x64 --publish never"
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "dist:linux": "electron-builder --linux --x64 --publish never",
+    "test:linux": "node tests/linux-acceptance.cjs"
   },
   "dependencies": {
     "@tesseract.js-data/eng": "1.0.0",
@@ -56,13 +59,6 @@
         ]
       },
       {
-        "from": "native",
-        "to": "native",
-        "filter": [
-          "*.ps1"
-        ]
-      },
-      {
         "from": "../LICENSE",
         "to": "LICENSE.txt"
       },
@@ -96,7 +92,16 @@
           ]
         }
       ],
-      "artifactName": "ClipBoardLine-Setup-${version}-${arch}.${ext}"
+      "artifactName": "ClipBoardLine-Setup-${version}-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "native",
+          "to": "native",
+          "filter": [
+            "*.ps1"
+          ]
+        }
+      ]
     },
     "nsis": {
       "installerIcon": "assets/clipboardline.ico",
@@ -111,7 +116,74 @@
       "lib/*.cjs",
       "node_modules/onnxruntime-web/**",
       "node_modules/onnxruntime-common/**"
-    ]
+    ],
+    "linux": {
+      "icon": "assets/clipboardline.png",
+      "executableName": "clipboardline",
+      "category": "Utility",
+      "synopsis": "Keyboard-first clipboard shelves and library",
+      "description": "Local clipboard shelves for images, text and links with a saved, searchable library.",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "pacman",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "ClipBoardLine-${version}-linux-${arch}.${ext}",
+      "desktop": {
+        "entry": {
+          "Name": "ClipBoardLine",
+          "Comment": "Keyboard-first clipboard shelves and library",
+          "Keywords": "clipboard;history;paste;screenshot;",
+          "StartupNotify": "false"
+        }
+      },
+      "maintainer": "ClipBoardLine contributors <noreply@github.com>"
+    },
+    "deb": {
+      "recommends": [
+        "wl-clipboard",
+        "xclip",
+        "xdotool",
+        "ydotool",
+        "ffmpeg",
+        "spectacle | gnome-screenshot | grim"
+      ]
+    },
+    "pacman": {
+      "depends": [
+        "gtk3",
+        "nss",
+        "alsa-lib",
+        "libxss",
+        "libxtst"
+      ]
+    },
+    "afterAllArtifactBuild": "scripts/pacman-optdepends.cjs"
   },
-  "clipboardLineBuild": 71
+  "clipboardLineBuild": 71,
+  "clipboardLineLinux": {
+    "pacmanOptionalDepends": [
+      "wl-clipboard: Wayland clipboard access",
+      "xclip: X11 clipboard access",
+      "xdotool: X11 automatic paste",
+      "ydotool: Wayland automatic paste",
+      "ffmpeg: screen recordings",
+      "spectacle: KDE screenshots"
+    ]
+  }
 }

@@ -32,6 +32,12 @@ const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
 const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
+const linux=process.platform==='linux';
+const linuxIntegration=linux?require('./lib/linux-integration.cjs'):null;
+const linuxClipboard=linux?require('./lib/linux-clipboard.cjs').linuxClipboard():null;
+// Must run before Electron initializes its windowing platform.
+if(linux)linuxIntegration.configurePlatform(app);
+const LINUX_UPDATE_MESSAGE='Linux builds update through their package: download the newest AppImage or install the new .deb/.pacman package. The signed in-app installer channel is Windows-only.';
 const testMode = process.argv.includes('--test-mode');
 const testFolder = process.argv.find(value=>value.startsWith('--test-data='))?.slice('--test-data='.length);
 const testTray=testMode&&!!testFolder&&process.argv.includes('--test-tray');
@@ -47,7 +53,7 @@ let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
 const shelfMotion=new MotionBridge(value=>{if(window&&!window.isDestroyed())window.webContents.send('clipboardline:shelf-motion',value);});
 const windowBounds=new WindowBounds();
-const pasteTargets=new PasteTargetTracker(process.pid);
+const pasteTargets=new PasteTargetTracker(process.pid,{compositorTargets:linux});
 const entry = pathToFileURL(path.join(__dirname,'index.html')).href;
 const copyMarker = crypto.randomBytes(16);
 const pending = new Map();
@@ -92,7 +98,7 @@ function createTray(){
   trayPresentation=new StatusTray({tray,createIcon:summary=>trayIcon(nativeImage,appIcon(),summary),createMenu:summary=>{
     const t=(key,...values)=>translated(summary.language,key,...values);
     return Menu.buildFromTemplate([{id:'tray-show',label:t('Show line'),click:()=>show('shelves')},{id:'tray-library',label:t('Library'),click:()=>show('library')},{id:'tray-capture',label:t('Screenshots'),click:()=>capture()},{id:'tray-settings',label:t('Settings'),click:()=>show('settings')},
-      ...(summary.updateVersion?[{id:'tray-update',label:t('Update available')+': '+summary.updateVersion+'…',click:openUpdates}]:[]),{id:'tray-check',label:t('Check for updates…'),click:async()=>{await openUpdates();await updates.check();}},{type:'separator'},{id:'tray-quit',label:t('Quit %@','ClipBoardLine'),click:()=>app.quit()}]);
+      ...(summary.updateVersion?[{id:'tray-update',label:t('Update available')+': '+summary.updateVersion+'…',click:openUpdates}]:[]),{id:'tray-check',label:t('Check for updates…'),click:async()=>{await openUpdates();if(linux)updates.set({status:'unsupported',message:LINUX_UPDATE_MESSAGE});else await updates.check();}},{type:'separator'},{id:'tray-quit',label:t('Quit %@','ClipBoardLine'),click:()=>app.quit()}]);
   }});
   refreshTray();tray.on('click',()=>desiredVisible?hide():show('shelves'));
 }
@@ -160,7 +166,9 @@ async function hide(restore=true) {
   try{await operation;}finally{if(hidePromise===operation)hidePromise=null;}
 }
 async function clipboardContent() {
-  return readClipboardContent({clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL});
+  // Linux reads through wl-clipboard/xclip; Electron cannot see a background
+  // Wayland selection. The same admission policy applies to both sources.
+  return readClipboardContent({clipboard:linux?linuxClipboard:clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL});
 }
 async function readClipboard() {
   if(capturing){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;capturing=true;
@@ -203,6 +211,13 @@ async function writeClipboard(selected) {
   }
   if(images.length>1){
     await native.copyImages({files:images.map(item=>store.mediaPath(item.id)),marker:copyMarker.toString('base64'),text:values.join('\n\n')});
+    ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
+  }
+  if(linux){
+    // Electron drops image/png offers and unfocused writes on Linux. The
+    // selection is owned by wl-copy/xclip; ownership is recognized on read.
+    let png=null;if(images.length){const image=nativeImage.createFromPath(store.mediaPath(images[0].id));if(image.isEmpty())throw new Error('Image unavailable');png=image.toPNG();}
+    await linuxClipboard.write({text:values.join('\n\n'),png,marker:copyMarker});
     ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
   }
   const data={'web application/x.clipboardline':new Blob([copyMarker])};if(values.length)data['text/plain']=new Blob([values.join('\n\n')],{type:'text/plain'});
@@ -255,6 +270,8 @@ async function capture() {
   try{
     // Capture only after the shelf window has left the compositor.
     await new Promise(resolve=>setTimeout(resolve,150));
+    const linuxShot=linux?await linuxIntegration.screenshot():null;
+    if(linuxShot){const item=store.insert('image',linuxShot);queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});return{id:item.id};}
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
     const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw new Error('Screen capture is unavailable');
@@ -283,6 +300,17 @@ function configureWatchers() {
   for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(()=>{});}catch{}},700));});watcher.on('error',()=>{});watchers.push(watcher);}catch{}}
 }
 let shortcutRegistry,shortcutRecording=null;
+async function copyLatestImage(){const image=store.data.items.filter(item=>item.kind==='image'&&!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];if(image){await writeClipboard([image]);notify('Copied');if(store.data.settings.sounds)shell.beep();}}
+// Desktop-environment shortcut commands (`clipboardline --toggle`) for sessions
+// whose compositor does not deliver application key grabs.
+function runCommandLine(command){
+  if(command==='toggle')return desiredVisible?hide():show('shelves');
+  if(command==='search')return show('shelves',{search:true});
+  if(command==='library'||command==='settings')return show(command);
+  if(command==='screenshot')return capture();
+  if(command==='copyLatest')return copyLatestImage();
+  return show('shelves');
+}
 function finishShortcutRecording(token=null){
   if(!shortcutRecording||(token!==null&&shortcutRecording.token!==token))return;
   const current=shortcutRecording;shortcutRecording=null;current.resume();
@@ -296,10 +324,12 @@ function startShortcutRecording(token){
 }
 
 function configureShortcuts(previousPreferences=null) {
-  shortcutRegistry??=new GlobalShortcuts(globalShortcut,{
+  // Separate Plasma components keep a development or test instance from
+  // touching the installed application's registrations.
+  shortcutRegistry??=new GlobalShortcuts(linux?linuxIntegration.shortcutRegistry(globalShortcut,{component:testMode?'clipboardline-test-'+process.pid:development?'clipboardline-dev':'clipboardline'}):globalShortcut,{
     toggle:()=>desiredVisible?hide():show('shelves'),
     search:()=>show('shelves',{search:true}),library:()=>show('library'),
-    copyLatest:async()=>{const image=store.data.items.filter(item=>item.kind==='image'&&!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];if(image){await writeClipboard([image]);notify('Copied');if(store.data.settings.sounds)shell.beep();}},
+    copyLatest:copyLatestImage,
     screenshot:capture
   },{failed:error=>notify(error.message)});
   const rejected=shortcutRegistry.update(store.data.settings.shortcuts);
@@ -360,10 +390,10 @@ async function command(action,payload={}) {
   else if(action==='export'){
     const selected=store.selected(ids(payload.ids));if(!selected.length)throw new Error('Select an item first');
     const response=await dialog.showOpenDialog(window,{properties:['openDirectory','createDirectory']});if(response.filePaths[0]){
-      for(const item of selected){const label=(item.name||item.title||item.kind).replace(/[<>:"/\\|?*\x00-\x1F]/g,'-').replace(/[. ]+$/g,'').slice(0,100)||item.kind;const extension=item.kind==='image'?(item.recording?path.extname(store.mediaPath(item.id)):'.png'):item.kind==='link'?'.url':'.txt';let index=1,destination;
+      for(const item of selected){const label=(item.name||item.title||item.kind).replace(/[<>:"/\\|?*\x00-\x1F]/g,'-').replace(/[. ]+$/g,'').slice(0,100)||item.kind;const extension=item.kind==='image'?(item.recording?path.extname(store.mediaPath(item.id)):'.png'):item.kind==='link'?(linux?'.desktop':'.url'):'.txt';let index=1,destination;
         do{destination=path.join(response.filePaths[0],label+(index>1?'-'+index:'')+extension);index++;}while(fs.existsSync(destination));
         if(item.kind==='image')await fs.promises.copyFile(store.mediaPath(item.id),destination,fs.constants.COPYFILE_EXCL);
-        else fs.writeFileSync(destination,Buffer.from(item.kind==='link'?'[InternetShortcut]\r\nURL='+item.url+'\r\n':item.text),{flag:'wx'});
+        else fs.writeFileSync(destination,Buffer.from(item.kind==='link'?(linux?linuxIntegration.linkFile(item.url):'[InternetShortcut]\r\nURL='+item.url+'\r\n'):item.text),{flag:'wx'});
       }result={count:selected.length};message=`Exported ${selected.length} items.`;
     }
   }
@@ -380,14 +410,14 @@ async function command(action,payload={}) {
     const previousShortcuts={...store.data.settings.shortcuts};
     store.modify('setSettings',{patch});if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
     if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastFingerprint='';
-    if(Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
-    if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
+    if(Object.hasOwn(patch,'launchAtLogin')&&!testMode){if(linux)linuxIntegration.setAutostart(patch.launchAtLogin);else app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});}
+    if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development&&!linux)void updateScheduler.tick({force:true});
   }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
   else if(action==='unwatchFolder'){const index=payload.index;if(!Number.isInteger(index)||index<0||index>=store.data.settings.watchFolders.length)throw new Error('Invalid watched folder');store.modify('setSettings',{patch:{watchFolders:store.data.settings.watchFolders.filter((_v,i)=>i!==index)}});configureWatchers();}
-  else if(action==='checkUpdates'||action==='refreshUpdates'){if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
+  else if(action==='checkUpdates'||action==='refreshUpdates'){if(linux)updates.set({status:'unsupported',message:LINUX_UPDATE_MESSAGE});else if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
   else if(action==='installUpdate'){
     if(development)throw new Error('Development builds cannot install official updates.');
-    if(process.platform!=='win32')throw new Error('Windows installer can run only on Windows.');
+    if(process.platform!=='win32')throw new Error(linux?LINUX_UPDATE_MESSAGE:'Windows installer can run only on Windows.');
     await updates.install(launchInstaller);app.quit();
   }else if(action==='quit')app.quit();
   else throw new Error('Unknown command');
@@ -404,8 +434,11 @@ function appIcon(){
 }
 if(!app.requestSingleInstanceLock())app.quit();
 else app.whenReady().then(async()=>{
-  store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
-  updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!development&&!testMode&&store.data.settings.autoCheckUpdates});
+  store=new Store(app.getPath('userData'),linux?{defaultSettings:linuxIntegration.LINUX_DEFAULT_SETTINGS}:{});
+  if(linux)linuxClipboard.configure({electron:{clipboard,ClipboardItem},toPNG:bytes=>{const image=nativeImage.createFromBuffer(bytes);if(image.isEmpty())throw new Error('Unsupported clipboard image');return image.toPNG();}});mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
+  // The signed feed and installer are Windows packages; never offer them on Linux.
+  updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!development&&!testMode&&!linux&&store.data.settings.autoCheckUpdates});
+  if(linux)updates.set({status:'unsupported',message:LINUX_UPDATE_MESSAGE});
   const searchPaths=modelPaths({packaged:app.isPackaged,resourcesPath:process.resourcesPath,sourceDirectory:__dirname});
   let ortModule=null,runtimeDirectory=null;try{ortModule=require.resolve('onnxruntime-web/wasm').replace(/app[.]asar([\\/])/,'app.asar.unpacked$1');runtimeDirectory=path.dirname(ortModule);}catch{}
   imageSearch=new ImageSearch({...searchPaths,ortModule,runtimeDirectory,cacheDirectory:path.join(store.directory,'image-search'),items:()=>store.data.items,readImage:readSemanticImage,changed:()=>broadcast()});refreshImageSearch();
@@ -452,7 +485,7 @@ else app.whenReady().then(async()=>{
     createTray();
   }
   if(!testMode){
-    updates.announce();
+    if(!linux)updates.announce();
     configureShortcuts();configureWatchers();
 
     clipboardTimer=setInterval(()=>{if(!monitor)void readClipboard();},1000);
@@ -461,10 +494,13 @@ else app.whenReady().then(async()=>{
     updateLaunchTimer=setTimeout(()=>void updateScheduler.tick(),10000);updateLaunchTimer.unref();
     powerMonitor.on('resume',()=>void updateScheduler.tick());
   }
-  await show('shelves');
+  const initialCommand=linux&&!testMode?linuxIntegration.commandFromArgv(process.argv):null;
+  if(initialCommand&&!['show','toggle'].includes(initialCommand))await runCommandLine(initialCommand).catch(error=>notify(error.message));else await show('shelves');
   // Test hooks are main-process only and require an explicit isolated data path.
   if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
-app.on('second-instance',()=>{if(window)void show('shelves');});
+// Ctrl+C or a session logout must still run before-quit (shortcut and watcher cleanup).
+if(linux)for(const signal of ['SIGINT','SIGTERM','SIGHUP'])process.on(signal,()=>app.quit());
+app.on('second-instance',(_event,argv)=>{if(!window)return;const command=linux?linuxIntegration.commandFromArgv(argv):null;void (command?runCommandLine(command):show('shelves')).catch(error=>notify(error.message));});
 app.on('activate',()=>{if(window)void show('shelves');});
-app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
+app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();linuxClipboard?.stop();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();shortcutRegistry?.registry?.dispose?.();globalShortcut.unregisterAll();});

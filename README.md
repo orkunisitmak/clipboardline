@@ -292,6 +292,10 @@ Sparkle provides the updater. Apple Vision and the original MobileCLIP-S2 models
 - [Apple MobileCLIP](https://github.com/apple-aiml-research/ml-mobileclip)
 
 
+## Linux
+
+The Electron edition also runs on Linux (KDE Plasma, GNOME, wlroots and X11 sessions) with a native bridge for the clipboard, paste, global shortcuts, screenshots and recordings. See the [Linux compatibility guide](docs/linux.md) for the audit, required tools, native exceptions and `npm run dist:linux` packaging.
+
 ## Platform support and current gaps
 
 **One public repository.** `orkunisitmak/clipboardline-desktop` now contains the source and Mac/Windows releases. Each platform keeps its own signed feed; every release designated Latest carries both current `appcast.xml` and `windows-update.json`. Old Mac `clipboardline-app` update addresses continue through verified compatibility redirects, so existing Mac installations keep updating without reinstalling. Both signed feeds and all three previous Mac ZIPs were verified through the old addresses without authentication, with identical bytes and archive hashes.

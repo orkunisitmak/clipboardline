@@ -88,7 +88,7 @@ function plainURL(value) {
 }
 
 class Store {
-  constructor(directory, {clock = Date.now} = {}) {
+  constructor(directory, {clock = Date.now, defaultSettings = null} = {}) {
     this.directory = path.resolve(directory); this.clock = clock; this.undoStack = []; this.trashUndoStack = []; this.textIdentities = new WeakMap();this.revision=0;
     fs.mkdirSync(this.directory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.directory).isSymbolicLink())fail('Application data must not be a symlink.');
@@ -97,18 +97,25 @@ class Store {
       const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
       try{execFileSync(powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-Directory',this.directory],{windowsHide:true,timeout:15000,stdio:['ignore','pipe','pipe'],env:windowsEnvironment()});}
       catch(error){const detail=String(error.stderr||error.message||'').replaceAll(this.directory,'[application data]').replace(/[\r\n]+/g,' ').slice(0,900);fail('The private application data permissions could not be secured. Existing files were preserved. '+detail);}
+    }else if(process.platform==='linux'){
+      // mkdir's mode applies only to a new folder. Keep an existing profile
+      // (for example one created by an older build) private to this user.
+      try{fs.chmodSync(this.directory,0o700);}catch(error){fail('The private application data permissions could not be secured. Existing files were preserved. '+String(error.code||error.message).slice(0,200));}
     }
     this.mediaDirectory = path.join(this.directory, 'media'); fs.mkdirSync(this.mediaDirectory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
     this.file = path.join(this.directory, 'library.json');
-    this.data = {schema: 1, items: [], folders: [], settings: clone(DEFAULTS)};
+    // Platform defaults (for example a Linux toggle that avoids the terminal
+    // shortcut) apply under every saved preference, never over one.
+    const defaults=defaultSettings?settings(defaultSettings,DEFAULTS):DEFAULTS;
+    this.data = {schema: 1, items: [], folders: [], settings: clone(defaults)};
     if (fs.existsSync(this.file)) {
       if(fs.lstatSync(this.file).isSymbolicLink())fail('Library must not be a symlink.');
       if (fs.statSync(this.file).size > 64 * 1024 * 1024) fail('Library exceeds safe load size');
       let parsed;
       try { parsed = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { fail('Library is unreadable. Original data was preserved; recover library.json.backup.'); }
       if (parsed.schema !== 1 || !Array.isArray(parsed.items) || parsed.items.length > 20000 || !Array.isArray(parsed.folders)) fail('Unsupported library format');
-      this.data = {...parsed, settings: settings(parsed.settings)};
+      this.data = {...parsed, settings: settings(parsed.settings, defaults)};
       for (const item of this.data.items) this.validateStored(item);
       if(this.data.pendingDeletionFiles&&(!Array.isArray(this.data.pendingDeletionFiles)||this.data.pendingDeletionFiles.length>200000||this.data.pendingDeletionFiles.some(name=>typeof name!=='string'||!MANAGED_MEDIA.test(name))))fail('Invalid pending deletion state.');
     }
