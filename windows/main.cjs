@@ -395,7 +395,7 @@ async function command(action,payload={}) {
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
   }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
   else if(action==='unwatchFolder'){const index=payload.index;if(!Number.isInteger(index)||index<0||index>=store.data.settings.watchFolders.length)throw new Error('Invalid watched folder');store.modify('setSettings',{patch:{watchFolders:store.data.settings.watchFolders.filter((_v,i)=>i!==index)}});configureWatchers();}
-  else if(action==='checkUpdates'||action==='refreshUpdates'){if(linux)updates.set({status:'development',message:'Linux builds update through your package manager or a new AppImage from the releases page.'});else if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
+  else if(action==='checkUpdates'||action==='refreshUpdates'){if(linux)updates.set({status:'development',message:'Linux builds update through your package manager or a new AppImage release.'});else if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
   else if(action==='installUpdate'){
     if(development)throw new Error('Development builds cannot install official updates.');
     if(process.platform!=='win32')throw new Error('Windows installer can run only on Windows.');
@@ -416,6 +416,8 @@ function appIcon(){
 if(!app.requestSingleInstanceLock())app.quit();
 else app.whenReady().then(async()=>{
   store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
+  // The signed Windows channel never installs on Linux; packages update the app.
+  if(linux)Object.assign(updates.state,{status:'development',message:'Linux builds update through your package manager or a new AppImage release.'});
   updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!linux&&!development&&!testMode&&store.data.settings.autoCheckUpdates});
   const searchPaths=modelPaths({packaged:app.isPackaged,resourcesPath:process.resourcesPath,sourceDirectory:__dirname});
   let ortModule=null,runtimeDirectory=null;try{ortModule=require.resolve('onnxruntime-web/wasm').replace(/app[.]asar([\\/])/,'app.asar.unpacked$1');runtimeDirectory=path.dirname(ortModule);}catch{}
