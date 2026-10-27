@@ -136,7 +136,7 @@ async function show(next='shelves',event=null) {
     const animate=next==='shelves'&&(!window.isVisible()||wasClosing);
     if(animate)await shelfMotion.request('prepare',{hidden:!window.isVisible()});else await shelfMotion.request('reset');
     if(generation!==visibilityGeneration)return;
-    window.show();window.focus();windowBounds.shown(window);broadcast({surfaceOnly:true});
+    window.show();window.focus();if(linux)await linux.desktop.present(next==='shelves').catch(()=>{});windowBounds.shown(window);broadcast({surfaceOnly:true});
     // Commands can await the settled pixels, but the window and keyboard are
     // available immediately. A concurrent toggle can cancel this animation.
     if(animate)await shelfMotion.request('open');

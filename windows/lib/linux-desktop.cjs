@@ -1,10 +1,10 @@
 'use strict';
 const {execFile}=require('node:child_process');
-const crypto=require('node:crypto');
+const crypto=require('node:crypto'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {which}=require('./linux-clipboard.cjs');
 
 // Linux focus and paste bridge. Window identity is read from the compositor
-// (Hyprland, Sway, KDE via kdotool, X11 via xdotool). Sessions without an
+// (Hyprland, Sway, KWin scripts, X11 via xdotool). Sessions without an
 // identity API, such as GNOME Wayland, use the compositor's own focus return
 // after the shelves hide. Only window ids and process ids are retained.
 const KEY_CTRL=29,KEY_V=47;
@@ -21,6 +21,13 @@ function session(environment=process.env){
   else if(desktop.includes('gnome'))compositor='gnome';
   return{type:wayland?'wayland':environment.DISPLAY?'x11':'none',compositor};
 }
+// KWin exposes window state only to its own scripts. A one-shot script reports
+// through the user journal with a per-call nonce; ids are KWin's window UUIDs.
+const KWIN_ACTIVE="const w=workspace.activeWindow;print(MARK+' '+(w?JSON.stringify({id:String(w.internalId),pid:w.pid}):'null'));";
+const KWIN_WINDOWS="const all=workspace.windowList?workspace.windowList():workspace.clientList();";
+function kwinActivate(id){return KWIN_WINDOWS+`for(const w of all)if(String(w.internalId)===${JSON.stringify(id)}){if(w.minimized)w.minimized=false;workspace.activeWindow=w;}print(MARK);`;}
+// Wayland has no always-on-top request for clients; KWin applies it here.
+function kwinPresent(pid,above){return KWIN_WINDOWS+`let count=0;for(const w of all)if(w.pid===${Number(pid)}&&!w.hidden&&(w.normalWindow||w.dialog)){w.keepAbove=${above?'true':'false'};workspace.activeWindow=w;count++;}print(MARK+' '+count);`;}
 function focusedSway(node){
   if(!node||typeof node!=='object')return null;
   if(node.focused&&Number.isInteger(node.pid))return node;
@@ -40,6 +47,7 @@ class LinuxDesktop{
     const{type,compositor}=this.session;
     if(compositor==='hyprland'&&this.find('hyprctl'))return'hyprland';
     if(compositor==='sway'&&this.find('swaymsg'))return'sway';
+    if(type==='wayland'&&compositor==='kde'&&(this.find('gdbus')||this.find('qdbus6'))&&this.find('journalctl'))return'kwin';
     if(type==='wayland'&&compositor==='kde'&&this.find('kdotool'))return'kdotool';
     if(type==='x11'&&this.find('xdotool'))return'xdotool';
     return null;
@@ -52,8 +60,37 @@ class LinuxDesktop{
     if(type==='wayland'&&this.find('wtype'))return'wtype';
     return null;
   }
+  async dbus(object,method,...args){
+    if(this.find('gdbus'))return this.run('gdbus',['call','--session','--dest','org.kde.KWin','--object-path',object,'--method',method,...args]);
+    return this.run('qdbus6',['org.kde.KWin',object,method,...args]);
+  }
+  async kwin(body,{wait=true}={}){
+    const nonce='CLIPBOARDLINE-'+crypto.randomBytes(8).toString('hex'),name='clipboardline-'+nonce.slice(14);
+    const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-kwin-')),file=path.join(directory,'script.js');
+    try{
+      fs.writeFileSync(file,`const MARK=${JSON.stringify(nonce)};${body}`,{mode:0o600});
+      const id=String(await this.dbus('/Scripting','org.kde.kwin.Scripting.loadScript',file,name)).match(/-?\d+/)?.[0];
+      if(id===undefined||Number(id)<0)throw new Error('KWin rejected the window script.');
+      try{await this.dbus('/Scripting/Script'+id,'org.kde.kwin.Script.run');}catch{await this.dbus('/'+id,'org.kde.kwin.Script.run');}
+      if(!wait)return'';
+      for(let attempt=0;attempt<20;attempt++){
+        const output=await this.run('journalctl',['--user','-o','cat','--since','-30s','-g',nonce]).catch(()=>'');
+        const line=output.split('\n').find(value=>value.startsWith(nonce));if(line!==undefined)return line.slice(nonce.length).trim();
+        await this.sleep(20);
+      }
+      throw new Error('KWin did not report the window state.');
+    }finally{this.dbus('/Scripting','org.kde.kwin.Scripting.unloadScript',name).catch(()=>{});fs.rmSync(directory,{recursive:true,force:true});}
+  }
+  // window.show() maps the Wayland surface asynchronously; retry until KWin
+  // lists it so the request is never applied to an earlier frame.
+  async present(above=true){
+    if(this.windowBackend()!=='kwin')return false;
+    for(let attempt=0;attempt<15;attempt++){if(Number(await this.kwin(kwinPresent(this.ownPID,above)))>0)return true;await this.sleep(40);}
+    return false;
+  }
   async active(){
     const backend=this.windowBackend();
+    if(backend==='kwin'){const value=JSON.parse(await this.kwin(KWIN_ACTIVE));return value&&typeof value.id==='string'&&Number.isInteger(value.pid)?{id:value.id,pid:value.pid}:null;}
     if(backend==='hyprland'){const value=JSON.parse(await this.run('hyprctl',['-j','activewindow']));if(!value||typeof value.address!=='string'||!Number.isInteger(value.pid))return null;return{id:value.address,pid:value.pid};}
     if(backend==='sway'){const value=focusedSway(JSON.parse(await this.run('swaymsg',['-t','get_tree','-r'])));return value?{id:String(value.id),pid:value.pid}:null;}
     if(backend==='kdotool'||backend==='xdotool'){
@@ -86,6 +123,7 @@ class LinuxDesktop{
     if(entry.implicit||!backend)return;
     if(backend==='hyprland')await this.run('hyprctl',['dispatch','focuswindow','address:'+entry.id]);
     else if(backend==='sway')await this.run('swaymsg',[`[con_id=${Number(entry.id)}]`,'focus']);
+    else if(backend==='kwin')await this.kwin(kwinActivate(entry.id));
     else if(backend==='xdotool')await this.run('xdotool',['windowactivate','--sync',entry.id]);
     else await this.run('kdotool',['windowactivate',entry.id]);
   }

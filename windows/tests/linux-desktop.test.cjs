@@ -109,3 +109,20 @@ test('XDG autostart entry targets the AppImage path and is removed when disabled
     assert.equal(command({environment:{},executable:'/opt/Clip Board/clipboardline'}),'"/opt/Clip Board/clipboardline" --hidden');
   }finally{fs.rmSync(home,{recursive:true,force:true});}
 });
+
+test('KDE Wayland reads and activates windows through one-shot KWin scripts reported by nonce',async()=>{
+  const scripts=[];let active='{a1}';
+  const {value,calls}=desktop({WAYLAND_DISPLAY:'w',XDG_CURRENT_DESKTOP:'KDE'},['gdbus','journalctl','ydotool'],key=>{
+    if(key.includes('loadScript')){const file=key.split(' ').at(-2);scripts.push(require('node:fs').readFileSync(file,'utf8'));return '(7,)';}
+    if(key.startsWith('journalctl')){const nonce=key.split(' ').at(-1),body=scripts.at(-1);
+      if(body.includes('activeWindow;print'))return nonce+' '+JSON.stringify({id:active,pid:51})+'\n';
+      return nonce+(body.includes('let count')?' 1':'')+'\n';}
+    return '';
+  });
+  const target=await value.capture();assert.equal(target.processId,51);
+  await value.validatePaste(target);await value.paste(target);
+  assert.ok(scripts.some(body=>body.includes('"{a1}"')&&body.includes('workspace.activeWindow=w')));
+  assert.equal(await value.present(true),true);assert.match(scripts.at(-1),/w\.pid===4242&&.*w\.keepAbove=true/);
+  assert.ok(calls.some(call=>call[0]==='gdbus'&&call.includes('/Scripting/Script7')));
+  active='{b2}';await assert.rejects(value.paste(target),/No keys were sent/);
+});

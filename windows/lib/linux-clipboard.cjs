@@ -100,8 +100,9 @@ class ClipboardWatcher{
     if(this.clipboard.kind==='wayland'){
       const startedAt=Date.now();
       const child=this.spawner('wl-paste',['--watch','echo','changed'],{stdio:['ignore','pipe','ignore']});this.child=child;
-      let initial=true;
-      child.stdout.on('data',chunk=>{for(const line of chunk.toString().split('\n'))if(line.trim()==='changed'){if(initial){initial=false;continue;}this.bump();}});
+      // The first line reports the selection present at startup, as Windows
+      // reports its initial sequence; both admit that clipboard once.
+      child.stdout.on('data',chunk=>{for(const line of chunk.toString().split('\n'))if(line.trim()==='changed')this.bump();});
       child.on('error',()=>{if(this.child===child)this.child=null;if(!this.stopped)this.poll();});
       // GNOME has no data-control protocol; wl-paste exits at once there.
       child.on('exit',()=>{if(this.child===child)this.child=null;if(!this.stopped){if(Date.now()-startedAt<5000)this.poll();else this.failed(new Error('Clipboard monitor stopped.'));}});
