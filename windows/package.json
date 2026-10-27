@@ -182,14 +182,6 @@
         "at-spi2-core",
         "libuuid",
         "(wl-clipboard or xclip)"
-      ],
-      "fpm": [
-        "--rpm-tag",
-        "Recommends: xdotool",
-        "--rpm-tag",
-        "Recommends: ydotool",
-        "--rpm-tag",
-        "Recommends: ffmpeg"
       ]
     },
     "pacman": {
@@ -203,18 +195,6 @@
         "util-linux-libs",
         "libsecret",
         "wl-clipboard"
-      ],
-      "fpm": [
-        "--pacman-optional-depends",
-        "xclip: clipboard access in X11 sessions",
-        "--pacman-optional-depends",
-        "xdotool: automatic paste in X11 sessions",
-        "--pacman-optional-depends",
-        "ydotool: automatic paste in KDE and GNOME Wayland sessions",
-        "--pacman-optional-depends",
-        "wtype: automatic paste in wlroots Wayland sessions",
-        "--pacman-optional-depends",
-        "ffmpeg: screen recording trim and posters"
       ]
     },
     "asarUnpack": [
