@@ -27,6 +27,16 @@ checksum enforced when the letters are mixed case), Tron `T` addresses
 Addresses are always saved normally when address capture is on; warnings never
 block a copy or change the clipboard.
 
+![Wallet Guard overview](assets/wallet-guard/wallet-guard-overview.png)
+
+| Replaced address (macOS) | Lookalike address (macOS) |
+| --- | --- |
+| ![Copied address was replaced](assets/wallet-guard/macos-hijack-warning.png) | ![Possible lookalike address](assets/wallet-guard/macos-lookalike-warning.png) |
+| ![Recovery phrase not saved](assets/wallet-guard/macos-recovery-phrase-notice.png) | ![Private key not saved](assets/wallet-guard/macos-private-key-notice.png) |
+
+Screenshots use public test vectors only; see
+[assets/wallet-guard/README.md](assets/wallet-guard/README.md).
+
 ### Threat model
 
 - **Clipboard hijackers ("clippers").** Malware watches the clipboard and swaps
