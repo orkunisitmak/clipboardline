@@ -18,6 +18,10 @@ jobs:
         run: python3 scripts/test-audit-public.py
       - name: Audit public source paths and high-confidence secret formats
         run: python3 scripts/audit-public.py --report "$RUNNER_TEMP/source-audit.json"
+      - name: Test the released security patch gate
+        run: python3 scripts/test-check-released-security-patches.py
+      - name: Check that every advisory fix reached a release
+        run: python3 scripts/check-released-security-patches.py
       - name: Scan working tree and all public Git history
         run: python3 scripts/check-secrets.py --report-dir "$RUNNER_TEMP/security-scan"
       - name: Preserve redacted evidence

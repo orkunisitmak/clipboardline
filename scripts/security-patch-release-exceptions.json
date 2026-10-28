@@ -1,0 +1,12 @@
+{
+  "comment": "Advisory fixes that exist on main but have not reached a release tag. Each entry names the issue tracking the release. The gate fails once a release contains the commit, so an entry cannot outlive its purpose.",
+  "excepted": [
+    {
+      "advisory": "GHSA-jr5w-w6x2-84p9",
+      "sha": "2d71cdbee5ac91dac1c12fb666aebb59976a89ff",
+      "issue": "https://github.com/orkunisitmak/clipboardline/issues/40",
+      "reviewed": "2026-10-29",
+      "reason": "Electron 44.9.1 landed on main after windows-1.7.8-build71; the next Windows release carries it."
+    }
+  ]
+}
