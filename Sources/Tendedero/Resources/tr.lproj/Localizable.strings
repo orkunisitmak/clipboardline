@@ -496,3 +496,29 @@
 "Focus previous pane" = "Önceki bölmeye odaklan";
 
 "Undo Move to Trash" = "Çöp’e taşımayı geri al";
+
+"Wallet Guard" = "Cüzdan Koruması";
+
+"Protect recovery phrases, keys and addresses" = "Kurtarma ifadelerini, anahtarları ve adresleri koru";
+
+"Recovery phrases and private keys are never saved. Warns when a copied crypto address is replaced or resembles one you copied before. Checks run only on this computer." = "Kurtarma ifadeleri ve özel anahtarlar asla kaydedilmez. Kopyaladığınız kripto adresi değiştirildiğinde veya daha önce kopyaladığınız bir adrese benzediğinde uyarır. Kontroller yalnızca bu bilgisayarda çalışır.";
+
+"Recovery phrase not saved. Never paste it into websites or chats." = "Kurtarma ifadesi kaydedilmedi. Onu asla web sitelerine veya sohbetlere yapıştırmayın.";
+
+"Private key not saved. Never paste it into websites or chats." = "Özel anahtar kaydedilmedi. Onu asla web sitelerine veya sohbetlere yapıştırmayın.";
+
+"Copied address was replaced" = "Kopyalanan adres değiştirildi";
+
+"Your copied address was replaced by another address. This is how clipboard malware steals crypto." = "Kopyaladığınız adres başka bir adresle değiştirildi. Pano kötü amaçlı yazılımları kriptoyu bu yöntemle çalar.";
+
+"You copied" = "Kopyaladığınız";
+
+"Clipboard now" = "Panodaki şu an";
+
+"Possible lookalike address" = "Benzer görünümlü adres olabilir";
+
+"This address starts and ends like one you copied before, but the middle is different. It may be a poisoned lookalike. Compare every character before sending." = "Bu adres daha önce kopyaladığınız bir adresle aynı şekilde başlayıp bitiyor, ancak ortası farklı. Zehirlenmiş, benzer görünümlü bir adres olabilir. Göndermeden önce her karakteri karşılaştırın.";
+
+"Copied now" = "Şimdi kopyalanan";
+
+"Copied before" = "Daha önce kopyalanan";

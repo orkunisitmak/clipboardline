@@ -496,3 +496,29 @@
 "Focus previous pane" = "聚焦上一个面板";
 
 "Undo Move to Trash" = "撤销移到废纸篓";
+
+"Wallet Guard" = "Wallet Guard";
+
+"Protect recovery phrases, keys and addresses" = "Protect recovery phrases, keys and addresses";
+
+"Recovery phrases and private keys are never saved. Warns when a copied crypto address is replaced or resembles one you copied before. Checks run only on this computer." = "Recovery phrases and private keys are never saved. Warns when a copied crypto address is replaced or resembles one you copied before. Checks run only on this computer.";
+
+"Recovery phrase not saved. Never paste it into websites or chats." = "Recovery phrase not saved. Never paste it into websites or chats.";
+
+"Private key not saved. Never paste it into websites or chats." = "Private key not saved. Never paste it into websites or chats.";
+
+"Copied address was replaced" = "Copied address was replaced";
+
+"Your copied address was replaced by another address. This is how clipboard malware steals crypto." = "Your copied address was replaced by another address. This is how clipboard malware steals crypto.";
+
+"You copied" = "You copied";
+
+"Clipboard now" = "Clipboard now";
+
+"Possible lookalike address" = "Possible lookalike address";
+
+"This address starts and ends like one you copied before, but the middle is different. It may be a poisoned lookalike. Compare every character before sending." = "This address starts and ends like one you copied before, but the middle is different. It may be a poisoned lookalike. Compare every character before sending.";
+
+"Copied now" = "Copied now";
+
+"Copied before" = "Copied before";

@@ -157,6 +157,7 @@ enum HistoryTestRunner {
         let shelfProjection = ShelfProjectionTests()
         let shelfPresentation = ShelfPresentationTests()
         let textIdentityParity = TextIdentityParityTests()
+        let walletGuard = WalletGuardTests()
         let keyboardSpeedTests = KeyboardSpeedTests()
         let shelfPaging = ShelfPagingTests()
         let markupPersistence = ImageMarkupPersistenceTests()
@@ -212,6 +213,15 @@ enum HistoryTestRunner {
             ("testExplicitSearchOrSidebarEntrySupersedesPendingNewNoteInspectorFocus", libraryFocusNativeTests.testExplicitSearchOrSidebarEntrySupersedesPendingNewNoteInspectorFocus),
             ("testReducedMotionIsImmediateAndPresentationDoesNotClaimKeyboardOwnership", shelfPresentation.testReducedMotionIsImmediateAndPresentationDoesNotClaimKeyboardOwnership),
             ("testSharedTextIdentitiesAgainstLibraryAndLegacyHistory", textIdentityParity.testSharedTextIdentitiesAgainstLibraryAndLegacyHistory),
+            ("testBundledWordlistAndLimitsMatchSharedContract", walletGuard.testBundledWordlistAndLimitsMatchSharedContract),
+            ("testKeccakMatchesPublishedDigests", walletGuard.testKeccakMatchesPublishedDigests),
+            ("testSharedClassificationVectors", walletGuard.testSharedClassificationVectors),
+            ("testSharedScenariosWithInjectedClock", walletGuard.testSharedScenariosWithInjectedClock),
+            ("testOversizedCopiesAreNotInspectedAndDenseNotesStayBounded", walletGuard.testOversizedCopiesAreNotInspectedAndDenseNotesStayBounded),
+            ("testHistoryComparisonIsBoundedAndSkipsUnusableRows", walletGuard.testHistoryComparisonIsBoundedAndSkipsUnusableRows),
+            ("testWatcherWithholdsSecretsFromTextHistoryAndKeepsAddresses", walletGuard.testWatcherWithholdsSecretsFromTextHistoryAndKeepsAddresses),
+            ("testAppDelegateAdmissionRespectsSettingAndPresentsMessages", walletGuard.testAppDelegateAdmissionRespectsSettingAndPresentsMessages),
+            ("testEveryWalletGuardStringHasATurkishTranslation", walletGuard.testEveryWalletGuardStringHasATurkishTranslation),
             ("testRepeatedThreeShelfOpenCloseLeavesInactiveRowsQuietAndRestoresSingleSelection", shelfPerformance.testRepeatedThreeShelfOpenCloseLeavesInactiveRowsQuietAndRestoresSingleSelection),
             ("testClosingActiveSearchClearsItBeforeFreshOpenChoosesImages", shelfPerformance.testClosingActiveSearchClearsItBeforeFreshOpenChoosesImages),
             ("testRepeatedScrollFocusDoesNotInvalidateAllRowsAndExplicitFocusStillWorks", shelfPerformance.testRepeatedScrollFocusDoesNotInvalidateAllRowsAndExplicitFocusStillWorks),

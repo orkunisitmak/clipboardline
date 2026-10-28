@@ -105,9 +105,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.receiveCopiedText(text)
         }
         let link: (URL) -> Void = { [weak self] url in if let record = self?.line.links.add(url) { self?.metadataService?.request([record.id]) } }
-        if let clipboardSource { return TextClipboardWatcher(source: clipboardSource, onText: callback, onLink: link, capturesText: { TextClipboardWatcher.isEnabled }, capturesLinks: { LinkHistory.isEnabled }) }
-        return TextClipboardWatcher(onText: callback, onLink: link, capturesText: { TextClipboardWatcher.isEnabled }, capturesLinks: { LinkHistory.isEnabled })
+        let admits: (String) -> Bool = { [weak self] text in self?.admitCopiedText(text) ?? true }
+        if let clipboardSource { return TextClipboardWatcher(source: clipboardSource, onText: callback, onLink: link, capturesText: { TextClipboardWatcher.isEnabled }, capturesLinks: { LinkHistory.isEnabled }, admits: admits) }
+        return TextClipboardWatcher(onText: callback, onLink: link, capturesText: { TextClipboardWatcher.isEnabled }, capturesLinks: { LinkHistory.isEnabled }, admits: admits)
     }()
+    private let walletGuard = WalletGuard()
+    private lazy var walletGuardPanel = WalletGuardPanel()
+    /// Test seam: the isolated harness records messages instead of showing a panel.
+    var presentWalletGuard: ((WalletGuardMessage) -> Void)?
     private var shortcutRecorder: ShortcutRecorder?
     private var shortcutRestoreWarning: String?
     private(set) var settingsController: SettingsWindowController?
@@ -1012,6 +1017,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.updateStatusIcon()
             }
             model.setLinks = { [weak self] on in LinkHistory.isEnabled = on; self?.refreshTextSources(); self?.updateStatusIcon() }
+            model.setWalletGuard = { [weak self] on in WalletGuard.isEnabled = on; if !on { self?.walletGuardPanel.hide() } }
             model.setMetadata = { [weak self] on in LinkMetadataService.isEnabled = on; if !on { self?.metadataService?.stop() } else { self?.metadataService?.request(self?.line.links.entries.map(\.id) ?? []) } }
             model.setLibraryShortcut = { [weak self] in self?.registerLibraryShortcut($0) }
             model.recordLibraryShortcut = { [weak self] in self?.recordLibraryShortcut() }
@@ -1053,6 +1059,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if TextClipboardWatcher.isEnabled || LinkHistory.isEnabled { textWatcher.start() } else { textWatcher.stop() }
     }
     func receiveCopiedText(_ text: String) { _ = line.texts.add(text) }
+    /// Wallet Guard decision for decoded clipboard text. Secrets are withheld
+    /// from history, links, search and previews; addresses are only compared
+    /// locally against this session and recent text history.
+    func admitCopiedText(_ text: String) -> Bool {
+        let context = NSWorkspace.shared.frontmostApplication.map { String($0.processIdentifier) }
+        let verdict = walletGuard.inspect(text, enabled: WalletGuard.isEnabled, context: context) { [line] in
+            line.texts.entries.prefix(WalletGuardLimits.historyAddresses).map(\.text)
+        }
+        if let message = WalletGuardMessage(verdict) {
+            line.notice = message.summary
+            if let presentWalletGuard { presentWalletGuard(message) } else if watchesFiles { walletGuardPanel.show(message) }
+        }
+        return verdict.save
+    }
     func showLibrary() {
         guard let store = line.library, flushPreviewEdits() else { return }
         capturePasteTarget()
