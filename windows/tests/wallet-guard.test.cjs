@@ -9,7 +9,7 @@ const {WalletGuard,classify,walletGuardMessage,messageSummary,LIMITS,keccak256}=
 const WORDS=require('../lib/bip39-english.cjs');
 const {Store}=require('../lib/model.cjs');
 const {translated}=require('../lib/status-summary.cjs');
-const {readClipboardContent}=require('../lib/clipboard-policy.cjs');
+const {readClipboardContent,admitClipboardContent}=require('../lib/clipboard-policy.cjs');
 const {plainURL}=require('../lib/model.cjs');
 const contract=require('../../contracts/wallet-guard.json');
 
@@ -86,13 +86,31 @@ test('secrets are withheld before the Store while text capture is on, and the se
       const verdict=guard.inspect(content.value,{enabled:store.data.settings.walletGuard,history:[]});
       if(verdict.save){store.insert(content.kind,content.value);saved++;}
     }
-    const persisted=fs.readdirSync(directory).filter(name=>name.endsWith('.json')).map(name=>fs.readFileSync(path.join(directory,name),'utf8')).join('\n');
+    const files=fs.readdirSync(directory).filter(name=>name==='library.json'||name==='library.json.backup'||name.startsWith('library.json.tmp-'));
+    assert.ok(files.includes('library.json')&&files.includes('library.json.backup'),'both persisted JSON artifacts exist');
+    const persisted=files.map(name=>fs.readFileSync(path.join(directory,name),'utf8')).join('\n');
     for(const row of contract.classify.filter(value=>value.expect.kind==='secret'))
       assert.equal(persisted.includes(JSON.stringify(row.value.trim()).slice(1,-1)),false,row.name);
     assert.ok(saved>0&&store.data.items.length>0);
     store.modify('setSettings',{patch:{walletGuard:false}});assert.equal(new Store(directory).data.settings.walletGuard,false);
     assert.throws(()=>store.modify('setSettings',{patch:{walletGuard:'yes'}}),/Invalid preference/);
   }finally{fs.rmSync(directory,{recursive:true,force:true});}
+});
+test('copied text is not inspected while text and link capture are off',()=>{
+  const phrase=contract.classify.find(row=>row.expect.kind==='secret'&&row.expect.secret==='recoveryPhrase').value;
+  const address=contract.classify.find(row=>row.expect.kind==='address').value;
+  const base={captureText:false,captureLinks:false,captureImages:true,walletGuard:true};
+  for(const value of [phrase,address]){
+    const inspected=[];const admit=text=>{inspected.push(text);return new WalletGuard().inspect(text,{history:[]}).save;};
+    assert.equal(admitClipboardContent({kind:'text',value},base,admit),false);
+    assert.equal(admitClipboardContent({kind:'link',value:'https://example.com/'},base,admit),false);
+    assert.deepEqual(inspected,[],'Wallet Guard never sees text when text and link capture are off');
+    assert.equal(admitClipboardContent({kind:'image',value:Buffer.from('png')},base,admit),true,'images still follow image capture');
+  }
+  const inspected=[];const admit=text=>{inspected.push(text);return new WalletGuard().inspect(text,{history:[]}).save;};
+  assert.equal(admitClipboardContent({kind:'text',value:phrase},{...base,captureLinks:true},admit),false,'link capture alone still inspects and withholds secrets, as on macOS');
+  assert.equal(admitClipboardContent({kind:'text',value:address},{...base,captureText:true},admit),true);
+  assert.deepEqual(inspected,[phrase,address]);
 });
 test('messages use the shared catalogs in English and Turkish and keep both addresses',()=>{
   const hijack={save:true,notice:null,alert:{type:'hijack',original:'0xORIGINAL',replacement:'0xREPLACEMENT'}};

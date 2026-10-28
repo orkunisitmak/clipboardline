@@ -16,7 +16,7 @@ const crypto = require('node:crypto');
 const {pathToFileURL} = require('node:url');
 const {spawn} = require('node:child_process');
 const {Store,plainURL,ids} = require('./lib/model.cjs');
-const {privateClipboard,readClipboardContent}=require('./lib/clipboard-policy.cjs');
+const {privateClipboard,readClipboardContent,admitClipboardContent}=require('./lib/clipboard-policy.cjs');
 const {mediaOrigin}=require('./lib/media-policy.cjs');
 const {mediaResponse,mediaGenerationMatches}=require('./lib/media-response.cjs');
 const {MediaJobs,MAXIMUM_VIDEO_BYTES}=require('./lib/media.cjs');
@@ -174,8 +174,7 @@ async function readClipboard() {
     if(content.owned)return;
     // Wallet Guard sees decoded text before any history, link, preview or
     // index path. A withheld secret never reaches the Store.
-    if(content.kind!=='image'&&!admitCopiedText(content.value))return;
-    const key={image:'captureImages',text:'captureText',link:'captureLinks'}[content.kind];if(!store.data.settings[key])return;
+    if(!admitClipboardContent(content,store.data.settings,admitCopiedText))return;
     const item=store.insert(content.kind,content.value);broadcast();
     if(item.kind==='link')void enrich(item.id);
     if(item.kind==='image'){queueOCR(item.id);refreshImageSearch();}

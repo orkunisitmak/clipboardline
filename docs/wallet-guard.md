@@ -16,8 +16,8 @@ no web content, and stores nothing new.
 | --- | --- |
 | A BIP39 recovery phrase (12, 15, 18, 21 or 24 English words with a valid checksum), also numbered or inside a short labelled note | Not saved to history, Library, search or previews. A short notice: "Recovery phrase not saved. Never paste it into websites or chats." |
 | A private key: raw secp256k1 hex (optional `0x`, range-checked), WIF, extended private key (`xprv`/`tprv`/`yprv`/`zprv`/`uprv`/`vprv`/`Yprv`/`Zprv`), or a Solana keypair (base58 or JSON byte array) | Not saved. A short notice: "Private key not saved. Never paste it into websites or chats." |
-| An address, then within 3 seconds a **different address of the same chain**, with no front application change | Persistent warning: "Your copied address was replaced by another address. This is how clipboard malware steals crypto." Both addresses stay visible. |
-| An address whose first 4 and last 4 characters match a different address in recent text history or earlier in this session | Persistent lookalike warning with both addresses side by side. |
+| An address, then within 3 seconds a **different address of the same chain**, with no front application change. If the front application is unknown for either copy, that counts as no change and the warning is shown. | Persistent warning: "Your copied address was replaced by another address. This is how clipboard malware steals crypto." Both addresses stay visible. |
+| An address of the **same chain and length** whose first 4 and last 4 characters (after a fixed prefix such as `0x`, `bc1q` or the base58 version character) match a different address in recent text history or earlier in this session | Persistent lookalike warning with both addresses side by side. |
 
 Address formats: Bitcoin base58 (P2PKH/P2SH, mainnet and testnet) and segwit
 bech32/bech32m (`bc1`/`tb1`, BIP173/BIP350 rules), EVM `0x` addresses (EIP-55
@@ -60,14 +60,21 @@ Screenshots use public test vectors only; see
   reading the clipboard. It cannot clear the clipboard for you, and it does not
   change what the receiving application gets when you paste.
 - It inspects text that ClipBoardLine already reads. If text and link capture
-  are both off, ClipBoardLine does not read copied text and Wallet Guard is idle.
+  are both off, copied text is never inspected and Wallet Guard is idle, even
+  while image capture is on (macOS stops its text watcher; Windows discards
+  text before Wallet Guard and the Store).
 - Replacement detection needs to observe the original copy. On macOS the
   watcher polls every 0.5 seconds, so a clipper that swaps faster than that can
   hide the original copy. Windows uses the native clipboard change monitor.
 - A front application change is the only available proxy for a new user copy
   action; neither platform reads keystrokes. Two different same-chain addresses
   copied within 3 seconds in the same application produce a warning, which is
-  the intended conservative outcome.
+  the intended conservative outcome. When the front application is unknown for
+  either copy (macOS reports no frontmost application; Windows has not yet seen
+  a foreground change, or the native monitor is unavailable), the copies are
+  treated as coming from the same application and the warning is shown.
+- Lookalike detection compares addresses of the same chain and the same length
+  only. A vanity address of a different length is not flagged.
 - Recovery phrases in other languages, Electrum seed formats, images or
   screenshots of seeds, passwords and API keys are not recognized. A phrase
   inside a run of more than 48 wordlist words, or a copy longer than 16,384
@@ -111,7 +118,7 @@ Screenshots use public test vectors only; see
 ### Shared contract and tests
 
 [`contracts/wallet-guard.json`](../contracts/wallet-guard.json) holds the
-shared limits, 91 classification vectors and 15 stateful scenarios with an
+shared limits, 91 classification vectors and 16 stateful scenarios with an
 injected clock. All values are public test vectors (BIP39, BIP32, BIP350,
 EIP-55, the key `1`) or synthetic data that hold no funds.
 
@@ -142,10 +149,14 @@ yeni bir veri saklamaz.
   gösterilir.
 - **Pano korsanı uyarısı:** Bir adres kopyalandıktan sonra 3 saniye içinde,
   ön plandaki uygulama değişmeden aynı zincirden **farklı** bir adres panoya
-  gelirse kalıcı bir uyarı iki adresi yan yana gösterir.
+  gelirse kalıcı bir uyarı iki adresi yan yana gösterir. Kopyalardan biri için
+  ön plandaki uygulama bilinmiyorsa bu, uygulama değişmedi sayılır ve uyarı
+  gösterilir.
 - **Adres zehirlenmesi uyarısı:** Yeni kopyalanan adres, son metin geçmişindeki
-  veya bu oturumda kopyalanan başka bir adresle aynı ilk 4 ve son 4 karakteri
-  paylaşıp ortada farklıysa benzer görünümlü adres uyarısı gösterilir.
+  veya bu oturumda kopyalanan, **aynı zincirden ve aynı uzunlukta** başka bir
+  adresle aynı ilk 4 ve son 4 karakteri (`0x`, `bc1q` veya base58 sürüm
+  karakteri gibi sabit önek hariç) paylaşıp ortada farklıysa benzer görünümlü
+  adres uyarısı gösterilir.
 
 Korunmayanlar: kötü amaçlı yazılımı silmez, panoyu temizlemez; metin ve link
 yakalama kapalıysa çalışmaz; macOS 0,5 saniyede bir kontrol ettiği için daha

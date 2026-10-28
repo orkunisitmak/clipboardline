@@ -159,8 +159,8 @@ verified counterpart. Latest must contain both signed 1.7.8 feeds and packages.
 ## Wallet Guard
 
 [`contracts/wallet-guard.json`](../contracts/wallet-guard.json) specifies the
-shared Wallet Guard limits, 91 classification vectors and 15 clock-injected
-scenarios (40 steps). The Mac `WalletGuardTests` and the Windows
+shared Wallet Guard limits, 91 classification vectors and 16 clock-injected
+scenarios (42 steps). The Mac `WalletGuardTests` and the Windows
 `wallet-guard.test.cjs` execute the same file against the shipped classifier,
 the actual text admission path and the persisted setting. Both platforms keep
 the same default (on), detection, withholding and warning behavior; the warning

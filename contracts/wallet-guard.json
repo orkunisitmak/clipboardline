@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "Wallet Guard: local crypto clipboard safety. Recovery phrases and private keys are withheld from history; same-chain address replacement inside a short window and lookalike addresses raise warnings. All values are public test vectors or synthetic data that hold no funds.",
+  "description": "Wallet Guard: local crypto clipboard safety. Recovery phrases and private keys are withheld from history; same-chain address replacement inside a short window and lookalike addresses raise warnings. Replacement needs no front application change between the two copies; an unknown context (null) on either copy counts as no change, so the warning still fires. A lookalike is a different same-chain address of the same length whose distinctive part (after a fixed prefix such as 0x, bc1q or a base58 version character) shares the first lookalikePrefix and last lookalikeSuffix characters. All values are public test vectors or synthetic data that hold no funds.",
   "setting": {
     "default": true,
     "macOSDefaultsKey": "walletGuardEnabled",
@@ -984,6 +984,37 @@
           "atMs": 0,
           "text": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
           "context": null,
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 400,
+          "text": "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4",
+          "context": null,
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": {
+              "type": "hijack",
+              "original": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+              "replacement": "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "a context known for only one copy still detects a replacement",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+          "context": "app-1",
           "expect": {
             "save": true,
             "notice": null,
