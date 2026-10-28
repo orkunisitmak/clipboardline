@@ -10,6 +10,10 @@ Images, text and links, close at hand. Keep recent copies on three shelves, save
 
 **Feature reference — 1.7.3:** this page describes the implementation in this source tree. The [latest release](https://github.com/orkunisitmak/clipboardline/releases/latest) lists available packages; every new release requires both native platform suites. See the [parity scope and verification requirements](docs/parity-1.7.3.md).
 
+## Linux preview
+
+A Linux x64 port shares the Electron shelves, Library, previews and local search. It targets X11/XWayland and builds AppImage/Debian packages. Direct paste uses manual Ctrl+V and updates use manual package replacement; native Wayland-only sessions are not supported. See [Linux build, desktop support and verification](linux/README.md).
+
 ## Your first five minutes
 
 1. **Install and open.** Download the latest Mac release, move the app to Applications and open it. ClipBoardLine lives in the menu bar.

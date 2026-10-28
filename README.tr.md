@@ -10,6 +10,10 @@ Görseller, metinler ve linkler elinin altında. Son kopyalarını üç askıda 
 
 **Özellik rehberi — 1.7.3:** bu sayfa kaynak ağacındaki uygulamayı anlatır. İndirilebilir paketler [son sürümde](https://github.com/orkunisitmak/clipboardline/releases/latest) listelenir; her yeni yayım iki yerel platform testini gerektirir. [Kapsam ve doğrulama şartları](docs/parity-1.7.3.md).
 
+## Linux önizleme
+
+Linux x64 portu Electron askılarını, kütüphaneyi, önizlemeleri ve yerel aramayı paylaşır. X11/XWayland için AppImage ve Debian paketi üretir. Yapıştırma, hedef uygulamaya geçip Ctrl+V ile; güncelleme ise elle paket değiştirilerek yapılır. [Linux derleme ve doğrulama rehberi](linux/README.md).
+
 ## İlk beş dakikan
 
 1. **Kur ve aç.** Son Mac sürümünü indir, uygulamayı Applications klasörüne taşı ve aç. ClipBoardLine menü çubuğunda yaşar.

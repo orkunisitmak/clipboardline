@@ -26,7 +26,38 @@
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
+      },
+      {
+        "id": "linux-display-backend",
+        "macos": "Native AppKit desktop integration.",
+        "windows": "Native Windows clipboard monitor and global hotkeys.",
+        "linux": "X11 and XWayland only; the launcher selects the X11 backend before Electron starts. Native Wayland-only sessions are unsupported.",
+        "reason": "XFixes supplies clipboard ownership generations for race-safe privacy checks. Native Wayland does not provide an equivalent global clipboard/focus API to this client."
+      },
+      {
+        "id": "linux-direct-paste",
+        "macos": "Accessibility validates the original nonsecure editable field before Command-Enter.",
+        "windows": "UI Automation validates the original nonsecure editable field before Control-Enter.",
+        "linux": "Copy and manually paste with Control-V. The direct-paste action is disabled and its command rejects before clipboard mutation. Ordinary copy may request restoration of the original X11 window.",
+        "reason": "X11 window IDs cannot prove editable-field identity or password status. Injecting keys without those checks would violate the existing paste trust boundary."
+      },
+      {
+        "id": "linux-manual-updates",
+        "macos": "Signed Sparkle update channel.",
+        "windows": "Signed Windows installer update channel.",
+        "linux": "Manual AppImage or Debian package replacement; no automatic feed checks or Windows installer downloads.",
+        "reason": "No signed Linux update feed exists. Linux must not consume the Windows release identity or change the existing coordinated Latest release policy."
+      },
+      {
+        "id": "linux-recording-codecs",
+        "macos": "Quick Look and AVKit use the installed macOS codecs.",
+        "windows": "WinRT media inspection and trimming use installed Windows codecs.",
+        "linux": "System FFmpeg/ffprobe inspect recordings and create managed H.264/AAC MP4 trim derivatives; Electron handles playback. Originals remain immutable.",
+        "reason": "Linux has no WinRT media API. FFmpeg is an explicit system dependency, is never downloaded at runtime, and shares the existing bounded queue and output validation."
       }
+    ],
+    "previewPlatforms": [
+      "linux"
     ]
   },
   "itemSets": {

@@ -1,5 +1,12 @@
 'use strict';
-const {app,BrowserWindow,ipcMain,clipboard,ClipboardItem,nativeImage,protocol,net,Tray,Menu,Notification,powerMonitor,globalShortcut,screen,desktopCapturer,dialog,shell} = require('electron');
+const {app}=require('electron');
+// Ozone selects its backend before main.cjs runs. The Linux launcher passes
+// this flag at process creation so Electron and XFixes see the same clipboard.
+if(process.platform==='linux'&&app.commandLine.getSwitchValue('ozone-platform')!=='x11'){
+  console.error('ClipBoardLine on Linux requires its launcher or: electron --ozone-platform=x11 .');app.exit(1);
+}
+if(process.platform==='linux')app.commandLine.appendSwitch('class','clipboardline');
+const {BrowserWindow,ipcMain,clipboard,ClipboardItem,nativeImage,protocol,net,Tray,Menu,Notification,powerMonitor,globalShortcut,screen,desktopCapturer,dialog,shell} = require('electron');
 // Electron's protocol.handle and net.fetch construct these globals lazily.
 // Finish Node/Undici initialization before renderer/protocol callbacks can
 // re-enter it during the first managed image request in an installed build.
@@ -15,23 +22,25 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const {pathToFileURL} = require('node:url');
 const {spawn} = require('node:child_process');
-const {Store,plainURL,ids} = require('./lib/model.cjs');
+const {Store,plainURL,ids,settings:validateSettings} = require('./lib/model.cjs');
 const {privateClipboard,readClipboardContent}=require('./lib/clipboard-policy.cjs');
 const {mediaOrigin}=require('./lib/media-policy.cjs');
 const {mediaResponse,mediaGenerationMatches}=require('./lib/media-response.cjs');
 const {MediaJobs,MAXIMUM_VIDEO_BYTES}=require('./lib/media.cjs');
-const {copyFiles,cancelFileCopies}=require('./lib/native-files.cjs');
-const native = require('./lib/native.cjs');
+const {copyFiles,cancelFileCopies}=require(process.platform==='linux'?'./lib/linux-files.cjs':'./lib/native-files.cjs');
+const native = require(process.platform==='linux'?'./lib/linux-native.cjs':'./lib/native.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
 const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
 const {Updates,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
+const UpdateController=process.platform==='linux'?require('./lib/linux-updates.cjs').ManualUpdates:Updates;
 const {GlobalShortcuts}=require('./lib/global-shortcuts.cjs');
 const {ImageSearch,modelPaths}=require('./lib/image-search.cjs');
 const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
-const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
+const packageInfo=require('./package.json');
+const BUILD_NUMBER=process.platform==='linux'?packageInfo.clipboardLineLinuxBuild:Number(packageInfo.clipboardLineBuild)||63;
 const testMode = process.argv.includes('--test-mode');
 const testFolder = process.argv.find(value=>value.startsWith('--test-data='))?.slice('--test-data='.length);
 const testTray=testMode&&!!testFolder&&process.argv.includes('--test-tray');
@@ -41,6 +50,7 @@ if(development){const directory=path.join(app.getPath('appData'),'ClipBoardLine 
 app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
+let clipboardReady=process.platform!=='linux';
 let lastFingerprint='',ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
@@ -65,7 +75,7 @@ async function readSemanticImage(id){
  if(!width||!height||width*height>80_000_000||Math.min(width,height)*scale<120||Math.max(width,height)/Math.min(width,height)>4)return null;
  // Electron delegates thumbnail decoding to the OS asynchronously. Inference
  // and pixel conversion stay in the worker, keeping large PNGs off the UI loop.
- let image=await nativeImage.createThumbnailFromPath(file,{width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))});if(image.isEmpty())return null;
+ let image=process.platform==='linux'?nativeImage.createFromPath(file):await nativeImage.createThumbnailFromPath(file,{width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))});if(image.isEmpty())return null;
  const size=image.getSize(),fit=Math.min(1,1024/Math.max(size.width,size.height));if(fit<1)image=image.resize({width:Math.max(1,Math.round(size.width*fit)),height:Math.max(1,Math.round(size.height*fit)),quality:'best'});
  const resized=image.getSize();return{bitmap:image.toBitmap(),width:resized.width,height:resized.height};
 }
@@ -160,9 +170,10 @@ async function hide(restore=true) {
   try{await operation;}finally{if(hidePromise===operation)hidePromise=null;}
 }
 async function clipboardContent() {
-  return readClipboardContent({clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL});
+  return readClipboardContent({clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL,rejectFileCopies:process.platform==='linux'});
 }
 async function readClipboard() {
+  if(!clipboardReady)return;
   if(capturing){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;capturing=true;
   try{
     const content=await clipboardContent();if(!content)return;
@@ -211,6 +222,7 @@ async function writeClipboard(selected) {
   ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));
 }
 async function copy(payload,paste=false) {
+  if(paste&&process.platform==='linux')throw new Error('Direct paste is unavailable on Linux. Copy, switch to your app, then press Ctrl+V.');
   if(pastePromise)return pastePromise;
   const selected=store.selected(ids(payload.ids));
   if(!selected.length)throw new Error('Select an item first');
@@ -377,14 +389,20 @@ async function command(action,payload={}) {
     if(payload.recordingToken!==undefined){if(typeof payload.recordingToken!=='string')throw new Error('Invalid shortcut recorder.');finishShortcutRecording(payload.recordingToken);}
     const patch={...payload.patch};
     if(Object.hasOwn(patch,'watchFolders'))throw new Error('Choose watched folders with the folder picker.');
+    validateSettings(patch,store.data.settings);
+    if(Object.hasOwn(patch,'launchAtLogin')&&!testMode){
+      if(process.platform==='linux')require('./lib/linux-autostart.cjs').setLaunchAtLogin(patch.launchAtLogin,{executable:process.env.APPIMAGE||(app.isPackaged?path.join(path.dirname(process.execPath),'clipboardline'):process.execPath),args:app.isPackaged?[]:['--ozone-platform=x11',app.getAppPath()]});
+      else app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
+    }
     const previousShortcuts={...store.data.settings.shortcuts};
     store.modify('setSettings',{patch});if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
-    if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastFingerprint='';
-    if(Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
+    if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key))){
+      if(process.platform==='linux'){clipboardReady=false;try{lastFingerprint=(await clipboardContent())?.fingerprint||'';}finally{clipboardReady=true;}}else lastFingerprint='';
+    }
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
   }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
   else if(action==='unwatchFolder'){const index=payload.index;if(!Number.isInteger(index)||index<0||index>=store.data.settings.watchFolders.length)throw new Error('Invalid watched folder');store.modify('setSettings',{patch:{watchFolders:store.data.settings.watchFolders.filter((_v,i)=>i!==index)}});configureWatchers();}
-  else if(action==='checkUpdates'||action==='refreshUpdates'){if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
+  else if(action==='checkUpdates'||action==='refreshUpdates'){if(process.platform==='linux')updates.set({status:'manual',message:'Linux packages are updated manually. Download a new Linux package from the project releases.'});else if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
   else if(action==='installUpdate'){
     if(development)throw new Error('Development builds cannot install official updates.');
     if(process.platform!=='win32')throw new Error('Windows installer can run only on Windows.');
@@ -404,8 +422,8 @@ function appIcon(){
 }
 if(!app.requestSingleInstanceLock())app.quit();
 else app.whenReady().then(async()=>{
-  store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
-  updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!development&&!testMode&&store.data.settings.autoCheckUpdates});
+  store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new UpdateController(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
+  updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>process.platform==='win32'&&!development&&!testMode&&store.data.settings.autoCheckUpdates});
   const searchPaths=modelPaths({packaged:app.isPackaged,resourcesPath:process.resourcesPath,sourceDirectory:__dirname});
   let ortModule=null,runtimeDirectory=null;try{ortModule=require.resolve('onnxruntime-web/wasm').replace(/app[.]asar([\\/])/,'app.asar.unpacked$1');runtimeDirectory=path.dirname(ortModule);}catch{}
   imageSearch=new ImageSearch({...searchPaths,ortModule,runtimeDirectory,cacheDirectory:path.join(store.directory,'image-search'),items:()=>store.data.items,readImage:readSemanticImage,changed:()=>broadcast()});refreshImageSearch();
@@ -446,7 +464,11 @@ else app.whenReady().then(async()=>{
   window.webContents.on('render-process-gone',()=>finishShortcutRecording());
   window.webContents.on('did-start-navigation',()=>finishShortcutRecording());
   await window.loadURL(entry);
-  monitor=native.monitor(()=>{if(!testMode)void readClipboard();},error=>{monitor?.kill();monitor=null;pasteTargets.clear();if(!closing)notify(error.message+' Falling back to bounded clipboard polling.');},focus=>pasteTargets.observe(focus));
+  monitor=native.monitor(()=>{if(!testMode)void readClipboard();},error=>{monitor?.kill();monitor=null;pasteTargets.clear();if(!closing)notify(error.message+(process.platform==='win32'?' Falling back to bounded clipboard polling.':''));},focus=>pasteTargets.observe(focus));
+  if(process.platform==='linux'){
+    updates.set({status:'manual',message:'Linux packages are updated manually from the project releases.'});
+    lastFingerprint=(await clipboardContent().catch(()=>null))?.fingerprint||'';clipboardReady=true;
+  }
   if(!testMode||testTray){
     if(process.platform==='win32')app.setAppUserModelId('com.clipboardline.desktop.windows');
     createTray();
