@@ -45,6 +45,7 @@ for(const scenario of contract.scenarios){
     let now=0;const guard=new WalletGuard({clock:()=>now});
     for(const [index,step] of scenario.steps.entries()){
       now=step.atMs;
+      if(step.turnedOffBefore){guard.settingChanged(false);guard.settingChanged(true);}
       const verdict=guard.inspect(step.text,{enabled:scenario.enabled,context:step.context,history:scenario.history});
       assert.deepEqual(verdict,step.expect,scenario.name+' step '+index);
     }
@@ -74,7 +75,7 @@ test('history comparison uses only recent text and ignores malformed rows',()=>{
   assert.equal(new WalletGuard().inspect(address.text,{history:old}).alert,null,'entries beyond the history limit are not compared');
   assert.equal(new WalletGuard().inspect(address.text,{history:[null,42,'x'.repeat(10000),similar]}).alert.similar,similar);
 });
-test('secrets are withheld before the Store while text capture is on, and the setting persists',async()=>{
+test('secrets are withheld by the clipboard admission hook while text capture is on, and the setting persists',async()=>{
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-wallet-guard-'));
   try{
     const store=new Store(directory);store.modify('setSettings',{patch:{captureText:true}});
@@ -83,8 +84,9 @@ test('secrets are withheld before the Store while text capture is on, and the se
       const board={types:['text/plain'],getType:async()=>new Blob([row.value])};
       const content=await readClipboardContent({clipboard:{read:async()=>[board]},sequence:async()=>1,marker:Buffer.from('synthetic-marker'),plainURL});
       if(!content)continue;
-      const verdict=guard.inspect(content.value,{enabled:store.data.settings.walletGuard,history:[]});
-      if(verdict.save){store.insert(content.kind,content.value);saved++;}
+      // The same admission call readClipboard makes before store.insert.
+      const admit=text=>guard.inspect(text,{enabled:store.data.settings.walletGuard,history:[]}).save;
+      if(admitClipboardContent(content,store.data.settings,admit)){store.insert(content.kind,content.value);saved++;}
     }
     const files=fs.readdirSync(directory).filter(name=>name==='library.json'||name==='library.json.backup'||name.startsWith('library.json.tmp-'));
     assert.ok(files.includes('library.json')&&files.includes('library.json.backup'),'both persisted JSON artifacts exist');

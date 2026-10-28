@@ -166,6 +166,9 @@ function classify(text){
 class WalletGuard {
   constructor({clock=()=>Date.now()}={}){this.clock=clock;this.last=null;this.session=[];}
   reset(){this.last=null;this.session=[];}
+  // Turning the setting off forgets the last copied address and the session
+  // list, so a later copy is never compared with them.
+  settingChanged(enabled){if(!enabled)this.reset();}
   // history: recent saved texts, newest first. context: identity of the
   // foreground application, or null when the platform cannot tell.
   inspect(text,{enabled=true,context=null,history=[]}={}){

@@ -42,6 +42,29 @@ struct WalletGuardMessage: Equatable {
     }
 }
 
+/// Which message the panel shows. A replacement or lookalike warning stays
+/// until the user dismisses it; a notice that arrives meanwhile waits and is
+/// shown after the dismissal instead of replacing the warning.
+struct WalletGuardPresentation: Equatable {
+    private(set) var current: WalletGuardMessage?
+    private(set) var queued: WalletGuardMessage?
+
+    /// Returns true when `message` should be displayed now.
+    mutating func receive(_ message: WalletGuardMessage) -> Bool {
+        if current?.persistent == true, !message.persistent { queued = message; return false }
+        current = message
+        return true
+    }
+
+    /// The current message was dismissed; returns the waiting notice, if any.
+    mutating func dismiss() -> WalletGuardMessage? {
+        defer { current = nil; queued = nil }
+        return queued
+    }
+
+    mutating func clear() { current = nil; queued = nil }
+}
+
 /// A small floating panel at the top of the active screen. It never activates
 /// the application or takes keyboard focus from the app the user copied from.
 @MainActor
@@ -49,13 +72,14 @@ final class WalletGuardPanel {
     static let noticeDuration: TimeInterval = 6
     private var panel: NSPanel?
     private var dismissal: DispatchWorkItem?
-    private(set) var current: WalletGuardMessage?
+    private var presentation = WalletGuardPresentation()
+    var current: WalletGuardMessage? { presentation.current }
 
     func show(_ message: WalletGuardMessage) {
-        current = message
+        guard presentation.receive(message) else { if let panel { announce(message, on: panel) }; return }
         let panel = self.panel ?? makePanel()
         self.panel = panel
-        let host = NSHostingView(rootView: WalletGuardView(message: message) { [weak self] in self?.hide() })
+        let host = NSHostingView(rootView: WalletGuardView(message: message) { [weak self] in self?.dismiss() })
         panel.contentView = host
         let size = host.fittingSize
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
@@ -63,19 +87,35 @@ final class WalletGuardPanel {
             panel.setFrame(NSRect(x: visible.midX - size.width / 2, y: visible.maxY - size.height - 12, width: size.width, height: size.height), display: true)
         }
         panel.orderFrontRegardless()
-        NSAccessibility.post(element: panel, notification: .announcementRequested,
-                             userInfo: [.announcement: message.summary, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+        announce(message, on: panel)
         dismissal?.cancel(); dismissal = nil
         guard !message.persistent else { return }
-        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.hide() } }
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.dismiss() } }
         dismissal = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.noticeDuration, execute: work)
     }
 
+    /// Closes the current message and shows a notice that waited behind it.
+    func dismiss() {
+        let next = presentation.dismiss()
+        close()
+        if let next { show(next) }
+    }
+
+    /// Closes everything, including a waiting notice (Wallet Guard turned off).
     func hide() {
+        presentation.clear()
+        close()
+    }
+
+    private func close() {
         dismissal?.cancel(); dismissal = nil
-        current = nil
         panel?.orderOut(nil)
+    }
+
+    private func announce(_ message: WalletGuardMessage, on panel: NSPanel) {
+        NSAccessibility.post(element: panel, notification: .announcementRequested,
+                             userInfo: [.announcement: message.summary, .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 
     private func makePanel() -> NSPanel {

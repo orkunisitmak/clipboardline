@@ -118,7 +118,7 @@ Screenshots use public test vectors only; see
 ### Shared contract and tests
 
 [`contracts/wallet-guard.json`](../contracts/wallet-guard.json) holds the
-shared limits, 91 classification vectors and 16 stateful scenarios with an
+shared limits, 91 classification vectors and 17 stateful scenarios with an
 injected clock. All values are public test vectors (BIP39, BIP32, BIP350,
 EIP-55, the key `1`) or synthetic data that hold no funds.
 
@@ -131,6 +131,10 @@ EIP-55, the key `1`) or synthetic data that hold no funds.
 
 Presentation differs by platform convention: macOS shows a non-activating
 floating panel at the top of the screen; Windows shows a system notification.
+On macOS a replacement or lookalike warning stays until you dismiss it; a
+recovery phrase or private key notice that arrives meanwhile waits and appears
+after the dismissal. Windows system notifications are separate, so a later
+notice never replaces an open warning.
 Both also show the message in the app's own notice area. Neither takes focus
 from the application you copied from.
 

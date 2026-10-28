@@ -317,6 +317,10 @@ final class WalletGuard {
 
     func reset() { last = nil; session = [] }
 
+    /// Turning the setting off forgets the last copied address and the
+    /// session list, so a later copy is never compared with them.
+    func settingChanged(_ enabled: Bool) { if !enabled { reset() } }
+
     /// - Parameters:
     ///   - context: identity of the frontmost application, or nil when unknown.
     ///   - history: recent saved texts, newest first.

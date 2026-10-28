@@ -891,6 +891,34 @@
       ]
     },
     {
+      "name": "turning the guard off and on forgets compared addresses",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 200,
+          "text": "0x1234bbBbbBBbBbBBbbBBBbBbBBBBBbBbBBBB5678",
+          "context": "app-1",
+          "turnedOffBefore": true,
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
       "name": "replacement exactly at the window edge is still a hijack",
       "enabled": true,
       "history": [],

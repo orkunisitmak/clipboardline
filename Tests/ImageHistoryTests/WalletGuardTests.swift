@@ -29,7 +29,7 @@ import XCTest
         struct Vector: Decodable { let name: String; let value: String; let expect: Expect }
         struct Alert: Decodable { let type: String; let original, replacement, address, similar: String? }
         struct StepExpect: Decodable { let save: Bool; let notice: String?; let alert: Alert? }
-        struct Step: Decodable { let atMs: Double; let text: String; let context: String?; let expect: StepExpect }
+        struct Step: Decodable { let atMs: Double; let text: String; let context: String?; let turnedOffBefore: Bool?; let expect: StepExpect }
         struct Scenario: Decodable { let name: String; let enabled: Bool; let history: [String]; let steps: [Step] }
         let schemaVersion: Int
         let setting: Setting
@@ -101,6 +101,7 @@ import XCTest
             let guardian = WalletGuard(now: { now })
             for (index, step) in scenario.steps.enumerated() {
                 now = step.atMs / 1000
+                if step.turnedOffBefore == true { guardian.settingChanged(false); guardian.settingChanged(true) }
                 let verdict = guardian.inspect(step.text, enabled: scenario.enabled, context: step.context) { scenario.history }
                 XCTAssertEqual(verdict.save, step.expect.save, "\(scenario.name) step \(index)")
                 XCTAssertEqual(verdict.notice?.rawValue, step.expect.notice, "\(scenario.name) step \(index)")
@@ -178,10 +179,37 @@ import XCTest
         XCTAssertEqual(shown.last?.rows.map(\.value), [hijack.steps[0].text, hijack.steps[1].text])
         XCTAssertEqual(shown.last?.body, "Your copied address was replaced by another address. This is how clipboard malware steals crypto.")
 
-        WalletGuard.isEnabled = false
-        let count = shown.count
+        let reset = try XCTUnwrap(contract.scenarios.first { $0.name.hasPrefix("turning the guard off") })
+        var count = shown.count
+        XCTAssertTrue(app.admitCopiedText(reset.steps[0].text))
+        app.setWalletGuardEnabled(false); app.setWalletGuardEnabled(true)
+        XCTAssertTrue(app.admitCopiedText(reset.steps[1].text))
+        XCTAssertEqual(shown.count, count, "turning the guard off forgets the last copied address")
+
+        app.setWalletGuardEnabled(false)
+        XCTAssertFalse(WalletGuard.isEnabled)
+        count = shown.count
         XCTAssertTrue(app.admitCopiedText(mnemonic))
         XCTAssertEqual(shown.count, count)
+    }
+
+    func testPersistentWarningIsNotReplacedByANotice() throws {
+        let warning = try XCTUnwrap(WalletGuardMessage(WalletGuardVerdict(alert: .hijack(original: "A", replacement: "B"))))
+        let lookalike = try XCTUnwrap(WalletGuardMessage(WalletGuardVerdict(alert: .poisoning(address: "C", similar: "D"))))
+        let phrase = try XCTUnwrap(WalletGuardMessage(WalletGuardVerdict(save: false, notice: .recoveryPhrase)))
+        let key = try XCTUnwrap(WalletGuardMessage(WalletGuardVerdict(save: false, notice: .privateKey)))
+        var presentation = WalletGuardPresentation()
+        XCTAssertTrue(presentation.receive(phrase)); XCTAssertEqual(presentation.current, phrase)
+        XCTAssertTrue(presentation.receive(warning), "a warning replaces a notice")
+        XCTAssertFalse(presentation.receive(key), "a notice waits behind an undismissed warning")
+        XCTAssertEqual(presentation.current, warning); XCTAssertEqual(presentation.queued, key)
+        XCTAssertTrue(presentation.receive(lookalike), "a newer warning is shown")
+        XCTAssertEqual(presentation.dismiss(), key, "the waiting notice follows the dismissal")
+        XCTAssertNil(presentation.current); XCTAssertNil(presentation.queued)
+        XCTAssertTrue(presentation.receive(warning)); XCTAssertFalse(presentation.receive(phrase))
+        presentation.clear()
+        XCTAssertNil(presentation.current); XCTAssertNil(presentation.queued)
+        XCTAssertNil(presentation.dismiss())
     }
 
     func testEveryWalletGuardStringHasATurkishTranslation() throws {

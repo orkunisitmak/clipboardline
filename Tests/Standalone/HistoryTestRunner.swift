@@ -221,6 +221,7 @@ enum HistoryTestRunner {
             ("testHistoryComparisonIsBoundedAndSkipsUnusableRows", walletGuard.testHistoryComparisonIsBoundedAndSkipsUnusableRows),
             ("testWatcherWithholdsSecretsFromTextHistoryAndKeepsAddresses", walletGuard.testWatcherWithholdsSecretsFromTextHistoryAndKeepsAddresses),
             ("testAppDelegateAdmissionRespectsSettingAndPresentsMessages", walletGuard.testAppDelegateAdmissionRespectsSettingAndPresentsMessages),
+            ("testPersistentWarningIsNotReplacedByANotice", walletGuard.testPersistentWarningIsNotReplacedByANotice),
             ("testEveryWalletGuardStringHasATurkishTranslation", walletGuard.testEveryWalletGuardStringHasATurkishTranslation),
             ("testRepeatedThreeShelfOpenCloseLeavesInactiveRowsQuietAndRestoresSingleSelection", shelfPerformance.testRepeatedThreeShelfOpenCloseLeavesInactiveRowsQuietAndRestoresSingleSelection),
             ("testClosingActiveSearchClearsItBeforeFreshOpenChoosesImages", shelfPerformance.testClosingActiveSearchClearsItBeforeFreshOpenChoosesImages),

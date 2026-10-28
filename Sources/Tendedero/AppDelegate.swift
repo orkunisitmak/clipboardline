@@ -1017,7 +1017,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.updateStatusIcon()
             }
             model.setLinks = { [weak self] on in LinkHistory.isEnabled = on; self?.refreshTextSources(); self?.updateStatusIcon() }
-            model.setWalletGuard = { [weak self] on in WalletGuard.isEnabled = on; if !on { self?.walletGuardPanel.hide() } }
+            model.setWalletGuard = { [weak self] in self?.setWalletGuardEnabled($0) }
             model.setMetadata = { [weak self] on in LinkMetadataService.isEnabled = on; if !on { self?.metadataService?.stop() } else { self?.metadataService?.request(self?.line.links.entries.map(\.id) ?? []) } }
             model.setLibraryShortcut = { [weak self] in self?.registerLibraryShortcut($0) }
             model.recordLibraryShortcut = { [weak self] in self?.recordLibraryShortcut() }
@@ -1059,6 +1059,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if TextClipboardWatcher.isEnabled || LinkHistory.isEnabled { textWatcher.start() } else { textWatcher.stop() }
     }
     func receiveCopiedText(_ text: String) { _ = line.texts.add(text) }
+    func setWalletGuardEnabled(_ on: Bool) {
+        WalletGuard.isEnabled = on
+        walletGuard.settingChanged(on)
+        if !on { walletGuardPanel.hide() }
+    }
     /// Wallet Guard decision for decoded clipboard text. Secrets are withheld
     /// from history, links, search and previews; addresses are only compared
     /// locally against this session and recent text history.

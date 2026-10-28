@@ -350,8 +350,10 @@ try {
     $last = [uint32]0
     while ($true) {
       $sequence = [ClipBoardLineNative]::GetClipboardSequenceNumber()
-      if ($sequence -ne $last) { [ClipBoardLineNative]::EmitSequence($sequence); $last=$sequence }
+      # Focus first: a copy is attributed to the application focused when the
+      # sequence changed, never to the previous one (Wallet Guard context).
       [ClipBoardLineNative]::EmitCurrentFocus()
+      if ($sequence -ne $last) { [ClipBoardLineNative]::EmitSequence($sequence); $last=$sequence }
       Start-Sleep -Milliseconds 250
     }
   } elseif ($Mode -eq 'FocusPolicySelfTest') {
