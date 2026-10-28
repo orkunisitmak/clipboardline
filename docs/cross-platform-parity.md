@@ -155,3 +155,14 @@ The genuine Windows upgrade baseline is 1.7.7/build70: 545777945 bytes, SHA256
 source `1c93c163e7e45d102d13c1077dd8baa969eab8ba`. Stage
 `clipboardline-1.7.8-build78`, then publish `windows-1.7.8-build71` with that
 verified counterpart. Latest must contain both signed 1.7.8 feeds and packages.
+
+## Wallet Guard
+
+[`contracts/wallet-guard.json`](../contracts/wallet-guard.json) specifies the
+shared Wallet Guard limits, 91 classification vectors and 15 clock-injected
+scenarios (40 steps). The Mac `WalletGuardTests` and the Windows
+`wallet-guard.test.cjs` execute the same file against the shipped classifier,
+the actual text admission path and the persisted setting. Both platforms keep
+the same default (on), detection, withholding and warning behavior; the warning
+surface follows the platform (non-activating panel on Mac, system notification
+on Windows, plus the in-app notice on both). See [wallet-guard.md](wallet-guard.md).
