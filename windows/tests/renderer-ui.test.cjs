@@ -343,12 +343,16 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
    else if(step.action==='remap'){const localShortcuts={...f.state.settings.localShortcuts};if(step.key===null)delete localShortcuts[step.binding];else localShortcuts[step.binding]=step.key==='KeyX'?'X':step.key;f.api.emit({settings:{...f.state.settings,localShortcuts}});}
    else if(step.action==='key')await f.key(step.code,searchEditing?{target:editor}:{});
    else if(['up','down','left','right'].includes(step.action))await f.key({up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight'}[step.action],searchEditing?{target:editor}:{});
+   else if(step.action==='extendRight')await f.key('ArrowRight',{shift:true});
+   else if(step.action==='queuePaste')await f.key('KeyQ');
    else if(step.action==='toggle')await f.key({image:'KeyI',text:'KeyT',link:'KeyL'}[step.kind],{shift:true});
    else if(step.action==='openSearch')await f.key('KeyS',{shift:true});
    else if(step.action==='finishSearch')await f.key('Enter',{target:editor});
    else throw new Error('Unsupported shared contract action: '+step.action);
    await f.ready();
    const actual={activeKind:activeKind(f),focused:aliases.get(focusedCard(f))||null,selected:selectedCards(f).map(id=>aliases.get(id)||id).sort(),visibleKinds:[...f.main.matchAll(/<section class="shelf(?: active-shelf)?\s*" data-shelf="([^"]+)"/g)].map(match=>match[1]),searchEditing:/class="search-hud"/.test(f.main)};
+   // Only queue steps observe the session paste queue the renderer sent, in paste order.
+   if('queue' in step.expect)actual.queue=(f.commands.filter(value=>value.action==='queuePaste').at(-1)?.payload.ids||[]).map(id=>aliases.get(id)||id);
    observations.push({scenarioId:scenario.id,step:index,actual});
    try{assert.deepEqual(actual,step.expect);}catch(error){errors.push(scenario.id+' step '+index+': '+error.message);}
   }
@@ -509,7 +513,7 @@ test('crop Escape cancels direct crop to browsing while markup crop apply return
 
 test('Settings records and directly disables optional global Library and copy-latest-image shortcuts',async()=>{
  const f=fixture();await f.ready();await f.api.command('settings');await f.ready();await f.click('settings-tab',{tab:'shortcuts'});
- assert.match(f.main,/data-action="record-global" data-key-action="library"/);assert.match(f.main,/data-action="record-global" data-key-action="copyLatest"/);
+ assert.match(f.main,/data-action="record-global" data-key-action="library"/);assert.match(f.main,/data-action="record-global" data-key-action="copyLatest"/);assert.match(f.main,/data-action="record-global" data-key-action="pasteQueue"/);assert.match(f.main,/Each press of this shortcut pastes the next item/);
  await f.click('record-global',{keyAction:'library'});await f.key('KeyL');await f.click('confirm-modal');assert.match(f.overlay,/Record shortcut/);assert.match(f.nodes.get('toast').textContent,/Use Control or Alt/);
  await f.key('KeyL',{ctrl:true,alt:true});await f.click('confirm-modal');assert.equal(f.commands.filter(value=>value.action==='setSettings').at(-1).payload.patch.shortcuts.library,'Control+Alt+L');
  await f.click('record-global',{keyAction:'copyLatest'});await f.key('KeyC',{ctrl:true,alt:true});await f.click('confirm-modal');assert.equal(f.commands.filter(value=>value.action==='setSettings').at(-1).payload.patch.shortcuts.copyLatest,'Control+Alt+C');

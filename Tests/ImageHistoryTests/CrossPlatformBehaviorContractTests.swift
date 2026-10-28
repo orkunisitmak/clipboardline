@@ -19,8 +19,8 @@ import XCTest
         switch kind { case "image": return .images; case "text": return .texts; case "link": return .links
         default: throw CocoaError(.coderReadCorrupt) }
     }
-    private func key(_ code: UInt16, characters: String = "") throws -> NSEvent {
-        try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+    private func key(_ code: UInt16, characters: String = "", modifiers: NSEvent.ModifierFlags = []) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
             windowNumber: 0, context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
     }
     private func revision() throws -> String {
@@ -95,6 +95,8 @@ import XCTest
                 case "down": _ = keyboard.handle(try key(125))
                 case "left": _ = keyboard.handle(try key(123))
                 case "right": _ = keyboard.handle(try key(124))
+                case "extendRight": _ = keyboard.handle(try key(124, modifiers: .shift))
+                case "queuePaste": _ = keyboard.handle(try key(12, characters: "q"))
                 case "toggle": _ = line.toggleShelf(try shelf(try required(step["kind"], String.self)))
                 case "openSearch": line.beginShelfSearch()
                 case "finishSearch":
@@ -103,7 +105,10 @@ import XCTest
                     while line.shelfSearchIsSearching, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.005)) }
                 default: throw CocoaError(.coderReadCorrupt)
                 }
-                let actual = snapshot(line, aliases: aliases), expected = try required(step["expect"], [String: Any].self)
+                let expected = try required(step["expect"], [String: Any].self)
+                var actual = snapshot(line, aliases: aliases)
+                // Only queue steps observe the session paste queue, in paste order.
+                if expected["queue"] != nil { actual["queue"] = line.pasteQueue.map { aliases[$0] ?? "unexpected-id" } }
                 observations.append(["scenarioId": id, "step": index, "actual": actual])
                 let matches = NSDictionary(dictionary: actual).isEqual(to: expected)
                 if !matches { errors.append("\(id):\(index)") }

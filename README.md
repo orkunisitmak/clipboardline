@@ -51,6 +51,7 @@ This table lists macOS defaults. The complete [Windows keymap](#windows-default-
 | `⌃⌥S` | Open shelves with search focused | Global; configurable or off. |
 | `Off by default` | Open Library globally | Set your own shortcut; Settings offers ⌃⌥L. |
 | `Off by default` | Copy latest image globally | Set your own shortcut; presets include ⌃⌥C and ⌃⇧C. |
+| `Off by default` | Paste next queued item | Set your own shortcut; Settings offers ⌃⌥V. Needs Accessibility permission, like ⌘Enter. |
 
 ### Browse and select
 
@@ -75,6 +76,7 @@ This table lists macOS defaults. The complete [Windows keymap](#windows-default-
 | `⌘C` | Copy and keep browsing | Selection or current preview; windows stay open. |
 | `⌘Enter` | Paste into previous app | Needs Accessibility permission and the original editable target. While editing text, finishes editing first. |
 | `P / ⌘P` | Toggle pin / favorite | One shared action for images, text and links. |
+| `Q` | Queue for paste | Shelves: queues the selection oldest first; the paste-queue global shortcut then pastes one item per press. |
 | `F / ⇧⌘F` | Toggle pinned-only results | Active shelf or Library scope; previews support the filter. |
 | `⇧P` | Pin to folder | Batch-aware picker: type to search; ↑/↓ choose; Enter confirm; Esc cancel. ⌘N creates a folder in the picker. |
 | `⌥P` | Name and pin | For a batch, Enter saves then advances; Esc leaves the remaining items unchanged. |
@@ -136,6 +138,7 @@ These are the Windows defaults, separate from the macOS table. Control replaces 
 | `Ctrl+Alt+S` | Open shelf search | Shows shelves with the shared search field focused. |
 | `Off by default` | Open Library globally | Record a shortcut in Settings; opens the normal Library window. |
 | `Off by default` | Copy latest image globally | Record a shortcut in Settings; copies the rendered image while keeping the external app focused. |
+| `Off by default` | Paste next queued item | Record a shortcut in Settings; each press pastes the next queued item into the focused field without opening the shelves. |
 | `Ctrl+Alt+A` | Capture a screen | Captures the display under the pointer; opens the new image in crop/preview. |
 
 ### Windows · Browse, select and find
@@ -166,6 +169,7 @@ These are the Windows defaults, separate from the macOS table. Control replaces 
 | `Ctrl+C` | Copy and keep browsing | Selected batch, or the current item when a preview is open. |
 | `Ctrl+Enter` | Paste into the previous app | Needs the original editable target; secure or changed targets are rejected. While editing text/image, saves and finishes editing first. |
 | `P / Ctrl+P` | Toggle pin / favorite | One action for images, text and links; supports selected batches. Remapping Pin also replaces Ctrl+P. |
+| `Q` | Queue for paste | Shelves: queues the selection oldest first for the paste-queue global shortcut. |
 | `F / Ctrl+Shift+F` | Toggle pinned-only results | Active shelf, or Library saved/pinned scope; previews support it. Remapping the filter also replaces Ctrl+Shift+F. |
 | `Shift+P` | Pin to folder | Batch picker: type to filter; ↑/↓ choose; Enter confirms; Esc exits. Ctrl+N creates a folder in the picker. |
 | `Alt+P` | Name and pin | With multiple selections, Enter saves the current name and advances; Esc leaves remaining items unchanged. |

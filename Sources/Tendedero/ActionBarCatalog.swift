@@ -181,6 +181,7 @@ enum ActionBarMenuAction: String, CaseIterable {
             if action == .paste && c.isTextEditing { return (false, L("Finish editing first")) }
             return require(selected, L("Select an item first"))
         case .open: return require(c.isLink, L("Select a link first"))
+        case .queuePaste: return require(c.origin == .line && selected, c.origin == .line ? L("Select an item first") : L("Available on the shelves"))
         case .cropImage, .markup, .markupSelect, .markupPen, .markupMarker, .markupRectangle, .markupEllipse, .markupArrow, .markupLine, .markupText, .copyImageText:
             return require(c.isImage, L("Select one image first"))
         case .editText: return require(c.isText, L("Select a text item first"))
@@ -317,6 +318,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .preview: return (selection, "eye", ["preview", "space", "önizleme", "büyüt"])
         case .pin: return (organization, "pin", ["pin", "unpin", "favorite", "favourite", "sabitle", "favori", "kaldır"])
         case .pinToFolder: return (organization, "folder", ["pin", "folder", "sabitle", "klasör"])
+        case .queuePaste: return (selection, "list.number", ["paste", "queue", "sequence", "order", "yapıştır", "sıra"])
         case .nameAndPin: return (organization, "pencil", ["name", "rename", "pin", "title", "isim", "ad", "sabitle", "başlık"])
         case .tag: return (organization, "tag", ["tag", "label", "etiket", "organize", "düzenle"])
         case .pinnedOnly: return (L("View"), "pin.fill", ["pinned", "favorite", "favourite", "filter", "sabitlenen", "favori", "filtre"])

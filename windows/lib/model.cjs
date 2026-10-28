@@ -12,7 +12,7 @@ const KINDS = ['image', 'text', 'link'];
 const DEFAULTS = Object.freeze({
   visibleKinds: KINDS, captureText: false, captureImages: false, captureLinks: true,fetchLinkMetadata:true,
   retentionDays: {image: 30, text: 30, link: 30},
-  shortcuts: {toggle: 'Control+Alt+T', search: 'Control+Alt+S', library:'', copyLatest:'', screenshot: 'Control+Alt+A'},
+  shortcuts: {toggle: 'Control+Alt+T', search: 'Control+Alt+S', library:'', copyLatest:'', pasteQueue:'', screenshot: 'Control+Alt+A'},
   localShortcuts: {},
   autoCheckUpdates: true, watchFolders: [], openAfterScreenshot: true,
   theme:'soft', cardSize:'medium', sounds:false, launchAtLogin:false, language:'system',indexImages:true,
@@ -47,7 +47,7 @@ function settings(patch, previous = DEFAULTS) {
       }
     } else if (key === 'shortcuts') {
       for (const [action, shortcut] of Object.entries(value || {})) {
-        if (!['toggle', 'search', 'library', 'copyLatest', 'screenshot'].includes(action) || typeof shortcut !== 'string' || shortcut.length > 80 || /[\r\n\0]/.test(shortcut)) fail('Invalid shortcut');
+        if (!['toggle', 'search', 'library', 'copyLatest', 'pasteQueue', 'screenshot'].includes(action) || typeof shortcut !== 'string' || shortcut.length > 80 || /[\r\n\0]/.test(shortcut)) fail('Invalid shortcut');
         out.shortcuts[action] = shortcut;
       }
     } else if (key === 'localShortcuts') {

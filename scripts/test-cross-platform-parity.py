@@ -127,6 +127,23 @@ class CrossPlatformParityTests(unittest.TestCase):
         self.reports['macos']['observations'][0]['actual']['assumedSuccess'] = True
         self.rejected()
 
+    def queue_observation(self, platform):
+        return next(value for value in self.reports[platform]['observations'] if 'queue' in value['actual'])
+
+    def test_different_paste_queue_order_is_rejected(self):
+        observation = self.queue_observation('windows')
+        observation['actual']['queue'] = list(reversed(observation['actual']['queue']))
+        self.rejected()
+
+    def test_unknown_paste_queue_item_is_rejected(self):
+        self.queue_observation('macos')['actual']['queue'].append('not-an-item')
+        self.rejected()
+
+    def test_multiple_selection_must_include_focus_on_one_shelf(self):
+        observation = self.queue_observation('macos')
+        observation['actual']['selected'] = sorted(set(observation['actual']['selected']) | {'i1'})
+        self.rejected()
+
     def test_missing_both_platform_default_is_rejected(self):
         self.contract['policy']['defaultPlatforms'] = ['macos']
         self.contract_path.write_text(json.dumps(self.contract))

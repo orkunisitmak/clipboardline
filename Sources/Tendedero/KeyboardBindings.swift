@@ -7,7 +7,7 @@ enum KeyboardAction: String, CaseIterable, Identifiable {
     case copy, paste, selectAll, pin, pinnedOnly, preview, close, switchShelf, toggleShelves, export, trash
     case library, search, allTypes, images, texts, links, tag, open, editText, finishEditing
     case removeFromLine, undoRemoveFromLine, toggleLinks, toggleTexts, toggleImages, pinToFolder, searchShelf
-    case copyImageText, commandPalette, nameAndPin
+    case copyImageText, commandPalette, nameAndPin, queuePaste
     case focusNextPane, focusPreviousPane, undoTrash, newNote, newFolder
     case markup, cropImage, markupSelect, markupPen, markupMarker, markupRectangle, markupEllipse, markupArrow, markupLine, markupText
     case select1, select2, select3, select4, select5, select6, select7, select8, select9
@@ -45,6 +45,7 @@ enum KeyboardAction: String, CaseIterable, Identifiable {
         case .toggleLinks: L("Toggle link shelf"); case .toggleTexts: L("Toggle text shelf"); case .toggleImages: L("Toggle image shelf")
         case .pinToFolder: L("Pin to folder…")
         case .nameAndPin: L("Name and pin…")
+        case .queuePaste: L("Queue for paste")
         case .focusNextPane: L("Focus next pane")
         case .focusPreviousPane: L("Focus previous pane")
         case .undoTrash: L("Undo Move to Trash")
@@ -74,7 +75,7 @@ enum KeyboardAction: String, CaseIterable, Identifiable {
         case .markup, .cropImage: [.library, .imagePreview, .imageMarkup]
         case .markupSelect, .markupPen, .markupMarker, .markupRectangle, .markupEllipse, .markupArrow, .markupLine, .markupText: [.imageMarkup]
         case .copy, .paste, .commandPalette: Set(KeyboardContext.allCases)
-        case .library, .switchShelf, .toggleShelves, .toggleLinks, .toggleTexts, .toggleImages, .searchShelf: [.line]
+        case .library, .switchShelf, .toggleShelves, .toggleLinks, .toggleTexts, .toggleImages, .searchShelf, .queuePaste: [.line]
         case .search, .allTypes, .images, .texts, .links: [.library]
         case .focusNextPane, .focusPreviousPane, .undoTrash, .newNote, .newFolder: [.library]
         case .select1, .select2, .select3, .select4, .select5, .select6, .select7, .select8, .select9: [.line]
@@ -111,6 +112,7 @@ enum KeyboardAction: String, CaseIterable, Identifiable {
         case .toggleLinks: [key(37,"L",shiftKey)]; case .toggleTexts: [key(17,"T",shiftKey)]; case .toggleImages: [key(34,"I",shiftKey)]
         case .pinToFolder: [key(35,"P",shiftKey)]
         case .nameAndPin: [key(35,"P",optionKey)]
+        case .queuePaste: [key(12,"Q")]
         case .focusNextPane: [key(97,"F6"),key(48,"Tab",controlKey)]
         case .focusPreviousPane: [key(97,"F6",shiftKey),key(48,"Tab",controlKey | shiftKey)]
         case .undoTrash: [key(51,"⌫"),key(6,"Z",cmdKey)]

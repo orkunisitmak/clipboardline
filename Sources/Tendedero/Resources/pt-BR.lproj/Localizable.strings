@@ -496,3 +496,17 @@
 "Focus previous pane" = "Focar painel anterior";
 
 "Undo Move to Trash" = "Desfazer mover para o Lixo";
+
+"Queue for paste" = "Queue for paste";
+
+"Paste queued items" = "Paste queued items";
+
+"Use ⌃⌥V" = "Use ⌃⌥V";
+
+"Queue for paste on the line orders the selection oldest first. Each press of this shortcut pastes the next item into the focused text field." = "Queue for paste on the line orders the selection oldest first. Each press of this shortcut pastes the next item into the focused text field.";
+
+"Queued %d items for paste" = "Queued %d items for paste";
+
+"Paste queue is empty" = "Paste queue is empty";
+
+"Set a paste-queue shortcut in Settings to paste queued items" = "Set a paste-queue shortcut in Settings to paste queued items";

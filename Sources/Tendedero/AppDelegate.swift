@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotKey: HotKey?
     private var copyHotKey: HotKey?
     private var libraryHotKey: HotKey?
+    private var pasteQueueHotKey: HotKey?
     private var searchHotKey: HotKey?
     private let directPaste: DirectPasteCoordinator
     private var pasteFocusHandoffDepth = 0
@@ -220,6 +221,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         line.onNameAndPinRequested = { [weak self] id in self?.showNameAndPin(id) }
         line.onNameAndPinBatchRequested = { [weak self] ids in self?.showNameAndPin(ids) }
         line.onPasteRequested = { [weak self] ids in self?.pasteItems(ids) }
+        line.onPasteQueued = { [weak self] count in
+            guard let self else { return }
+            self.line.notice = self.line.pasteQueueShortcut == nil
+                ? L("Set a paste-queue shortcut in Settings to paste queued items")
+                : String(format: L("Queued %d items for paste"), count)
+        }
         line.onTagRequested = { [weak self] ids in self?.showTagPicker(ids) }
         line.onImageTextCopyRequested = { [weak self] id in self?.copyImageText(id) }
         line.onCommandsRequested = { [weak self] in self?.showCommands(origin: .line) }
@@ -252,6 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         registerCopyShortcut(line.copyLatestShortcut, persist: false)
         registerLibraryShortcut(line.libraryShortcut, persist: false)
+        registerPasteQueueShortcut(line.pasteQueueShortcut, persist: false)
         if watchesFiles { registerSearchShortcut(line.globalSearchShortcut, persist: false) }
         setUpStatusItem()
         watchMenuBarClicks()
@@ -830,6 +838,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
               Shortcut.current == nil || hotKey?.isRegistered == true,
               line.globalSearchShortcut == nil || searchHotKey?.isRegistered == true,
               line.libraryShortcut == nil || libraryHotKey?.isRegistered == true,
+              line.pasteQueueShortcut == nil || pasteQueueHotKey?.isRegistered == true,
               line.copyLatestShortcut == nil || copyHotKey?.isRegistered == true else { return }
         if line.notice == shortcutRestoreWarning { line.notice = nil }
         shortcutRestoreWarning = nil; settingsController?.model.shortcutWarning = nil
@@ -1015,6 +1024,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             model.setMetadata = { [weak self] on in LinkMetadataService.isEnabled = on; if !on { self?.metadataService?.stop() } else { self?.metadataService?.request(self?.line.links.entries.map(\.id) ?? []) } }
             model.setLibraryShortcut = { [weak self] in self?.registerLibraryShortcut($0) }
             model.recordLibraryShortcut = { [weak self] in self?.recordLibraryShortcut() }
+            model.setPasteQueueShortcut = { [weak self] in self?.registerPasteQueueShortcut($0) }
+            model.recordPasteQueueShortcut = { [weak self] in self?.recordPasteQueueShortcut() }
             model.setSearchShortcut = { [weak self] in self?.registerSearchShortcut($0) }
             model.recordSearchShortcut = { [weak self] in self?.recordSearchShortcut() }
             model.requestPastePermission = { [weak self] in self?.showPastePermission() }
@@ -1454,7 +1465,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         textPreview?.controls.position.stringValue = message
         linkPreview?.controls.position.stringValue = message
     }
-    private func pasteItems(_ ids: [UUID]) {
+    private func pasteItems(_ ids: [UUID], onPasted: (() -> Void)? = nil) {
         guard !ids.isEmpty, let store = line.library, flushPreviewEdits(), libraryController?.flush() ?? true else { return }
         do {
             let records = try store.records(ids)
@@ -1466,7 +1477,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }, completion: { [weak self] result in
                 guard let self else { return }; self.isPasting = false
                 switch result {
-                case .pasted: self.reportActionStatus(L("Pasted"))
+                case .pasted: self.reportActionStatus(L("Pasted")); onPasted?()
                 case .permissionRequired:
                     self.reportActionStatus(L("Accessibility permission is needed to paste into another app."))
                     let alert = NSAlert()
@@ -1718,6 +1729,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .search: actionBarLibrary(from: snapshot)?.model.onSearchFocus?()
         case .library: showLibrary()
         case .paste: pasteItems(snapshot.ids)
+        case .queuePaste: line.queueForPaste(snapshot.ids)
         case .copy:
             do {
                 guard let store = line.library, !snapshot.ids.isEmpty else { return }
@@ -1923,6 +1935,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         libraryHotKey?.invalidate(); libraryHotKey = replacement; if persist { line.saveLibraryShortcut(value) }
+    }
+    /// Pastes into whichever app is frontmost when the global shortcut fires.
+    /// A failed paste keeps the item at the head so the next press retries it.
+    private func pasteNextQueued() {
+        guard !isPasting, let store = line.library else { return }
+        while let id = line.pasteQueue.first, (try? store.records([id]))?.first.map({ $0.deletedAt == nil }) != true {
+            line.completeQueuedPaste(id)
+        }
+        guard let id = line.pasteQueue.first else { NSSound.beep(); reportActionStatus(L("Paste queue is empty")); return }
+        capturePasteTarget()
+        pasteItems([id]) { [weak self] in self?.line.completeQueuedPaste(id) }
+    }
+    private func registerPasteQueueShortcut(_ value: KeyShortcut?, persist: Bool = true) {
+        defer { clearResolvedShortcutWarning() }
+        guard value != nil else { pasteQueueHotKey?.invalidate(); pasteQueueHotKey = nil; if persist { line.savePasteQueueShortcut(nil) }; return }
+        guard let value, value.isValid else { return }
+        if pasteQueueHotKey?.isRegistered == true && value == line.pasteQueueShortcut { return }
+        let replacement = HotKey(keyCode: value.keyCode, modifiers: value.modifiers) { [weak self] in self?.pasteNextQueued() }
+        guard replacement.isRegistered else {
+            if persist { let alert = NSAlert(); alert.messageText = L("Shortcut unavailable; the previous shortcut is kept"); alert.runModal() }
+            return
+        }
+        pasteQueueHotKey?.invalidate(); pasteQueueHotKey = replacement; if persist { line.savePasteQueueShortcut(value) }
+    }
+    private func recordPasteQueueShortcut() {
+        shortcutRecorder?.window.close(); let recorder = ShortcutRecorder(); shortcutRecorder = recorder
+        recorder.onRestoreFailure = { [weak self] in self?.reportShortcutRestoreFailure() }
+        recorder.onFinish = { [weak self] value in self?.shortcutRecorder = nil; if let value { self?.registerPasteQueueShortcut(value) }; self?.settingsController?.model.refresh() }
+        recorder.show()
     }
     private func recordLibraryShortcut() {
         shortcutRecorder?.window.close(); let recorder = ShortcutRecorder(); shortcutRecorder = recorder

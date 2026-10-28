@@ -1504,6 +1504,123 @@
           }
         }
       ]
+    },
+    {
+      "id": "queue-for-paste-replays-selection-oldest-first",
+      "itemSet": "standard",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i1",
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "down",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "extendRight",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t2",
+            "selected": [
+              "t1",
+              "t2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "queuePaste",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t2",
+            "selected": [
+              "t1",
+              "t2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "queue": [
+              "t2",
+              "t1"
+            ]
+          }
+        },
+        {
+          "action": "right",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t3",
+            "selected": [
+              "t3"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "queuePaste",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t3",
+            "selected": [
+              "t3"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "queue": [
+              "t3"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

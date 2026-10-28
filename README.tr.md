@@ -51,6 +51,7 @@ Bu tablo macOS varsayılanlarını gösterir. Aşağıdaki [Windows kısayol tab
 | `⌃⌥S` | Askıları arama odakta aç | Genel; değiştirilebilir veya kapatılabilir. |
 | `Varsayılan kapalı` | Kütüphaneyi genel kısayolla aç | Kendi kısayolunu ata; Ayarlar’da ⌃⌥L önerilir. |
 | `Varsayılan kapalı` | Son görseli genel kısayolla kopyala | Kendi kısayolunu ata; ⌃⌥C ve ⌃⇧C hazır seçenekleri bulunur. |
+| `Varsayılan kapalı` | Sıradakini yapıştır | Kendi kısayolunu ata; Ayarlar ⌃⌥V önerir. ⌘Enter gibi Erişilebilirlik izni gerekir. |
 
 ### Gezinme ve seçim
 
@@ -75,6 +76,7 @@ Bu tablo macOS varsayılanlarını gösterir. Aşağıdaki [Windows kısayol tab
 | `⌘C` | Kopyala ve gezinmeye devam et | Seçim veya geçerli önizleme; pencereler açık kalır. |
 | `⌘Enter` | Önceki uygulamaya yapıştır | Erişilebilirlik izni ve önceki düzenlenebilir hedef gerekir. Metin düzenlerken önce düzenlemeyi bitirir. |
 | `P / ⌘P` | Sabitle / favori durumunu değiştir | Görsel, metin ve linkler için tek ortak işlem. |
+| `Q` | Yapıştırma sırasına al | Raflarda seçimi en eskiden başlayarak sıraya alır; yapıştırma sırası kısayolu her basışta bir öğe yapıştırır. |
 | `F / ⇧⌘F` | Yalnız sabitlenenleri aç/kapat | Etkin askı veya kütüphane kapsamı; önizlemede de desteklenir. |
 | `⇧P` | Klasöre ekleyerek sabitle | Çoklu seçim destekli: yazarak ara; ↑/↓ seç; Enter onayla; Esc iptal. Seçicide ⌘N klasör oluşturur. |
 | `⌥P` | Adlandır ve sabitle | Çoklu seçimde Enter kaydeder ve sıradakine geçer; Esc kalan öğeleri değiştirmeden çıkar. |
@@ -136,6 +138,7 @@ Bunlar macOS tablosundan ayrı Windows varsayılanlarıdır. Command yerine Cont
 | `Ctrl+Alt+S` | Askı aramasını aç | Askıları, ortak arama alanı odaktayken açar. |
 | `Varsayılan kapalı` | Kütüphaneyi genel kısayolla aç | Ayarlar’dan ata; normal Kütüphane penceresini açar. |
 | `Varsayılan kapalı` | Son görseli genel kısayolla kopyala | Ayarlar’dan ata; düzenlenmiş görseli kopyalar, odak dış uygulamada kalır. |
+| `Varsayılan kapalı` | Sıradakini yapıştır | Ayarlar’dan ata; her basışta sıradaki öğe rafları açmadan odaktaki alana yapıştırılır. |
 | `Ctrl+Alt+A` | Ekran görüntüsü al | İmlecin bulunduğu ekranı yakalar; yeni görseli kırpma/önizlemede açar. |
 
 ### Windows · Gezinme, seçim ve arama
@@ -166,6 +169,7 @@ Bunlar macOS tablosundan ayrı Windows varsayılanlarıdır. Command yerine Cont
 | `Ctrl+C` | Kopyala ve gezinmeye devam et | Seçili grup veya önizleme açıksa geçerli öğe. |
 | `Ctrl+Enter` | Önceki uygulamaya yapıştır | Önceki düzenlenebilir hedef gerekir; güvenli veya değişmiş hedefler reddedilir. Metin/görsel düzenlerken önce kaydedip düzenlemeyi bitirir. |
 | `P / Ctrl+P` | Sabitle / favori durumunu değiştir | Görsel, metin ve linkler için tek işlem; çoklu seçimi destekler. Sabitle kısayolu değiştirilince Ctrl+P eşdeğeri de değişir. |
+| `Q` | Yapıştırma sırasına al | Raflarda seçimi en eskiden başlayarak yapıştırma sırası kısayolu için sıraya alır. |
 | `F / Ctrl+Shift+F` | Yalnız sabitlenenleri aç/kapat | Etkin askı veya kütüphanenin kayıtlı/sabitlenen kapsamı; önizlemede çalışır. Filtre kısayolu değiştirilince Ctrl+Shift+F eşdeğeri de değişir. |
 | `Shift+P` | Klasöre ekleyerek sabitle | Toplu seçici: yazarak ara; ↑/↓ seç; Enter onayla; Esc çık. Seçicide Ctrl+N klasör oluşturur. |
 | `Alt+P` | Adlandır ve sabitle | Çoklu seçimde Enter geçerli adı kaydedip sıradakine geçer; Esc kalan öğeleri değiştirmeden çıkar. |

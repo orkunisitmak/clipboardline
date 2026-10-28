@@ -29,10 +29,11 @@ versioned behavioral specification. Its synthetic items use portable aliases and
 are listed newest first. Every step contains an expected active row, focused
 item, complete selection, visible rows and native search-editing state.
 
-The current eleven scenarios (62 observations per platform) cover one selected image on opening, reopening,
+The current scenarios cover one selected image on opening, reopening,
 hidden/empty/filtered image fallback, column-preserving vertical navigation and
 clamping, hidden/empty row skipping, horizontal navigation, adding and hiding
-rows, search caret keys, empty shelves, remapping, disabling and restoring defaults.
+rows, search caret keys, empty shelves, remapping, disabling and restoring defaults,
+and queueing a multi-item selection for paste oldest first.
 A future user-visible change must add
 or amend the relevant scenarios and both adapters in the same change. Extend the
 contract's scope as the product grows; passing the current shelf scenarios is not

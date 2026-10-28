@@ -29,6 +29,8 @@ final class SettingsModel: ObservableObject {
     var setMetadata: (Bool) -> Void = { _ in }
     var setLibraryShortcut: (KeyShortcut?) -> Void = { _ in }
     var recordLibraryShortcut: () -> Void = {}
+    var setPasteQueueShortcut: (KeyShortcut?) -> Void = { _ in }
+    var recordPasteQueueShortcut: () -> Void = {}
     var setSearchShortcut: (KeyShortcut?) -> Void = { _ in }
     var recordSearchShortcut: () -> Void = {}
     var requestPastePermission: () -> Void = {}
@@ -324,6 +326,15 @@ private struct SettingsView: View {
                 } else {
                     Button(L("Open Accessibility Settings"), action: model.requestPastePermission)
                 }
+            }
+            Section(L("Paste queued items")) {
+                LabeledContent(L("Shortcut")) { Text(line.pasteQueueShortcut?.title ?? L("Off")).monospaced() }
+                HStack {
+                    Button(L("Use ⌃⌥V")) { model.setPasteQueueShortcut(KeyShortcut(keyCode: 9, modifiers: 4096 | 2048, keyLabel: "V")); model.refresh() }
+                    Button(L("Record shortcut…"), action: model.recordPasteQueueShortcut)
+                    Button(L("Off")) { model.setPasteQueueShortcut(nil); model.refresh() }
+                }
+                Text(L("Queue for paste on the line orders the selection oldest first. Each press of this shortcut pastes the next item into the focused text field.")).font(.caption).foregroundStyle(.secondary)
             }
             Section(L("Show or hide the line")) {
                 LabeledContent(L("Shortcut")) { Text(Shortcut.current?.display ?? L("None")).monospaced() }

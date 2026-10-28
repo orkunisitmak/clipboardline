@@ -496,3 +496,17 @@
 "Focus previous pane" = "Önceki bölmeye odaklan";
 
 "Undo Move to Trash" = "Çöp’e taşımayı geri al";
+
+"Queue for paste" = "Yapıştırma sırasına al";
+
+"Paste queued items" = "Sıradakileri yapıştır";
+
+"Use ⌃⌥V" = "⌃⌥V kullan";
+
+"Queue for paste on the line orders the selection oldest first. Each press of this shortcut pastes the next item into the focused text field." = "Raftaki “Yapıştırma sırasına al” seçimi en eskiden başlayarak sıraya koyar. Bu kısayola her basışta sıradaki öğe odaktaki metin alanına yapıştırılır.";
+
+"Queued %d items for paste" = "%d öğe yapıştırma sırasına alındı";
+
+"Paste queue is empty" = "Yapıştırma sırası boş";
+
+"Set a paste-queue shortcut in Settings to paste queued items" = "Sıradakileri yapıştırmak için Ayarlar'dan bir yapıştırma sırası kısayolu belirle";

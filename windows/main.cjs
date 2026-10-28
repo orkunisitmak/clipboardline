@@ -23,6 +23,7 @@ const {MediaJobs,MAXIMUM_VIDEO_BYTES}=require('./lib/media.cjs');
 const {copyFiles,cancelFileCopies}=require('./lib/native-files.cjs');
 const native = require('./lib/native.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
+const {PasteQueue}=require('./lib/paste-queue.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
 const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
 const {Updates,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
@@ -47,7 +48,7 @@ let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
 const shelfMotion=new MotionBridge(value=>{if(window&&!window.isDestroyed())window.webContents.send('clipboardline:shelf-motion',value);});
 const windowBounds=new WindowBounds();
-const pasteTargets=new PasteTargetTracker(process.pid);
+const pasteTargets=new PasteTargetTracker(process.pid),pasteQueue=new PasteQueue();
 const entry = pathToFileURL(path.join(__dirname,'index.html')).href;
 const copyMarker = crypto.randomBytes(16);
 const pending = new Map();
@@ -210,7 +211,7 @@ async function writeClipboard(selected) {
   await clipboard.write([new ClipboardItem(data)]);
   ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));
 }
-async function copy(payload,paste=false) {
+async function copy(payload,paste=false,{reshow=true}={}) {
   if(pastePromise)return pastePromise;
   const selected=store.selected(ids(payload.ids));
   if(!selected.length)throw new Error('Select an item first');
@@ -227,13 +228,21 @@ async function copy(payload,paste=false) {
       // clipboard mutation, just as the native Mac coordinator does.
       await native.validatePaste(target);current();await writeClipboard(selected);current();
       await native.paste({...target,prepared:true});current();if(store.data.settings.sounds)shell.beep();
-    }catch(error){if(generation===pasteGeneration)await show(view);throw error;}})();
+    }catch(error){if(generation===pasteGeneration&&reshow)await show(view);throw error;}})();
     pastePromise=operation;try{return await operation;}finally{if(pastePromise===operation)pastePromise=null;}
   }
   await writeClipboard(selected);
   if(store.data.settings.sounds)shell.beep();
   if(payload.keepOpen&&!paste){notify('Copied');return;}
   await hide();
+}
+// The global shortcut pastes into whichever field is focused when it fires,
+// without showing the shelves; a failed paste keeps the head for a retry.
+async function pasteNextQueued(){
+  const id=pasteQueue.next(id=>store.data.items.some(value=>value.id===id&&!value.trashedAt));
+  if(!id){shell.beep();return;}
+  if(!window.isVisible()||!window.isFocused()){const target=await native.capture().catch(()=>null);previous=pasteTargets.capture(target);}
+  await copy({ids:[id]},true,{reshow:false});pasteQueue.complete(id);
 }
 async function importFile(file) {
   const stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink())throw new Error('Select a regular file.');
@@ -299,6 +308,7 @@ function configureShortcuts(previousPreferences=null) {
   shortcutRegistry??=new GlobalShortcuts(globalShortcut,{
     toggle:()=>desiredVisible?hide():show('shelves'),
     search:()=>show('shelves',{search:true}),library:()=>show('library'),
+    pasteQueue:pasteNextQueued,
     copyLatest:async()=>{const image=store.data.items.filter(item=>item.kind==='image'&&!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];if(image){await writeClipboard([image]);notify('Copied');if(store.data.settings.sounds)shell.beep();}},
     screenshot:capture
   },{failed:error=>notify(error.message)});
@@ -324,6 +334,7 @@ async function command(action,payload={}) {
   else if(action==='windowMinimize'){if(view!=='shelves'){rememberNormalBounds();window.minimize();}}
   else if(action==='windowMaximize'){if(view!=='shelves'){if(window.isMaximized())window.unmaximize();else window.maximize();rememberNormalBounds();}}
   else if(action==='copy'||action==='paste')await copy(payload,action==='paste');
+  else if(action==='queuePaste')pasteQueue.replace(store.selected(ids(payload.ids)).filter(item=>!item.trashedAt).map(item=>item.id));
   else if(action==='cancelTrim'){recordingTrims.get(payload.id)?.abort();result={canceled:true};}
   else if(action==='trimRecording'){
     const item=store.item(payload.id);

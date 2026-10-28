@@ -172,6 +172,22 @@ final class FavoritesTests: HistoryTestCase {
             f.defaults.set(Data("bad".utf8), forKey: "copyLatestShortcut"); XCTAssertNil(line.copyLatestShortcut)
         }
     }
+    @MainActor func testPasteQueueShortcutIsOffByDefaultAndQueueStaysInSession() throws {
+        try fixture { f in
+            let line = f.line(); XCTAssertNil(line.pasteQueueShortcut)
+            let custom = KeyShortcut(keyCode: 9, modifiers: controlKey | optionKey, keyLabel: "V")
+            line.savePasteQueueShortcut(custom); XCTAssertEqual(f.line().pasteQueueShortcut, custom)
+            line.savePasteQueueShortcut(nil); XCTAssertNil(f.line().pasteQueueShortcut)
+            let newest = UUID(), middle = UUID(), oldest = UUID(); var counts = [Int]()
+            line.onPasteQueued = { counts.append($0) }
+            line.queueForPaste([]); XCTAssertTrue(line.pasteQueue.isEmpty); XCTAssertTrue(counts.isEmpty)
+            line.queueForPaste([newest, middle, oldest])
+            XCTAssertEqual(line.pasteQueue, [oldest, middle, newest]); XCTAssertEqual(counts, [3])
+            line.completeQueuedPaste(newest); XCTAssertEqual(line.pasteQueue, [oldest, middle, newest])
+            line.completeQueuedPaste(oldest); XCTAssertEqual(line.pasteQueue, [middle, newest])
+            XCTAssertTrue(f.line().pasteQueue.isEmpty)
+        }
+    }
     @MainActor func testHotKeysCanCoexistAndConflictsPreserveRegistration() throws {
         let modifiers = controlKey | optionKey | cmdKey
         let first = HotKey(keyCode: kVK_F18, modifiers: modifiers) {}

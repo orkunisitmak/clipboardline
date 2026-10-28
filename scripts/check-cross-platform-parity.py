@@ -15,7 +15,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 KINDS = ['image', 'text', 'link']
 FIELDS = {'activeKind', 'focused', 'selected', 'visibleKinds', 'searchEditing'}
-ACTIONS = {'open', 'close', 'up', 'down', 'left', 'right', 'toggle', 'openSearch', 'finishSearch', 'remap', 'key'}
+ACTIONS = {'open', 'close', 'up', 'down', 'left', 'right', 'extendRight', 'toggle', 'openSearch', 'finishSearch', 'remap', 'key', 'queuePaste'}
 PLATFORMS = {'macos': ('darwin', 'model'), 'windows': ('win32', 'renderer')}
 
 
@@ -56,7 +56,11 @@ def valid_ordered_kinds(values):
 
 
 def valid_snapshot(value, aliases):
-    if not isinstance(value, dict) or set(value) != FIELDS:
+    # Only paste-queue steps add the observed queue, listed in paste order.
+    if not isinstance(value, dict) or set(value) not in (FIELDS, FIELDS | {'queue'}):
+        return False
+    if 'queue' in value and not (isinstance(value['queue'], list) and
+                                 all(isinstance(item, str) and item in aliases for item in value['queue'])):
         return False
     if not valid_ordered_kinds(value['visibleKinds']) or value['activeKind'] not in value['visibleKinds']:
         return False
@@ -69,8 +73,8 @@ def valid_snapshot(value, aliases):
         return False
     focused = value['focused']
     return ((focused is None and selected == []) or
-            (isinstance(focused, str) and focused in aliases and selected == [focused] and
-             aliases[focused] == value['activeKind']))
+            (isinstance(focused, str) and focused in aliases and focused in selected and
+             all(aliases[item] == value['activeKind'] for item in selected)))
 
 
 def load_contract(path):

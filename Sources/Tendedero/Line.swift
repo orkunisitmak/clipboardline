@@ -536,6 +536,21 @@ final class Line: ObservableObject {
     private var shelfSearchFilterSubscriptions = Set<AnyCancellable>()
     var onLibraryRequested: (() -> Void)?
     var onPasteRequested: (([UUID]) -> Void)?
+    var onPasteQueued: ((Int) -> Void)?
+    /// Session-only and never persisted: copied content stays out of preferences.
+    private(set) var pasteQueue: [UUID] = []
+    /// Shelves list newest first; a queue replays copies in the order they were made.
+    func queueActiveSelectionForPaste() { queueForPaste(activeActionIDs) }
+    func queueForPaste(_ displayOrder: [UUID]) {
+        guard !displayOrder.isEmpty else { return }
+        pasteQueue = displayOrder.reversed()
+        onPasteQueued?(pasteQueue.count)
+    }
+    /// Drops the head only if it is still the item that was pasted, so a queue
+    /// replaced mid-paste is not shortened.
+    func completeQueuedPaste(_ id: UUID) {
+        if pasteQueue.first == id { pasteQueue.removeFirst() }
+    }
     var onTagRequested: (([UUID]) -> Void)?
     var onImageMarkupRequested: ((UUID) -> Void)?
     var onFlushPreview: () -> Bool = { true }
@@ -826,6 +841,13 @@ final class Line: ObservableObject {
         if let value, value.isValid, let data = try? JSONEncoder().encode(value) {
             defaults.set(data, forKey: "copyLatestShortcut")
         } else if value == nil { defaults.removeObject(forKey: "copyLatestShortcut") }
+    }
+    var pasteQueueShortcut: KeyShortcut? {
+        guard let data = defaults.data(forKey: "pasteQueueShortcut"), let value = try? JSONDecoder().decode(KeyShortcut.self, from: data), value.isValid else { return nil }; return value
+    }
+    func savePasteQueueShortcut(_ value: KeyShortcut?) {
+        if let value, value.isValid, let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: "pasteQueueShortcut") }
+        else if value == nil { defaults.removeObject(forKey: "pasteQueueShortcut") }
     }
     var libraryShortcut: KeyShortcut? {
         guard let data = defaults.data(forKey: "libraryShortcut"), let value = try? JSONDecoder().decode(KeyShortcut.self, from: data), value.isValid else { return nil }; return value
