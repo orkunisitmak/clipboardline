@@ -44,5 +44,12 @@ function runTool(file,args,{input,timeout=4000,maximum=70*1024*1024,signal,detac
  });
 }
 function abortError(){const error=new Error('Operation canceled.');error.name='AbortError';return error;}
-const delay=(ms,signal)=>new Promise((resolve,reject)=>{const timer=setTimeout(resolve,ms);signal?.addEventListener('abort',()=>{clearTimeout(timer);reject(abortError());},{once:true});});
+// Callers poll with one signal many times (activeIs); a settled delay must
+// not leave its abort listener behind.
+const delay=(ms,signal)=>new Promise((resolve,reject)=>{
+ if(signal?.aborted)return reject(abortError());
+ const cancel=()=>{clearTimeout(timer);reject(abortError());};
+ const timer=setTimeout(()=>{signal?.removeEventListener('abort',cancel);resolve();},ms);
+ signal?.addEventListener('abort',cancel,{once:true});
+});
 module.exports={which,session,runTool,abortError,delay};

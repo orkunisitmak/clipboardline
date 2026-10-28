@@ -110,3 +110,18 @@ test('stopping the clipboard ends the Wayland watcher and its exit hook',()=>{
  clipboard.start();assert.equal(process.listenerCount('exit'),before+1);
  clipboard.stop();assert.equal(killed,1);assert.equal(process.listenerCount('exit'),before);assert.equal(clipboard.watcher,null);
 });
+test('a change notification that arrives before the copy tool exits is still a self-copy',async()=>{
+ const harness=fakeWayland();const run=harness.clipboard.run;
+ harness.clipboard.run=async(file,args,options)=>{const result=await run(file,args,options);if(file==='wl-copy')harness.clipboard.changed();return result;};
+ await harness.clipboard.write({text:'early notification',marker});
+ assert.ok((await harness.clipboard.read())[0].types.includes(MARKER_TYPE));
+ assert.equal(await content(harness.clipboard),null,'own copy must not be recaptured');
+ harness.clipboard.changed();// another application copied identical bytes
+ assert.equal((await content(harness.clipboard)).value,'early notification');
+});
+test('a failed copy tool does not leave an ownership record behind',async()=>{
+ const harness=fakeWayland({'text/plain':'from another app'});
+ harness.clipboard.run=async file=>{if(file==='wl-copy')throw new Error('wl-copy failed');return Buffer.alloc(0);};
+ await assert.rejects(harness.clipboard.write({text:'from another app',marker}),/wl-copy failed/);
+ assert.equal(harness.clipboard.ownWrite,null);
+});

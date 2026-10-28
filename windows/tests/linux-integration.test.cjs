@@ -110,3 +110,13 @@ test('pacman optdepends are inserted after depends and the .MTREE digest follows
  assert.match(mtree,/\.\/\.INSTALL time=1 size=4 md5digest=aa sha256digest=bb/);
  assert.throws(()=>withPkginfoDigest('#mtree\n',bytes),/no \.PKGINFO entry/);
 });
+test('delay rejects a pre-aborted signal and never accumulates abort listeners',async()=>{
+ const {delay}=require('../lib/linux-desktop.cjs');const {getEventListeners}=require('node:events');
+ const aborted=new AbortController();aborted.abort();
+ await assert.rejects(delay(1000,aborted.signal),{name:'AbortError'});
+ const controller=new AbortController();
+ for(let index=0;index<60;index++)await delay(0,controller.signal);
+ assert.equal(getEventListeners(controller.signal,'abort').length,0);
+ const pending=delay(1000,controller.signal);assert.equal(getEventListeners(controller.signal,'abort').length,1);
+ controller.abort();await assert.rejects(pending,{name:'AbortError'});
+});

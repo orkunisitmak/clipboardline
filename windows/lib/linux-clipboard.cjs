@@ -77,18 +77,22 @@ class LinuxClipboard{
  async write({text='',png=null,files=[],marker=null}={}){
   const value=payload({text,png,files});
   if(this.backend==='electron')return this.writeElectron(value,{marker});
-  let offered=value.type;
-  if(this.backend==='wl-clipboard'){
-   // An explicit type stops content sniffing (HTML-like text would become
-   // text/html); wl-copy still adds the text/plain and X11 text aliases.
-   await this.run(this.tool('wl-copy'),['--type',value.type],{input:value.bytes,detach:true,timeout:4000,environment:this.environment});
-  }else{
-   offered=value.type.startsWith('text/plain')?'UTF8_STRING':value.type;
-   await this.run(this.tool('xclip'),['-selection','clipboard','-target',offered,'-in'],{input:value.bytes,detach:true,timeout:4000,environment:this.environment});
-  }
+  const offered=this.backend==='wl-clipboard'||!value.type.startsWith('text/plain')?value.type:'UTF8_STRING';
   // The next change notification is this write. Any later change belongs to
-  // another application, even when it copies identical bytes.
-  this.ownWrite=marker?{offered,hash:digest(value.bytes),marker:Buffer.from(marker),pending:true}:null;
+  // another application, even when it copies identical bytes. Record it
+  // before the tool runs: the watcher can report the change before the
+  // tool's own process exit is observed.
+  const own=marker?{offered,hash:digest(value.bytes),marker:Buffer.from(marker),pending:true}:null;
+  this.ownWrite=own;
+  try{
+   if(this.backend==='wl-clipboard'){
+    // An explicit type stops content sniffing (HTML-like text would become
+    // text/html); wl-copy still adds the text/plain and X11 text aliases.
+    await this.run(this.tool('wl-copy'),['--type',value.type],{input:value.bytes,detach:true,timeout:4000,environment:this.environment});
+   }else{
+    await this.run(this.tool('xclip'),['-selection','clipboard','-target',offered,'-in'],{input:value.bytes,detach:true,timeout:4000,environment:this.environment});
+   }
+  }catch(error){if(this.ownWrite===own)this.ownWrite=null;throw error;}
   return{type:value.type};
  }
  async writeElectron(value,{marker}){
