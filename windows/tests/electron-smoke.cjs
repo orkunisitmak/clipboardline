@@ -49,7 +49,8 @@ async function waitForCropBox(page,viewport,raster={width:900,height:220}){
   return ready.box;
 }
 async function main(){
-  const args=['--test-mode','--test-data='+data,'--test-tray'];
+  // Assertions use English UI text; pin it so non-English Windows hosts pass.
+  const args=['--lang=en-US','--test-mode','--test-data='+data,'--test-tray'];
   application=await electron.launch({...(process.env.CLIPBOARDLINE_EXECUTABLE?{executablePath:path.resolve(process.env.CLIPBOARDLINE_EXECUTABLE)}:{args:[path.resolve('.'),...args]}),...(process.env.CLIPBOARDLINE_EXECUTABLE?{args}:{}),timeout:60000});
   const page=await application.firstWindow();activePage=page;await page.waitForFunction(()=>!!window.clipboardLine);
   report.rendererErrors=[];page.on('pageerror',error=>{if(report.rendererErrors.length<20)report.rendererErrors.push(String(error.stack||error.message).slice(0,2000));});
@@ -363,7 +364,7 @@ async function main(){
   const persisted=JSON.parse(fs.readFileSync(path.join(data,'library.json'),'utf8'));assert.ok(persisted.items.some(i=>i.id===textItem.id&&i.pinned&&i.tags.includes('work')));check('real persisted library retains named pinned organization');
   if(fixture){fixture.kill();fixture=null;}
   await application.close();application=null;
-  application=await electron.launch({...(process.env.CLIPBOARDLINE_EXECUTABLE?{executablePath:path.resolve(process.env.CLIPBOARDLINE_EXECUTABLE),args:[]}:{args:[path.resolve('.')]}),timeout:60000});
+  application=await electron.launch({...(process.env.CLIPBOARDLINE_EXECUTABLE?{executablePath:path.resolve(process.env.CLIPBOARDLINE_EXECUTABLE),args:['--lang=en-US']}:{args:[path.resolve('.'),'--lang=en-US']}),timeout:60000});
   const productionPage=await application.firstWindow();activePage=productionPage;await productionPage.waitForFunction(()=>!!window.clipboardLine);
   const production=await until(()=>productionPage.evaluate(()=>window.clipboardLine.state()),value=>value.windowVisible===true);
   assert.equal(production.settings.captureText,false);assert.equal(production.settings.captureImages,false);assert.equal(production.settings.captureLinks,true);assert.equal(production.settings.fetchLinkMetadata,true);
