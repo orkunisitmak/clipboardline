@@ -352,8 +352,8 @@ desteklenir). Pano, pencere hedefleme, yapıştırma ve kayıt köprüsü
 `ydotool`/`wtype` ve FFmpeg kullanır.
 
 ```sh
-cd packaging/arch && makepkg -si        # Arch, CachyOS, EndeavourOS, Manjaro
-cd windows && npm ci && npm run dist:linux   # AppImage, deb, rpm, pacman
+(cd packaging/arch && makepkg -si)        # Arch, CachyOS, EndeavourOS, Manjaro
+(cd windows && npm ci && npm run dist:linux)   # AppImage, deb, rpm, pacman
 ```
 
 Yardımcı paketler, portal olmadan kısayollar (`clipboardline --toggle`) ve

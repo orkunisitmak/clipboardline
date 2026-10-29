@@ -352,8 +352,8 @@ limits). The clipboard, window targeting, paste and recording bridge uses
 `ydotool`/`wtype` and FFmpeg.
 
 ```sh
-cd packaging/arch && makepkg -si        # Arch, CachyOS, EndeavourOS, Manjaro
-cd windows && npm ci && npm run dist:linux   # AppImage, deb, rpm, pacman
+(cd packaging/arch && makepkg -si)        # Arch, CachyOS, EndeavourOS, Manjaro
+(cd windows && npm ci && npm run dist:linux)   # AppImage, deb, rpm, pacman
 ```
 
 See [ClipBoardLine on Linux](docs/linux.md) for helpers, shortcuts without the

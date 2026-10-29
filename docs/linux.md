@@ -32,7 +32,8 @@ desktop entry and the icon. Optional helpers:
 
 `npm run dist:linux` in `windows/` builds an AppImage, a `.deb`, an `.rpm` and
 a `.pacman` package into `windows/dist/`. The Linux CI workflow uploads the same
-artifacts for every commit. Install `wl-clipboard` (Wayland) or `xclip` (X11).
+artifacts for pull requests and `main` pushes that change the application or
+its packaging. Install `wl-clipboard` (Wayland) or `xclip` (X11).
 
 ## How the bridge works
 
@@ -56,7 +57,8 @@ ClipBoardLine itself.
 ### Shortcuts without the portal
 
 When a desktop does not offer the GlobalShortcuts portal, bind a custom system
-shortcut to one of these commands. They control the running instance:
+shortcut to one of these commands. They control the running instance, or
+start ClipBoardLine in that view when it is not running:
 
 ```sh
 clipboardline --toggle    # show or hide the shelves
@@ -81,7 +83,9 @@ These differences come from the platform and are user-visible:
   shelves hide. GNOME has no data-control protocol, so the clipboard is polled.
 - **One clipboard format per copy.** `wl-copy` and `xclip` offer one MIME type.
   A text copy is text, a single image copy is PNG, and several images or a
-  recording are copied as a `text/uri-list` of the managed files.
+  recording are copied as a `text/uri-list` of the managed files. A selection
+  that mixes images and text copies only the images; Windows also offers the
+  text.
 - **Updates.** The signed update feed is Windows-only. Update Linux builds with
   your package manager or a newer AppImage.
 - **Paste key.** Paste sends Control+V. Terminals that need Control+Shift+V
