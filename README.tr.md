@@ -253,7 +253,7 @@ Açıkken güncelleme kontrolü açılışta zamanı geldiyse ve uygulama çalı
 ## Yerel arşiv. Açıkça seçilen bağlantılar.
 
 - **Cihazında saklanır.** Geçmiş, klasör, etiket, not, küçük görsel ve arama indeksleri yerelde tutulur. ClipBoardLine bulut senkronizasyonu sunmaz. Yerel geçmiş bir parola kasası değildir; kopyaladığın ve sakladığın içerikleri sen seçersin.
-- **Görsel ve metin yakalama isteğe bağlıdır.** İzlemeyi açmak panodaki eski içeriği içeri aktarmaz. Gizli, geçici ve otomatik üretilmiş pano işaretleri denetlenir; Finder dosya kopyaları atlanır ve uygulamanın kendi kopyaları yeniden eklenmez.
+- **Görsel ve metin yakalama isteğe bağlıdır.** İzlemeyi açmak panodaki eski içeriği içeri aktarmaz. Gizli, geçici ve otomatik üretilmiş pano işaretleri denetlenir; Finder dosya kopyaları atlanır ve uygulamanın kendi kopyaları yeniden eklenmez. Yalnızca bir kart numarası (Luhn doğrulamalı) veya IBAN'dan oluşan kopya hiç kaydedilmez; bunları yalnızca içeren metinler kopyalandığı gibi tutulur.
 - **OCR ve görsel arama cihazda kalır.** Yazı tanıma, görsel vektörleri ve arama sorguları yerel çalışır. Çalışma anında OCR/görsel arama, görselleri veya sorgu metnini yüklemez.
 - **Link zenginleştirme isteğe bağlı ağ erişimidir.** Açıkken başlık ve küçük görsel için linkin sitesine veya YouTube’a bağlanır. Yerel adresler ve bilinen gizli parametreleri taşıyan URL’ler dışlanır; istemiyorsan Kaynaklar’dan kapat.
 - **Güncellemeler ağı kullanır, cihaz token’ı istemez.** Resmî Sparkle akışı ve arşivleri herkese açık ve imzalıdır. Kontrol ayarlanabilir; indirme ve kurulum senin işlemini gerektirir. Bu kanal GitHub hesabına giriş istemez.

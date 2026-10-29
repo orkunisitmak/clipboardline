@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "Copied content admission before history, previews, indexing or metadata. Private markers on any item exclude the whole copy; nonblank text bytes stay exact.",
+  "description": "Copied content admission before history, previews, indexing or metadata. Private markers on any item exclude the whole copy; a copy that is only a payment card number (Luhn) or an IBAN (ISO 13616 mod 97) is excluded; nonblank text bytes stay exact.",
   "privateMarkers": [
     "org.nspasteboard.ConcealedType",
     "org.nspasteboard.TransientType",
@@ -36,6 +36,51 @@
     {
       "name": "BOM is content",
       "value": "﻿",
+      "capture": true
+    },
+    {
+      "name": "spaced card number",
+      "value": "4111 1111 1111 1111",
+      "capture": false
+    },
+    {
+      "name": "hyphenated padded card number",
+      "value": " 5555-5555-5555-4444\n",
+      "capture": false
+    },
+    {
+      "name": "card number failing Luhn",
+      "value": "4111 1111 1111 1112",
+      "capture": true
+    },
+    {
+      "name": "short digit run",
+      "value": "411111111111",
+      "capture": true
+    },
+    {
+      "name": "card number inside a sentence",
+      "value": "Order 4111111111111111 shipped",
+      "capture": true
+    },
+    {
+      "name": "grouped IBAN",
+      "value": "TR33 0006 1005 1978 6457 8413 26",
+      "capture": false
+    },
+    {
+      "name": "lowercase compact IBAN",
+      "value": "gb82west12345698765432",
+      "capture": false
+    },
+    {
+      "name": "IBAN with wrong check digits",
+      "value": "DE88 3704 0044 0532 0130 00",
+      "capture": true
+    },
+    {
+      "name": "IBAN-shaped word",
+      "value": "AB12 HELLO WORLD",
       "capture": true
     }
   ]

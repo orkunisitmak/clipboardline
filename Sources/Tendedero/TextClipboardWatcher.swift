@@ -57,6 +57,7 @@ final class TextClipboardWatcher {
             // consumes a leading BOM, which changes an otherwise valid copy.
             let text = String(decoding: data, as: UTF8.self)
             guard text.unicodeScalars.contains(where: { !$0.properties.isWhitespace }) else { continue }
+            guard !SensitiveText.isPaymentIdentifier(text) else { return }
             guard source.changeCount == count else { return }
             if capturesLinks(), let onLink, let url = LinkIdentity.standalone(text) { onLink(url) }
             else if capturesText() { onText(text) }
