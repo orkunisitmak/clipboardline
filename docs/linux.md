@@ -21,7 +21,7 @@ them from a release that lists Linux assets.
 ```sh
 # Fedora, openSUSE and other RPM distributions
 sudo dnf install ./ClipBoardLine-1.7.8-x86_64.rpm
-sudo dnf install wl-clipboard ffmpeg-free     # recommended extras
+sudo dnf install wl-clipboard xclip ffmpeg-free     # recommended extras
 
 # Ubuntu, Debian and derivatives (apt also installs the recommended extras)
 sudo apt install ./ClipBoardLine-1.7.8-amd64.deb
@@ -47,7 +47,7 @@ integration** shows the active mode and any missing optional package.
 | | KDE Plasma, Sway, Hyprland (Wayland) | GNOME, Ubuntu (Wayland) | X11 desktops (Xfce, MATE, Cinnamon …) |
 | --- | --- | --- | --- |
 | Display backend | Native Wayland | Xwayland | X11 |
-| Background clipboard capture | `wl-clipboard` through the data-control protocol | Mutter mirrors the selection to Xwayland | X11 selection polling |
+| Background clipboard capture | `wl-clipboard` through the data-control protocol | Mutter mirrors the selection to Xwayland; read through `xclip` | X11 selection polling through `xclip` |
 | Global shortcuts | Desktop GlobalShortcuts portal; approve the request once | Bind a custom shortcut to a [command](#shortcut-commands); Xwayland key grabs only fire while an X11 window is focused | X11 key grabs |
 | Screen capture | Screenshot portal (the desktop may ask once) | Screenshot portal | Direct capture |
 | Ctrl+Enter | Copies, hides and returns focus; press Ctrl+V | Same as Wayland | Also pastes into the same, still active window when `xdotool` is installed |
@@ -84,6 +84,7 @@ Shortcuts**.
 | --- | --- |
 | `wl-clipboard` | Background capture and copying while hidden on KDE and wlroots compositors |
 | `ffmpeg` (`ffmpeg-free` on Fedora) | Importing, posters and trimming of `.mp4`/`.mov` recordings |
+| `xclip` | Reliable clipboard reading under X11 and GNOME's Xwayland: a copy whose app quits mid-transfer cannot stall capture |
 | `xdotool` | Automatic paste with Ctrl+Enter under X11 |
 | `xdg-desktop-portal` with your desktop's backend | Wayland screenshots and global shortcuts (installed by default on desktop editions) |
 
@@ -153,7 +154,7 @@ kütüphane ve ayarlar korunur.
 ```sh
 # Fedora, openSUSE ve diğer RPM dağıtımları
 sudo dnf install ./ClipBoardLine-1.7.8-x86_64.rpm
-sudo dnf install wl-clipboard ffmpeg-free     # önerilen ek paketler
+sudo dnf install wl-clipboard xclip ffmpeg-free     # önerilen ek paketler
 
 # Ubuntu, Debian ve türevleri (apt önerilen ek paketleri de kurar)
 sudo apt install ./ClipBoardLine-1.7.8-amd64.deb
@@ -175,7 +176,7 @@ Kaynaklar → Linux integration** etkin modu ve eksik isteğe bağlı paketleri 
 | | KDE Plasma, Sway, Hyprland (Wayland) | GNOME, Ubuntu (Wayland) | X11 masaüstleri (Xfce, MATE, Cinnamon …) |
 | --- | --- | --- | --- |
 | Görüntü altyapısı | Yerel Wayland | Xwayland | X11 |
-| Arka planda pano toplama | Data-control protokolüyle `wl-clipboard` | Mutter seçimi Xwayland’e yansıtır | X11 seçimini yoklama |
+| Arka planda pano toplama | Data-control protokolüyle `wl-clipboard` | Mutter seçimi Xwayland’e yansıtır; `xclip` ile okunur | `xclip` ile X11 seçimini yoklama |
 | Genel kısayollar | Masaüstünün GlobalShortcuts portalı; isteği bir kez onaylayın | Bir [komuta](#kısayol-komutları) özel kısayol atayın; Xwayland tuş yakalama yalnızca bir X11 penceresi odaktayken çalışır | X11 tuş yakalama |
 | Ekran yakalama | Screenshot portalı (masaüstü bir kez izin isteyebilir) | Screenshot portalı | Doğrudan yakalama |
 | Ctrl+Enter | Kopyalar, gizler ve odağı geri verir; Ctrl+V’ye basın | Wayland ile aynı | `xdotool` kuruluysa aynı, hâlâ etkin pencereye yapıştırır |
@@ -213,6 +214,7 @@ altından ekleyin.
   Kırpma H.264/AAC MP4 yazar; çalışan H.264 kodlayıcı yoksa (Fedora’da Cisco
   OpenH264 gerekir) önizlemenin oynatabildiği VP9/Opus MP4 yazar. FFmpeg uygulama
   tarafından indirilmez.
+- `xclip`: X11 ve GNOME’un Xwayland oturumunda güvenilir pano okuma; aktarım sırasında kapanan bir uygulamanın kopyası toplamayı durduramaz.
 - `xdotool`: X11’de Ctrl+Enter ile otomatik yapıştırma.
 - Masaüstünüzün `xdg-desktop-portal` arka ucu: Wayland ekran görüntüsü ve genel kısayollar.
 

@@ -32,7 +32,7 @@ test('tool discovery accepts only executable regular files on absolute PATH entr
   const env={PATH:['relative/bin',bin].join(path.delimiter)};
   if(process.platform!=='win32'){assert.equal(findExecutable('wl-paste',env),path.join(bin,'wl-paste'));assert.equal(findExecutable('wl-copy',env),null);}
   assert.equal(findExecutable('ffmpeg',env),null);assert.equal(findExecutable('../wl-paste',env),null);
-  const tools=linuxTools(env,name=>name==='gdbus'?'/usr/bin/gdbus':null);assert.deepEqual(Object.keys(tools),['wl-paste','wl-copy','xdotool','ffmpeg','ffprobe','gdbus']);assert.equal(tools.gdbus,'/usr/bin/gdbus');assert.equal(Object.isFrozen(tools),true);
+  const tools=linuxTools(env,name=>name==='gdbus'?'/usr/bin/gdbus':null);assert.deepEqual(Object.keys(tools),['wl-paste','wl-copy','xclip','xdotool','ffmpeg','ffprobe','gdbus']);assert.equal(tools.gdbus,'/usr/bin/gdbus');assert.equal(Object.isFrozen(tools),true);
 });
 test('the reveal waits out the desktop map animation, scaled by KDE animation speed',()=>{
   const kde=linuxSession({XDG_CURRENT_DESKTOP:'KDE',WAYLAND_DISPLAY:'wayland-0'},[]),files=new Map(),read=file=>{if(!files.has(file))throw new Error('ENOENT');return files.get(file);};

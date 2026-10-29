@@ -96,6 +96,15 @@ test('an empty selection is told apart from one whose owner is still running',as
   const monitor=wayland.monitor(()=>{});
   assert.equal(await wayland.clipboardEmpty(),false);owned=false;assert.equal(await wayland.clipboardEmpty(),true);monitor.kill();
 });
+test('X11 reads go through xclip when it is installed and its absence is reported',async()=>{
+  const run=async(_file,args)=>{if(args.includes('TARGETS'))return Buffer.from('TIMESTAMP\nTARGETS\nUTF8_STRING\n');return Buffer.from('7\n');};
+  const withXclip=createLinuxNative({session:{session:'x11',backend:'x11'},tools:{xclip:'/usr/bin/xclip',xdotool:'/usr/bin/xdotool'},clipboard:{read:async()=>{throw new Error('Electron must not be read');}},run,ownPID:1});
+  const monitor=withXclip.monitor(()=>{});
+  assert.equal(withXclip.clipboardReader('electron').constructor.name,'X11Clipboard');assert.equal(await withXclip.clipboardEmpty(),false);assert.equal(await withXclip.clipboardSequence(),2,'the change signature is read through xclip');
+  assert.deepEqual(withXclip.status().missing.filter(name=>name==='xclip'),[]);monitor.kill();
+  const without=createLinuxNative({session:{session:'x11',backend:'x11'},tools:{xdotool:'/usr/bin/xdotool'},clipboard:{read:async()=>[]},ownPID:1});
+  const fallback=without.monitor(()=>{});assert.equal(without.clipboardReader('electron'),'electron');assert.ok(without.status().missing.includes('xclip'));fallback.kill();
+});
 test('removing the package unregisters the command, but an rpm or deb upgrade keeps the new one',t=>{
   const root=temporary(t),bin=path.join(root,'bin'),calls=path.join(root,'calls'),script=path.join(root,'after-remove');fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin,'update-alternatives'),'#!/bin/sh\necho "$@" >> "$CALLS"\n',{mode:0o755});

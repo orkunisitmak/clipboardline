@@ -38,7 +38,7 @@ function findExecutable(name,env=process.env){
  return null;
 }
 function linuxTools(env=process.env,find=findExecutable){
- return Object.freeze(Object.fromEntries(['wl-paste','wl-copy','xdotool','ffmpeg','ffprobe','gdbus'].map(name=>[name,find(name,env)])));
+ return Object.freeze(Object.fromEntries(['wl-paste','wl-copy','xclip','xdotool','ffmpeg','ffprobe','gdbus'].map(name=>[name,find(name,env)])));
 }
 // KWin (Scale) and Mutter fade in every newly mapped window, which would hide
 // a reveal that starts at the same moment. The line waits out that animation;

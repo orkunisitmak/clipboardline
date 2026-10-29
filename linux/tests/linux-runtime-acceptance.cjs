@@ -76,14 +76,17 @@ async function main(){
       for(let attempt=0;attempt<3;attempt++){await test(()=>global.__clipboardLineTest.readClipboard());await new Promise(resolve=>setTimeout(resolve,200));}
       items=await listed();assert.equal(items.filter(item=>item.kind==='image').length,imageCount);check('the same image served again with other PNG bytes is not captured twice');
       // A screenshot tool copies and quits at once (Spectacle does); its copy
-      // must stay pasteable without a second shelf item.
-      {
+      // must stay pasteable without a second shelf item. Under X11 only xclip
+      // can abandon a read the quitting owner never answers.
+      if(backend==='x11'&&!xclip)skip('a copy whose app quits stays pasteable','install xclip; Electron\'s X11 reader can stall when the owner quits');
+      else{
         const quitting=syntheticPNG(12,12),images=()=>listed().then(value=>value.filter(item=>item.kind==='image').length),before=await images();
         const source=backend==='wayland'?spawn(tools['wl-copy'],['--foreground','--type','image/png'],{stdio:['pipe','ignore','ignore']}):spawn(electronBinary(),[helper,'write','image/png',quitting.toString('base64')],{stdio:['pipe','pipe','ignore']});
         if(backend==='wayland')source.stdin.end(quitting);else await new Promise(resolve=>source.stdout.once('data',resolve));
         await until(async()=>{await test(()=>global.__clipboardLineTest.readClipboard());return images();},count=>count===before+1);
         await new Promise(resolve=>{source.once('exit',resolve);if(backend==='wayland')source.kill();else source.stdin.end();});
-        const served=await until(async()=>{await test(()=>global.__clipboardLineTest.readClipboard());try{return externalPaste('image/png',backend);}catch{return null;}},value=>!!value?.length);
+        // A read sent as the owner quit can go unanswered until the app gives up on it.
+        const served=await until(async()=>{await test(()=>global.__clipboardLineTest.readClipboard());try{return externalPaste('image/png',backend);}catch{return null;}},value=>!!value?.length,40000);
         const samePixels=await test(({nativeImage},[copied,pasted])=>{const left=nativeImage.createFromBuffer(Buffer.from(copied,'base64')),right=nativeImage.createFromBuffer(Buffer.from(pasted,'base64'));return !right.isEmpty()&&left.toBitmap().equals(right.toBitmap());},[quitting.toString('base64'),served.toString('base64')]);
         assert.ok(samePixels,'the pasted image is the copied screenshot');
         for(let attempt=0;attempt<3;attempt++){await test(()=>global.__clipboardLineTest.readClipboard());await new Promise(resolve=>setTimeout(resolve,200));}

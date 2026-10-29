@@ -196,8 +196,14 @@ async function hide(restore=true) {
 }
 async function openDialog(options){const release=overlayFocus?.hold();try{return await dialog.showOpenDialog(window,options);}finally{release?.();}}
 function captureOptions(){const settings=store?.data.settings||{};return{text:!!(settings.captureText||settings.captureLinks),images:!!settings.captureImages};}
+// A Linux selection request to an app that is quitting may never be
+// answered; give up on it so later copies are still captured.
+function answered(promise){
+  if(!linuxSession)return promise;let timer;
+  return Promise.race([promise,new Promise((_resolve,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error('The clipboard did not answer.'),{stalled:true})),15000);})]).finally(()=>clearTimeout(timer));
+}
 async function clipboardContent() {
-  const content=await readClipboardContent({clipboard:native.clipboardReader?.(clipboard)??clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL});
+  const content=await answered(readClipboardContent({clipboard:native.clipboardReader?.(clipboard)??clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL}));
   if(linuxSession&&content?.kind==='image')content.fingerprint=pixelFingerprint(content.value,bytes=>{const image=nativeImage.createFromBuffer(bytes);if(image.isEmpty())return null;const size=image.getSize();return{...size,bitmap:image.toBitmap()};})||content.fingerprint;
   return content;
 }
@@ -215,16 +221,16 @@ async function readClipboard() {
     if(item.kind==='link')void enrich(item.id);
     if(item.kind==='image'){queueOCR(item.id);refreshImageSearch();}
     if(item.kind==='image'&&store.data.settings.openAfterScreenshot&&!desiredVisible)await show('shelves',{selectId:item.id,kind:'image'});
-  }catch(error){notify('Clipboard capture: '+error.message);}finally{capturing=false;if(pendingClipboard){pendingClipboard=false;queueMicrotask(()=>void readClipboard());}}
+  }catch(error){if(!error.stalled)notify('Clipboard capture: '+error.message);}finally{capturing=false;if(pendingClipboard){pendingClipboard=false;queueMicrotask(()=>void readClipboard());}}
 }
 // A Linux selection disappears with the app that copied it; Spectacle quits
 // right after copying a screenshot. Like the desktop's clipboard manager,
 // serve the item captured from it again, unless something else was copied.
 async function keepClipboard(){
   const kept=keptClipboard;keptClipboard=null;
-  if(!kept||kept.fingerprint!==lastFingerprint||!await native.clipboardEmpty().catch(()=>false))return;
+  if(!kept||kept.fingerprint!==lastFingerprint||!await answered(native.clipboardEmpty()).catch(()=>false))return;
   ownWrites++;
-  try{await native.write({text:kept.kind==='image'?'':kept.value,png:kept.kind==='image'?kept.value:null,marker:copyMarker});ownFingerprint=(await clipboardContent())?.fingerprint||'';}
+  try{await native.write({text:kept.kind==='image'?'':kept.value,png:kept.kind==='image'?kept.value:null,marker:copyMarker});ownFingerprint=(await clipboardContent().catch(()=>null))?.fingerprint||'';}
   catch{}
   finally{ownWrites--;if(!ownWrites&&pendingClipboard&&!capturing){pendingClipboard=false;queueMicrotask(()=>void readClipboard());}}
 }
@@ -257,7 +263,7 @@ async function writeClipboard(selected) {
     // A watcher can report this write before its fingerprint is known; hold
     // capture until then so the copy is never taken in as a new item.
     ownWrites++;
-    try{await native.write({text:values.join('\n\n'),png,files,marker:copyMarker});ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;}
+    try{await native.write({text:values.join('\n\n'),png,files,marker:copyMarker});ownFingerprint=(await clipboardContent().catch(()=>null))?.fingerprint||'';lastFingerprint=ownFingerprint;}
     finally{ownWrites--;if(!ownWrites&&pendingClipboard&&!capturing){pendingClipboard=false;queueMicrotask(()=>void readClipboard());}}
     store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
   }

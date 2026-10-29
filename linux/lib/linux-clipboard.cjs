@@ -25,8 +25,8 @@ function readProcess(file,args,{limit=TEXT_LIMIT,timeout=3000,input=null,spawner
   child.on('close',code=>{
    if(code===0)return finish(null,Buffer.concat(chunks));
    const error=new Error(stderr.trim().slice(0,300)||'Clipboard helper failed.');
-   // wl-paste reports an empty clipboard or a missing type as a failure.
-   error.empty=/nothing is copied|no selection|clipboard content is not available|no suitable type/i.test(stderr);finish(error);
+   // wl-paste and xclip report an empty clipboard or a missing type as a failure.
+   error.empty=/nothing is copied|no selection|clipboard content is not available|no suitable type|there is no owner|cannot convert .* to target/i.test(stderr);finish(error);
   });
   if(input!==null){child.stdin.on('error',()=>{});child.stdin.end(input);}
  });
@@ -77,6 +77,18 @@ class WaylandClipboard{
  }
 }
 
+// xclip reads the X11 selection in its own process. A request to an owner
+// that quits mid-transfer may never be answered; a helper process can be
+// abandoned, while Electron's own reader would stay stuck for good.
+class X11Clipboard extends WaylandClipboard{
+ constructor({xclip,run=readProcess}){super({wlPaste:null,run});this.xclip=xclip;}
+ readType(type,limit){return this.run(this.xclip,['-selection','clipboard','-o','-t',type],{limit,timeout:limit>TEXT_LIMIT?10000:3000});}
+ async types(){
+  try{return lines(await this.run(this.xclip,['-selection','clipboard','-o','-t','TARGETS'],{limit:65536}));}
+  catch(error){if(error.empty)return[];throw error;}
+ }
+}
+
 // One wl-paste --watch process per offered kind: wl-paste only reports offers
 // that contain its requested type. Only change notifications cross the pipe;
 // the clipboard payload is discarded by the notification command.
@@ -116,7 +128,7 @@ async function clipboardSignature(clipboard,{images=false}={}){
  if(privateClipboard(entries.flatMap(entry=>entry.types))){for(const entry of entries)hash.update(JSON.stringify(entry.types));return hash.digest('hex');}
  for(const entry of entries){
   hash.update(JSON.stringify(entry.types));
-  const timestamp=entry.types.find(type=>/format="TIMESTAMP"/.test(type));
+  const timestamp=entry.types.find(type=>/^TIMESTAMP$|format="TIMESTAMP"/.test(type));
   if(timestamp){const bytes=Buffer.from(await(await entry.getType(timestamp)).arrayBuffer());if(bytes.length&&bytes.some(Boolean)){hash.update(bytes);stamped=true;}}
   if(!stamped&&entry.types.includes('text/plain')){const blob=await entry.getType('text/plain');hash.update(blob.size<=TEXT_LIMIT?Buffer.from(await blob.arrayBuffer()):Buffer.from(String(blob.size)));}
   if(images&&!stamped&&entry.types.includes('image/png')){const blob=await entry.getType('image/png');hash.update(blob.size<=IMAGE_LIMIT?Buffer.from(await blob.arrayBuffer()):Buffer.from(String(blob.size)));}
@@ -192,4 +204,4 @@ async function writeClipboard({clipboard,ClipboardItem,marker,text='',png=null,f
  }
  return{method:'wl-copy',type:primary.type};
 }
-module.exports={WaylandClipboard,WaylandWatchers,PollingSequence,clipboardSignature,pixelFingerprint,writeClipboard,fileClipboard,readProcess,copyProcess,TEXT_TYPES,FORMAT_MAP,MARKER_TYPE};
+module.exports={WaylandClipboard,X11Clipboard,WaylandWatchers,PollingSequence,clipboardSignature,pixelFingerprint,writeClipboard,fileClipboard,readProcess,copyProcess,TEXT_TYPES,FORMAT_MAP,MARKER_TYPE};

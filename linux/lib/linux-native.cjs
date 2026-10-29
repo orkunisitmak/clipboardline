@@ -1,7 +1,7 @@
 'use strict';
 const {execFile}=require('node:child_process');
 const {linuxSession,linuxTools}=require('./linux-session.cjs');
-const {WaylandClipboard,WaylandWatchers,PollingSequence,clipboardSignature,writeClipboard}=require('./linux-clipboard.cjs');
+const {WaylandClipboard,X11Clipboard,WaylandWatchers,PollingSequence,clipboardSignature,writeClipboard}=require('./linux-clipboard.cjs');
 
 // Linux implementation of the native bridge used by main.cjs. Window focus is
 // returned by the compositor when the shelves hide. Under X11 xdotool, when
@@ -33,16 +33,17 @@ function createLinuxNative({session=linuxSession(),tools=linuxTools(),clipboard,
  const selection={read:clipboard?.read?.bind(clipboard)};
  const bump=()=>{sequence=sequence>=0xffffffff?1:sequence+1;notify(sequence);};
  const startPolling=()=>{
-  reader=null;mode=wayland?'focused-polling':'x11-polling';
-  poller=new PollingSequence({signature:()=>clipboardSignature(selection,{images:!!options().images}),enabled:()=>{const value=options();return !!(value.text||value.images);},changed:value=>{sequence=value;notify(value);}}).start();
+  reader=!wayland&&tools.xclip?new X11Clipboard({xclip:tools.xclip,...(run?{run}:{})}):null;mode=wayland?'focused-polling':'x11-polling';
+  poller=new PollingSequence({signature:()=>clipboardSignature(reader||selection,{images:!!options().images}),enabled:()=>{const value=options();return !!(value.text||value.images);},changed:value=>{sequence=value;notify(value);}}).start();
  };
  const native={
   session,tools,
   // X11 has no change counter: read the selection now, so a copy made during
   // a capture read is detected like a Windows or Mac sequence change.
   clipboardSequence:async()=>poller?await poller.poll():sequence,
-  // wl-paste reads through data-control without focus. Elsewhere Electron's
-  // clipboard is current under X11 (and Xwayland on Mutter desktops).
+  // wl-paste reads through data-control without focus and xclip reads the X11
+  // selection; without them Electron's clipboard is current under X11 (and
+  // Xwayland on Mutter desktops).
   clipboardReader:fallback=>reader||fallback,
   // Nothing owns the selection, as after the app that copied has quit.
   clipboardEmpty:async()=>reader?!(await reader.types()).length:!(await selection.read()).some(entry=>entry.types?.length),
@@ -83,6 +84,7 @@ function createLinuxNative({session=linuxSession(),tools=linuxTools(),clipboard,
    if(wayland&&(!tools['wl-paste']||!tools['wl-copy']))missing.push('wl-clipboard');
    if(!tools.ffmpeg||!tools.ffprobe)missing.push('ffmpeg');
    if(session.session==='wayland'&&!tools.gdbus)missing.push('gdbus');
+   if(session.backend==='x11'&&!tools.xclip)missing.push('xclip');
    if(session.backend==='x11'&&!tools.xdotool)missing.push('xdotool');
    return{session:session.session,backend:session.backend,desktop:session.desktop,clipboardMonitor:mode,automaticPaste:!!xdotool,screenshot:session.session==='wayland'?'portal':'x11',recordings:!!(tools.ffmpeg&&tools.ffprobe),missing,problem};
   }

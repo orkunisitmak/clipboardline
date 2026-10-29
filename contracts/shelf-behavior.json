@@ -37,8 +37,8 @@
         "id": "linux-clipboard-monitoring",
         "macos": "NSPasteboard change count",
         "windows": "Clipboard sequence number from the native monitor",
-        "linux": "wl-clipboard data-control watchers on Wayland compositors that offer it (KDE Plasma, wlroots); Xwayland selection bridging on Mutter desktops (GNOME, Ubuntu); X11 selection polling elsewhere. Without wl-clipboard on such a Wayland compositor, copies are captured only while ClipBoardLine is focused.",
-        "reason": "Wayland only lets the focused client read the selection unless the compositor offers data-control; Mutter does not, but mirrors the selection to Xwayland. Admission, privacy markers and deduplication remain the shared policy."
+        "linux": "wl-clipboard data-control watchers on Wayland compositors that offer it (KDE Plasma, wlroots); Xwayland selection bridging on Mutter desktops (GNOME, Ubuntu); X11 selection polling elsewhere, read through xclip when it is installed. Without wl-clipboard on such a Wayland compositor, copies are captured only while ClipBoardLine is focused.",
+        "reason": "Wayland only lets the focused client read the selection unless the compositor offers data-control; Mutter does not, but mirrors the selection to Xwayland. An X11 request to an app that quits mid-transfer can stall Electron's reader for good, so a separate xclip process reads it. Admission, privacy markers and deduplication remain the shared policy."
       },
       {
         "id": "linux-paste-into-previous-application",

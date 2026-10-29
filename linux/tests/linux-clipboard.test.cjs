@@ -1,7 +1,7 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {EventEmitter}=require('node:events');
-const {WaylandClipboard,WaylandWatchers,PollingSequence,clipboardSignature,pixelFingerprint,writeClipboard,fileClipboard,readProcess,copyProcess,FORMAT_MAP,MARKER_TYPE}=require('../lib/linux-clipboard.cjs');
+const {WaylandClipboard,X11Clipboard,WaylandWatchers,PollingSequence,clipboardSignature,pixelFingerprint,writeClipboard,fileClipboard,readProcess,copyProcess,FORMAT_MAP,MARKER_TYPE}=require('../lib/linux-clipboard.cjs');
 const {readClipboardContent}=require('../lib/clipboard-policy.cjs');
 const {plainURL}=require('../lib/model.cjs');
 
@@ -28,6 +28,7 @@ test('readProcess keeps at most limit+1 bytes, reports empty clipboards and enfo
   const small=readProcess('wl-paste',[],{spawner,limit:10});child.stdout.emit('data',Buffer.from('hello'));child.emit('close',0);assert.equal((await small).toString(),'hello');
   const large=readProcess('wl-paste',[],{spawner,limit:4});child.stdout.emit('data',Buffer.from('0123456789'));assert.equal((await large).toString(),'01234');assert.equal(child.killed,true);
   const empty=readProcess('wl-paste',[],{spawner});child.stderr.emit('data',Buffer.from('Nothing is copied\n'));child.emit('close',1);await assert.rejects(empty,error=>error.empty===true);
+  for(const message of ['xclip: Error: There is no owner for the CLIPBOARD selection',"xclip: Error: 'Chromium clipboard' (0x200000) cannot convert CLIPBOARD selection to target 'image/png'"]){const missing=readProcess('xclip',[],{spawner});child.stderr.emit('data',Buffer.from(message+'\n'));child.emit('close',1);await assert.rejects(missing,error=>error.empty===true,message);}
   const slow=readProcess('wl-paste',[],{spawner,timeout:5});await assert.rejects(slow,/timed out/);assert.equal(child.killed,true);
   const written=readProcess('wl-copy',[],{spawner,input:Buffer.from('in')});child.emit('close',0);await written;assert.deepEqual(child.stdin.written.map(String),['in']);
 });
@@ -148,4 +149,19 @@ test('the X11 change signature never reads a private copy and skips payloads a t
   assert.deepEqual(reads,[],'a password manager copy is identified by its formats only');assert.equal(one,two);
   const stamp='electron application/osclipboard;format="TIMESTAMP"';
   await clipboardSignature(clipboard(['text/plain',stamp],{'text/plain':'note',[stamp]:Buffer.from([7,0,0,0])}));assert.deepEqual(reads,[stamp],'a timestamped copy is not read');
+});
+test('xclip reads the X11 selection in its own process with raw target names and the copy timestamp',async()=>{
+  // A synthetic xclip: the selection is a map of target to bytes.
+  let offer={TIMESTAMP:'42149757\n',TARGETS:'',UTF8_STRING:'X11 note','x-kde-passwordManagerHint':'secret'};const calls=[];
+  const run=async(file,args,options)=>{calls.push({file,args,limit:options.limit});assert.deepEqual(args.slice(0,4),['-selection','clipboard','-o','-t']);const target=args[4];
+    if(!offer)throw Object.assign(new Error('There is no owner for the CLIPBOARD selection'),{empty:true});
+    if(target==='TARGETS')return Buffer.from(Object.keys(offer).join('\n')+'\n');if(!Object.hasOwn(offer,target))throw Object.assign(new Error('cannot convert'),{empty:true});return Buffer.from(offer[target]);};
+  const clipboard=new X11Clipboard({xclip:'/usr/bin/xclip',run});
+  assert.equal(await admit(clipboard),null,'a password manager hint keeps the copy private');
+  delete offer['x-kde-passwordManagerHint'];
+  const note=await admit(clipboard);assert.equal(note.kind,'text');assert.equal(note.value,'X11 note');
+  assert.ok(calls.some(call=>call.file==='/usr/bin/xclip'&&call.args[4]==='UTF8_STRING'),'text is read from the UTF8_STRING target');
+  calls.length=0;const first=await clipboardSignature(clipboard);assert.deepEqual(calls.map(call=>call.args[4]),['TARGETS','TIMESTAMP'],'a timestamped copy is identified without reading it');
+  offer={...offer,TIMESTAMP:'42150000\n'};assert.notEqual(await clipboardSignature(clipboard),first,'a new copy has a new timestamp');
+  offer=null;assert.deepEqual(await clipboard.read(),[]);assert.deepEqual(await clipboard.types(),[]);
 });
