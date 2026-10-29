@@ -47,6 +47,14 @@ async function main(){
     const native=await application.evaluate(()=>global.__clipboardLineTest.native.captureDiagnostics());
     assert.equal(native.platform,'linux');check(`desktop bridge reports ${native.session}/${native.compositor} (window: ${native.windowBackend||'compositor focus return'}, keys: ${native.keyBackend||'manual paste'})`);
   }finally{await application.close().catch(()=>{});fs.rmSync(data,{recursive:true,force:true});}
+  // Desktop actions start the first instance in the requested view.
+  const library=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-linux-'));
+  const launched=await electron.launch({args:[path.resolve(__dirname,'..'),'--test-mode','--test-data='+library,'--library'],timeout:60000});
+  try{
+    const page=await launched.firstWindow();await page.waitForFunction(()=>!!window.clipboardLine);
+    await until(()=>page.evaluate(()=>window.clipboardLine.state()),value=>value.view==='library');
+    check('a first launch with --library opens the Library');
+  }finally{await launched.close().catch(()=>{});fs.rmSync(library,{recursive:true,force:true});}
   console.log(`${results.length} Linux acceptance checks passed.`);
 }
 main().catch(error=>{console.error(error);process.exit(1);});

@@ -136,7 +136,9 @@ async function show(next='shelves',event=null) {
     const animate=next==='shelves'&&(!window.isVisible()||wasClosing);
     if(animate)await shelfMotion.request('prepare',{hidden:!window.isVisible()});else await shelfMotion.request('reset');
     if(generation!==visibilityGeneration)return;
-    window.show();window.focus();if(linux)await linux.desktop.present(next==='shelves').catch(()=>{});windowBounds.shown(window);broadcast({surfaceOnly:true});
+    window.show();window.focus();
+    if(linux){await linux.desktop.present(next==='shelves').catch(()=>{});if(generation!==visibilityGeneration)return;}
+    windowBounds.shown(window);broadcast({surfaceOnly:true});
     // Commands can await the settled pixels, but the window and keyboard are
     // available immediately. A concurrent toggle can cancel this animation.
     if(animate)await shelfMotion.request('open');
@@ -475,18 +477,19 @@ else app.whenReady().then(async()=>{
     updateLaunchTimer=setTimeout(()=>void updateScheduler.tick(),10000);updateLaunchTimer.unref();
     powerMonitor.on('resume',()=>void updateScheduler.tick());
   }
-  if(!process.argv.includes('--hidden'))await show('shelves');
+  await launch(process.argv,{running:false});
   // Test hooks are main-process only and require an explicit isolated data path.
   if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
 // Wayland desktops without the shortcut portal can bind a custom shortcut to
-// `clipboardline --toggle`, `--search` or `--library`.
-app.on('second-instance',(_event,argv=[])=>{
-  if(!window)return;
-  if(argv.includes('--toggle'))void(desiredVisible?hide():show('shelves'));
-  else if(argv.includes('--search'))void show('shelves',{search:true});
-  else if(argv.includes('--library'))void show('library');
-  else void show('shelves');
-});
+// `clipboardline --toggle`, `--search` or `--library`. A first launch honors the
+// same action; only `--hidden` without an action starts in the background.
+function launch(argv=[],{running=true}={}){
+  if(argv.includes('--search'))return show('shelves',{search:true});
+  if(argv.includes('--library'))return show('library');
+  if(argv.includes('--toggle')&&running&&desiredVisible)return hide();
+  if(running||argv.includes('--toggle')||!argv.includes('--hidden'))return show('shelves');
+}
+app.on('second-instance',(_event,argv=[])=>{if(window)void launch(argv);});
 app.on('activate',()=>{if(window)void show('shelves');});
 app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
