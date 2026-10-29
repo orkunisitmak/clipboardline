@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path');
 const {spawn}=require('node:child_process');
 const {windowsEnvironment}=require('./windows-environment.cjs');
+const {job:linuxJob}=require('./linux-media.cjs');
 const MAXIMUM_VIDEO_BYTES=2*1024*1024*1024,MAXIMUM_JOB_MS=10*60*1000;
 const SCRIPT=__dirname.includes('app.asar')?path.join(process.resourcesPath,'native','windows-media.ps1'):path.join(__dirname,'..','native','windows-media.ps1');
 const OWNER='clipboardline-media-v1',MARKER='.clipboardline-media.json';
@@ -61,13 +62,13 @@ class MediaJobs {
  }
  run(mode,source,options={}){return this.scheduler.schedule(mode,signal=>this.execute(mode,source,{...options,signal}),{signal:options.signal,onDiscard:result=>this.release(result)});}
  async execute(mode,source,{startMs,endMs,signal,verifyAudio=false}={}){
-  if(process.platform!=='win32')throw new Error('Native recording processing requires Windows.');
+  if(!['win32','linux'].includes(process.platform))throw new Error('Native recording processing requires Windows or Linux.');
   if(signal?.aborted)throw aborted();const before=validVideo(source);safeDirectory(this.directory);
   if(mode==='Trim'&&(!Number.isFinite(startMs)||!Number.isFinite(endMs)||startMs<0||endMs-startMs<50))throw new Error('Choose a nonempty trim interval.');
   const directory=fs.mkdtempSync(path.join(this.directory,'job-'));fs.writeFileSync(path.join(directory,MARKER),JSON.stringify({owner:OWNER}),{flag:'wx',mode:0o600});
   let keep=false;
   try{
-   const result=await new Promise((resolve,reject)=>{
+   const result=process.platform==='linux'?await this.executeLinux(mode,source,directory,{startMs,endMs,signal,verifyAudio}):await new Promise((resolve,reject)=>{
     const executable=path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
     const child=spawn(executable,['-NoLogo','-NoProfile','-MTA','-NonInteractive','-ExecutionPolicy','Bypass','-File',this.script,'-Mode',mode],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:windowsEnvironment()});
     let stdout='',stderr='',failure=null,finished=false;this.jobs.set(directory,child);
@@ -86,6 +87,19 @@ class MediaJobs {
    if(mode==='Trim'){const file=path.join(directory,'trimmed.mp4');if(result.trimmedFile!=='trimmed.mp4')throw new Error('Invalid recording output.');validVideo(file);keep=true;return{...details,file,posterFile:poster,jobDirectory:directory,...(audioFile?{audioFile}:{})};}
    keep=true;return{...details,file:source,posterFile:poster,jobDirectory:directory,...(audioFile?{audioFile}:{})};
   }finally{if(!keep)this.remove(directory);}
+ }
+ // FFmpeg replaces the WinRT helper on Linux; the response is validated by the
+ // same poster, trim, size and source-identity checks as on Windows.
+ async executeLinux(mode,source,directory,{startMs,endMs,signal,verifyAudio}){
+  const controller=new AbortController(),cancel=()=>controller.abort();let timedOut=false;
+  signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted)cancel();
+  const timer=setTimeout(()=>{timedOut=true;controller.abort();},this.timeout);this.jobs.set(directory,{kill:cancel});
+  try{return await linuxJob(mode,{source,outputDirectory:directory,verifyAudio:verifyAudio===true,...(mode==='Trim'?{startMs,endMs}:{})},{signal:controller.signal});}
+  catch(error){
+   if(timedOut)throw new Error('Video operation timed out after ten minutes.');
+   if(signal?.aborted||error.name==='AbortError')throw aborted();
+   const problem=new Error(String(error.message||'FFmpeg could not process this recording.').slice(0,500));problem.code='MEDIA_UNSUPPORTED_OR_FAILED';throw problem;
+  }finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);this.jobs.delete(directory);}
  }
  probe(file,options){return this.run('Inspect',file,options);}
  inspect(file,options){return this.probe(file,options);}
