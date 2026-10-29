@@ -718,3 +718,16 @@ test('Wallet Guard setting is on by default, localized, and sends a boolean pref
  await f.setting('walletGuard',false);assert.deepEqual(f.commands.filter(value=>value.action==='setSettings').at(-1).payload.patch,{walletGuard:false});
  await f.ready();assert.match(f.main,/data-setting="walletGuard"  aria-label/);
 });
+
+test('a capture crop owns Enter before the next render tick can copy and hide the shelves',async()=>{
+ const f=fixture();await f.ready();
+ f.api.emit({viewEvent:{serial:'immediate-capture-crop',selectId:f.image,kind:'image',preview:true,crop:true}});
+ await f.key('Enter');
+ assert.equal(f.commands.filter(value=>value.action==='copy').length,0,'Enter belongs to the capture crop immediately');
+ assert.equal(f.state.windowVisible,true,'Applying the crop keeps its preview open');
+ await f.ready();
+ assert.doesNotMatch(f.overlay,/id="markup-canvas"/,'An unchanged crop finishes back in preview');
+ await f.key('Enter');
+ assert.equal(f.commands.filter(value=>value.action==='copy').length,1,'Enter in the finished preview copies normally');
+ assert.equal(f.state.windowVisible,false);
+});

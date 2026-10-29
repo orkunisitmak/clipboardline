@@ -31,4 +31,21 @@ function assertImagePreviewFit(geometry){
  for(const key of ['x','y','width','height'])assert.ok(Math.abs(displayed[key]-expected[key])<=1,'The image must fill its aspect-fitting preview content ('+key+'): '+JSON.stringify(geometry));
 }
 
-module.exports={sampleImagePreviewGeometry,assertImagePreviewFit};
+// Thumbnail decoding can trigger a native state packet that replaces the
+// preview between a separate image-ready check and a locator boundingBox().
+// Observe the thumbnail and its own visible panel together on two frames.
+// A disappearing or replaced preview remains pending instead of returning a
+// null box (or accidentally accepting the next preview's dimensions).
+async function sampleLinkPreviewGeometry(){
+ const read=()=>{
+  const panel=document.getElementById('preview-dialog'),image=document.getElementById('preview-link-media');
+  if(!panel||!image||!panel.contains(image))return{ready:false,reason:'link preview nodes missing'};
+  const rect=panel.getBoundingClientRect(),style=getComputedStyle(panel);
+  const geometry={dimensions:{width:rect.width,height:rect.height},naturalHeight:image.naturalHeight,letterboxRemoved:image.dataset.letterboxRemoved==='true'};
+  return{panel,image,geometry,ready:panel.isConnected&&image.isConnected&&image.complete&&image.naturalWidth>0&&image.naturalHeight>0&&rect.width>0&&rect.height>0&&style.display!=='none'&&style.visibility!=='hidden'};
+ };
+ const first=read();await new Promise(resolve=>requestAnimationFrame(resolve));const next=read();
+ return{...next.geometry,ready:!!next.ready,reason:next.reason,stable:!!first.ready&&!!next.ready&&first.panel===next.panel&&first.image===next.image&&JSON.stringify(first.geometry)===JSON.stringify(next.geometry)};
+}
+
+module.exports={sampleImagePreviewGeometry,assertImagePreviewFit,sampleLinkPreviewGeometry};
