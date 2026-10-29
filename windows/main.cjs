@@ -109,6 +109,8 @@ function rememberNormalBounds(){if(window&&view!=='shelves'&&!applyingBounds&&!w
 function fitNormalBounds(area){const width=Math.min(area.width,normalBounds?.width||1180),height=Math.min(area.height,normalBounds?.height||800);return{width,height,x:Math.min(area.x+area.width-width,Math.max(area.x,normalBounds?.x??Math.round(area.x+(area.width-width)/2))),y:Math.min(area.y+area.height-height,Math.max(area.y,normalBounds?.y??Math.round(area.y+(area.height-height)/2)))};}
 async function show(next='shelves',event=null) {
   cancelRecordingTrims();
+  // Like macOS focusShelf: selecting an item on a hidden shelf shows that shelf alone.
+  if(next==='shelves'&&event?.selectId&&['image','text','link'].includes(event.kind)&&!store.data.settings.visibleKinds.includes(event.kind))store.modify('setSettings',{patch:{visibleKinds:[event.kind]}});
   if(pastePromise){pasteGeneration++;cancelNativePaste();}
   const generation=++visibilityGeneration,wasClosing=!desiredVisible&&window.isVisible();desiredVisible=true;shelfMotion.cancel();showing++;
   try {
@@ -278,9 +280,40 @@ async function recognize(id,quiet=false) {
   try{let image=nativeImage.createFromPath(file);const size=image.getSize(),scale=Math.min(1,2400/Math.max(size.width,size.height));if(scale<1)image=image.resize({width:Math.round(size.width*scale),height:Math.round(size.height*scale)});const result=await worker.recognize(image.toPNG());if(!store.data.items.includes(item)||(item.renderedFile||item.imageFile)!==fingerprint)throw new Error('Image changed during recognition');item.ocrText=String(result.data.text||'').slice(0,1024*1024);store.persist();if(!quiet)notify(item.ocrText?'Image text ready':'No text found');else broadcast();return{text:item.ocrText,id};}
   finally{await worker.terminate();}
 }
-function configureWatchers() {
+// Win+Shift+S, PrtSc and Win+PrtSc save into the Screenshots known folder,
+// which follows Pictures (often redirected to OneDrive) unless relocated.
+// The relocated path is read through PowerShell as Base64 UTF-8 so non-ASCII
+// folder names survive any console code page. Each reconfigure re-resolves it
+// off the main path; watchers are rebuilt only when the folder changes, and a
+// failed lookup retries after a minute.
+let watchedFolders=new Set(),systemScreenshots=null,resolvingScreenshots=false,screenshotRetry=null;
+function resolveSystemScreenshotFolder() {
+  if(resolvingScreenshots)return;resolvingScreenshots=true;clearTimeout(screenshotRetry);
+  const ready=folder=>{try{if(folder&&path.isAbsolute(folder)){fs.mkdirSync(folder,{recursive:true});if(fs.statSync(folder).isDirectory())return folder;}}catch{}return null;};
+  const powershell=path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
+  const query="$v=(Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders' -ErrorAction SilentlyContinue).'{B7BEDE81-DF94-4682-A7D8-57A52620B86F}';if($v){[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($v))}";
+  require('node:child_process').execFile(powershell,['-NoProfile','-NonInteractive','-Command',query],{windowsHide:true,timeout:10000},(error,stdout)=>{
+    resolvingScreenshots=false;
+    const relocated=error?'':Buffer.from(String(stdout).trim(),'base64').toString('utf8');
+    const folder=ready(relocated)||ready(path.join(app.getPath('pictures'),'Screenshots'));
+    if(!folder)screenshotRetry=setTimeout(()=>{if(store.data.settings.watchSystemScreenshots)resolveSystemScreenshotFolder();},60000);
+    if(folder!==systemScreenshots){systemScreenshots=folder;configureWatchers(false);}
+  });
+}
+function systemScreenshotFolder(resolve) {
+  if(testMode||process.platform!=='win32'||!store.data.settings.watchSystemScreenshots)return null;
+  if(resolve)resolveSystemScreenshotFolder();
+  return systemScreenshots;
+}
+function configureWatchers(resolve=true) {
   for(const watcher of watchers)watcher.close();watchers=[];
-  for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(()=>{});}catch{}},700));});watcher.on('error',()=>{});watchers.push(watcher);}catch{}}
+  const system=systemScreenshotFolder(resolve);
+  const folders=[...store.data.settings.watchFolders];
+  if(system&&!folders.some(folder=>path.resolve(folder).toLowerCase()===path.resolve(system).toLowerCase()))folders.push(system);
+  // A debounced import still pending when its folder stops being watched (for
+  // example the screenshot setting is turned off) is dropped when it fires.
+  watchedFolders=new Set(folders.map(folder=>path.resolve(folder).toLowerCase()));
+  for(const folder of folders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);if(!watchedFolders.has(path.resolve(folder).toLowerCase()))return;try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(()=>{});}catch{}},700));});watcher.on('error',()=>{});watchers.push(watcher);}catch{}}
 }
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){
@@ -385,6 +418,7 @@ async function command(action,payload={}) {
     const previousShortcuts={...store.data.settings.shortcuts};
     store.modify('setSettings',{patch});if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
     if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastFingerprint='';
+    if(Object.hasOwn(patch,'watchSystemScreenshots'))configureWatchers();
     if(Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
   }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
