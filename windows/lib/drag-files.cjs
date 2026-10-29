@@ -1,5 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path');
+const {linkFile}=require('./link-file.cjs');
 const MARKER='.clipboardline-drag.json',OWNER='clipboardline-native-drag-v1';
 function regular(file){const value=fs.lstatSync(file);return value.isFile()&&!value.isSymbolicLink();}
 class DragFiles {
@@ -23,14 +24,14 @@ class DragFiles {
     try{
       if(records.some(value=>value.kind!=='image')){
         batch=fs.mkdtempSync(path.join(this.directory,'batch-'));fs.chmodSync(batch,0o700);
-        const names=records.flatMap((value,index)=>value.kind==='image'?[]:[String(index+1).padStart(4,'0')+'-'+value.id+(value.kind==='link'?'.url':'.txt')]);
+        const names=records.flatMap((value,index)=>value.kind==='image'?[]:[String(index+1).padStart(4,'0')+'-'+value.id+(value.kind==='link'?linkFile(value.url).extension:'.txt')]);
         fs.writeFileSync(path.join(batch,MARKER),JSON.stringify({owner:OWNER,files:names}),{flag:'wx',mode:0o600});
       }
       const files=records.map((value,index)=>{
         if(value.kind==='image'){const file=mediaPath(value.id);if(!regular(file))throw new Error('Managed image is unavailable.');return file;}
         // UUID/index-only labels never reveal copied API keys, titles or URLs.
-        const name=String(index+1).padStart(4,'0')+'-'+value.id+(value.kind==='link'?'.url':'.txt');
-        const file=path.join(batch,name),bytes=value.kind==='link'?'[InternetShortcut]\r\nURL='+value.url+'\r\n':value.text;
+        const link=value.kind==='link'?linkFile(value.url):null,name=String(index+1).padStart(4,'0')+'-'+value.id+(link?link.extension:'.txt');
+        const file=path.join(batch,name),bytes=link?link.bytes:value.text;
         fs.writeFileSync(file,bytes,{flag:'wx',mode:0o600});generated.push(name);return file;
       });
       if(batch)this.batches.add(batch);
@@ -46,7 +47,7 @@ class DragFiles {
       const stat=fs.lstatSync(batch);if(!stat.isDirectory()||stat.isSymbolicLink())return false;
       const marker=path.join(batch,MARKER);if(!regular(marker)||fs.statSync(marker).size>100000)return false;
       const value=JSON.parse(fs.readFileSync(marker,'utf8'));
-      if(value.owner!==OWNER||!Array.isArray(value.files)||value.files.length>1000||new Set(value.files).size!==value.files.length||value.files.some(name=>typeof name!=='string'||!/^\d{4}-[-0-9a-f]{36}\.(txt|url)$/.test(name)))return false;
+      if(value.owner!==OWNER||!Array.isArray(value.files)||value.files.length>1000||new Set(value.files).size!==value.files.length||value.files.some(name=>typeof name!=='string'||!/^\d{4}-[-0-9a-f]{36}\.(txt|url|desktop)$/.test(name)))return false;
       const expected=new Set([...value.files,MARKER]),actual=fs.readdirSync(batch);
       if(actual.length>expected.size||actual.some(name=>!expected.has(name)||!regular(path.join(batch,name))))return false;
       for(const name of value.files)if(actual.includes(name))fs.unlinkSync(path.join(batch,name));fs.unlinkSync(marker);fs.rmdirSync(batch);this.batches.delete(batch);return true;

@@ -129,6 +129,16 @@ class Updates {
     this.installPromise=operation;operation.then(()=>{},()=>{if(this.installPromise===operation)this.installPromise=null;});return operation;
   }
 }
+// Linux packages have no signed in-app channel yet. AppImage, .deb and .rpm
+// installs are replaced by a newer package; checks never download or install.
+const RELEASES='https://github.com/orkunisitmak/clipboardline/releases';
+class ManualUpdates{
+  constructor({version='0.0.0',build=0,changed=()=>{}}={}){this.changed=changed;this.manifest=null;this.state={status:'manual',message:'Install newer Linux releases as an AppImage, .deb or .rpm package.',error:null,checkedAt:null,lastAttemptAt:null,currentVersion:version,currentBuild:build,busy:false,canInstall:false,availableVersion:null,availableBuild:null,releasesURL:RELEASES};}
+  set(state){this.state={...this.state,...state,busy:false,canInstall:false};try{this.changed();}catch{}}
+  check(){return Promise.resolve(this.state);}
+  announce(){}
+  install(){return Promise.reject(new Error('Linux packages are updated by installing a newer release.'));}
+}
 class AutomaticUpdateScheduler{
   constructor(updates,{enabled=()=>true,clock=Date.now,interval=3600000,retry=300000}={}){this.updates=updates;this.enabled=enabled;this.clock=clock;this.interval=interval;this.retry=retry;}
   tick({force=false}={}){
@@ -138,4 +148,4 @@ class AutomaticUpdateScheduler{
     return force||this.clock()>=due?this.updates.check({force}):Promise.resolve(state);
   }
 }
-module.exports = {Updates,AutomaticUpdateScheduler,verifyEnvelope,compareVersions,verifiedInstaller,UPDATE_ARGUMENTS,FEED,PUBLIC_KEY,REPOSITORY};
+module.exports = {Updates,ManualUpdates,RELEASES,AutomaticUpdateScheduler,verifyEnvelope,compareVersions,verifiedInstaller,UPDATE_ARGUMENTS,FEED,PUBLIC_KEY,REPOSITORY};

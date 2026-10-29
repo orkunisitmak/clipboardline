@@ -7,8 +7,10 @@ test('native drag supplies one ordered private text/link file per item and prese
   const root=fixture(t),original=path.join(root,'original.png');fs.writeFileSync(original,'unchanged image bytes');const drag=new DragFiles(root);
   const first=text(2,'Line one\nLine two'),image={...text(1),kind:'image'},link={...text(3),kind:'link',url:'https://example.com/private?code=synthetic'};
   const batch=drag.prepare([first,image,link],id=>{assert.equal(id,image.id);return original;});
-  assert.equal(batch.files.length,3);assert.equal(batch.files[1],original);assert.equal(fs.readFileSync(batch.files[0],'utf8'),first.text);assert.equal(fs.readFileSync(batch.files[2],'utf8'),'[InternetShortcut]\r\nURL='+link.url+'\r\n');
-  assert.equal(path.basename(batch.files[0]),'0001-'+first.id+'.txt');assert.equal(path.basename(batch.files[2]),'0003-'+link.id+'.url');assert.ok(batch.files.every(file=>!file.includes('Sensitive')));
+  assert.equal(batch.files.length,3);assert.equal(batch.files[1],original);assert.equal(fs.readFileSync(batch.files[0],'utf8'),first.text);// Each operating system receives its own native link file type.
+  const linux=process.platform==='linux';
+  assert.equal(fs.readFileSync(batch.files[2],'utf8'),linux?'[Desktop Entry]\nType=Link\nName=example.com\nURL='+link.url+'\nIcon=text-html\n':'[InternetShortcut]\r\nURL='+link.url+'\r\n');
+  assert.equal(path.basename(batch.files[0]),'0001-'+first.id+'.txt');assert.equal(path.basename(batch.files[2]),'0003-'+link.id+(linux?'.desktop':'.url'));assert.ok(batch.files.every(file=>!file.includes('Sensitive')));
   const second=drag.prepare([first],()=>{throw new Error('No image');});assert.notEqual(batch.files[0],second.files[0]);drag.dispose();
   assert.equal(fs.existsSync(batch.batch),false);assert.equal(fs.existsSync(second.batch),false);assert.equal(fs.readFileSync(original,'utf8'),'unchanged image bytes');
 });

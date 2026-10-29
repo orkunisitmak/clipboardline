@@ -21,17 +21,25 @@ const {mediaOrigin}=require('./lib/media-policy.cjs');
 const {mediaResponse,mediaGenerationMatches}=require('./lib/media-response.cjs');
 const {MediaJobs,MAXIMUM_VIDEO_BYTES}=require('./lib/media.cjs');
 const {copyFiles,cancelFileCopies}=require('./lib/native-files.cjs');
-const native = require('./lib/native.cjs');
+const linuxSupport=process.platform==='linux'?require('./lib/linux-session.cjs'):null;
+const linuxSession=linuxSupport?.linuxSession()||null,linuxTools=linuxSupport?.linuxTools()||null;
+const native = linuxSession?require('./lib/linux-native.cjs').createLinuxNative({session:linuxSession,tools:linuxTools,clipboard,ClipboardItem,options:captureOptions,focused:()=>!!window&&!window.isDestroyed()&&window.isFocused()}):require('./lib/native.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
+const {LinuxPasteTargets}=require('./lib/linux-native.cjs');
+const {setAutostart}=require('./lib/linux-autostart.cjs');
+const {portalScreenshot}=require('./lib/linux-screenshot.cjs');
+const {linkFile}=require('./lib/link-file.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
 const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
-const {Updates,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
+const {Updates,ManualUpdates,RELEASES,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
 const {GlobalShortcuts}=require('./lib/global-shortcuts.cjs');
 const {ImageSearch,modelPaths}=require('./lib/image-search.cjs');
 const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
-const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
+const packageInfo=require('./package.json');
+// Platform build counters are independent updater identifiers.
+const BUILD_NUMBER=linuxSession?Number(packageInfo.clipboardLineLinuxBuild)||1:Number(packageInfo.clipboardLineBuild)||63;
 const testMode = process.argv.includes('--test-mode');
 const testFolder = process.argv.find(value=>value.startsWith('--test-data='))?.slice('--test-data='.length);
 const testTray=testMode&&!!testFolder&&process.argv.includes('--test-tray');
@@ -39,6 +47,12 @@ if(testMode && testFolder) app.setPath('userData',path.resolve(testFolder));
 const development=!app.isPackaged&&!testMode;
 if(development){const directory=path.join(app.getPath('appData'),'ClipBoardLine Dev');fs.mkdirSync(directory,{recursive:true,mode:0o700});app.setPath('userData',directory);}
 app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
+if(linuxSession){
+  // Selected before ready; lib/linux-session.cjs documents the desktop policy.
+  // Wayland global shortcuts are granted by the desktop's GlobalShortcuts portal.
+  if(!process.argv.some(value=>value.startsWith('--ozone-platform=')))app.commandLine.appendSwitch('ozone-platform',linuxSession.backend);
+  if(linuxSession.backend==='wayland')app.commandLine.appendSwitch('enable-features','GlobalShortcutsPortal');
+}
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
 let lastFingerprint='',ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
@@ -47,7 +61,7 @@ let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
 const shelfMotion=new MotionBridge(value=>{if(window&&!window.isDestroyed())window.webContents.send('clipboardline:shelf-motion',value);});
 const windowBounds=new WindowBounds();
-const pasteTargets=new PasteTargetTracker(process.pid);
+const pasteTargets=linuxSession?new LinuxPasteTargets(process.pid):new PasteTargetTracker(process.pid);
 const entry = pathToFileURL(path.join(__dirname,'index.html')).href;
 const copyMarker = crypto.randomBytes(16);
 const pending = new Map();
@@ -65,12 +79,14 @@ async function readSemanticImage(id){
  if(!width||!height||width*height>80_000_000||Math.min(width,height)*scale<120||Math.max(width,height)/Math.min(width,height)>4)return null;
  // Electron delegates thumbnail decoding to the OS asynchronously. Inference
  // and pixel conversion stay in the worker, keeping large PNGs off the UI loop.
- let image=await nativeImage.createThumbnailFromPath(file,{width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))});if(image.isEmpty())return null;
+ const thumbnail={width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))};
+ let image=linuxSession?nativeImage.createFromPath(file):await nativeImage.createThumbnailFromPath(file,thumbnail);if(image.isEmpty())return null;
+ if(linuxSession&&scale<1)image=image.resize({...thumbnail,quality:'best'});
  const size=image.getSize(),fit=Math.min(1,1024/Math.max(size.width,size.height));if(fit<1)image=image.resize({width:Math.max(1,Math.round(size.width*fit)),height:Math.max(1,Math.round(size.height*fit)),quality:'best'});
  const resized=image.getSize();return{bitmap:image.toBitmap(),width:resized.width,height:resized.height};
 }
 
-function state(result,{surfaceOnly=false}={}) { const light=surfaceOnly&&lastBroadcastLibraryRevision===store.revision;return {...(light?{surfaceOnly:true}:store.publicState()),libraryRevision:store.revision,version:app.getVersion(),build:BUILD_NUMBER,platform:process.platform,development,view,windowMode:view==='shelves'?'overlay':'normal',windowMaximized:window?.isMaximized()||false,windowVisible:desiredVisible&&(window?.isVisible()||false),shortcutRecordingToken:shortcutRecording?.token||null,message:message||store.privacyWarning||'',viewEvent,imageSearch:{...(imageSearch?.state||{available:false,indexing:false,pending:0,revision:0})},update:{...updates.state},...(result===undefined?{}:{result})}; }
+function state(result,{surfaceOnly=false}={}) { const light=surfaceOnly&&lastBroadcastLibraryRevision===store.revision;return {...(light?{surfaceOnly:true}:store.publicState()),libraryRevision:store.revision,version:app.getVersion(),build:BUILD_NUMBER,platform:process.platform,development,view,windowMode:view==='shelves'?'overlay':'normal',windowMaximized:window?.isMaximized()||false,windowVisible:desiredVisible&&(window?.isVisible()||false),shortcutRecordingToken:shortcutRecording?.token||null,message:message||store.privacyWarning||'',viewEvent,imageSearch:{...(imageSearch?.state||{available:false,indexing:false,pending:0,revision:0})},update:{...updates.state},...(linuxSession?{linux:native.status()}:{}),...(result===undefined?{}:{result})}; }
 function broadcast({surfaceOnly=false}={}) {
   // Visibility and native bounds do not change library content. Retain the
   // renderer's existing rows instead of cloning and sending the full history
@@ -159,8 +175,9 @@ async function hide(restore=true) {
   hidePromise=operation;
   try{await operation;}finally{if(hidePromise===operation)hidePromise=null;}
 }
+function captureOptions(){const settings=store?.data.settings||{};return{text:!!(settings.captureText||settings.captureLinks),images:!!settings.captureImages};}
 async function clipboardContent() {
-  return readClipboardContent({clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL});
+  return readClipboardContent({clipboard:native.clipboardReader?.(clipboard)??clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL});
 }
 async function readClipboard() {
   if(capturing){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;capturing=true;
@@ -197,6 +214,15 @@ async function writeClipboard(selected) {
   if(!selected.length)throw new Error('Select an item first');
   const images=selected.filter(item=>item.kind==='image');
   const values=selected.filter(item=>item.kind!=='image').map(item=>item.kind==='link'?item.url:item.text);
+  if(linuxSession){
+    // Several images or any recording are offered as a file list (text/uri-list
+    // and GNOME's copied-files format) with the first still image as PNG.
+    const files=images.length>1||images.some(item=>item.recording)?images.map(item=>store.mediaPath(item.id)):[];
+    const still=images.find(item=>!item.recording);let png=null;
+    if(still){const image=nativeImage.createFromPath(store.mediaPath(still.id));if(image.isEmpty())throw new Error('Image unavailable');png=image.toPNG();}
+    await native.write({text:values.join('\n\n'),png,files,marker:copyMarker});
+    ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
+  }
   if(images.some(item=>item.recording)){
     await copyFiles({files:images.map(item=>store.mediaPath(item.id)),marker:copyMarker.toString('base64'),text:values.join('\n\n')});
     ownFingerprint=(await clipboardContent())?.fingerprint||'';lastFingerprint=ownFingerprint;store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
@@ -214,6 +240,7 @@ async function copy(payload,paste=false) {
   if(pastePromise)return pastePromise;
   const selected=store.selected(ids(payload.ids));
   if(!selected.length)throw new Error('Select an item first');
+  if(paste&&linuxSession)return linuxPaste(selected);
   const target=paste?pasteTargets.resolve(previous):previous;
   if(paste)previous=target;
   if(paste&&(!target||!target.editable||target.secure))throw new Error('Select an editable field in another application, then reopen the shelves.');
@@ -235,6 +262,20 @@ async function copy(payload,paste=false) {
   if(payload.keepOpen&&!paste){notify('Copied');return;}
   await hide();
 }
+// Linux: copy while ClipBoardLine still owns keyboard focus, hide so the
+// compositor returns focus, then paste only where xdotool can do it safely.
+let linuxPasteHintShown=false;
+async function linuxPaste(selected){
+  const generation=++pasteGeneration,target=pasteTargets.resolve(previous);
+  const current=()=>{if(generation!==pasteGeneration)throw new Error('Paste canceled by another browsing action.');};
+  const operation=(async()=>{try{
+    await writeClipboard(selected);current();await hide(false);current();
+    if(target)await native.restore(target);current();
+    const result=await native.paste(target);current();if(store.data.settings.sounds)shell.beep();
+    if(!result.pasted&&!linuxPasteHintShown&&!testMode&&Notification.isSupported()){linuxPasteHintShown=true;new Notification({title:'Copied to the clipboard',body:'Press Ctrl+V to paste. Automatic paste needs an X11 session with xdotool.',silent:true}).show();}
+  }catch(error){if(generation===pasteGeneration)await show(view);throw error;}})();
+  pastePromise=operation;try{return await operation;}finally{if(pastePromise===operation)pastePromise=null;}
+}
 async function importFile(file) {
   const stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink())throw new Error('Select a regular file.');
   const extension=path.extname(file).toLowerCase();
@@ -255,11 +296,21 @@ async function capture() {
   try{
     // Capture only after the shelf window has left the compositor.
     await new Promise(resolve=>setTimeout(resolve,150));
-    const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
-    const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw new Error('Screen capture is unavailable');
-    const item=store.insert('image',source.thumbnail.toPNG());queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});return{id:item.id};
+    const item=store.insert('image',await screenPNG());queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});return{id:item.id};
   }catch(error){if(wasVisible)await show(view);throw error;}
+}
+async function screenPNG(){
+  if(linuxSession?.session==='wayland'){
+    // Wayland clients cannot read the screen; the desktop portal captures it
+    // into a new file, which is imported and then removed like a native grab.
+    const requested=Date.now(),file=await portalScreenshot({gdbus:linuxTools.gdbus});
+    try{const image=nativeImage.createFromPath(file);if(image.isEmpty())throw new Error('Screen capture is unavailable');return image.toPNG();}
+    finally{try{if(fs.lstatSync(file).mtimeMs>=requested-2000)fs.unlinkSync(file);}catch{}}
+  }
+  const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
+  const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw new Error('Screen capture is unavailable');
+  return source.thumbnail.toPNG();
 }
 function queueOCR(id){if(testMode||!store.data.settings.indexImages||ocrQueue.includes(id)||ocrQueue.length>=64)return;ocrQueue.push(id);if(indexing)return;indexing=true;setImmediate(async()=>{try{while(ocrQueue.length&&!closing){const next=ocrQueue.shift(),item=store.data.items.find(i=>i.id===next);if(!item||item.trashedAt||item.ocrText)continue;const fingerprint=item.renderedFile||item.imageFile;try{await ocr(next,true);}catch{}if(store.data.items.includes(item)&&(item.renderedFile||item.imageFile)!==fingerprint&&!ocrQueue.includes(next))ocrQueue.push(next);}}finally{indexing=false;}});}
 async function ocr(id,quiet=false){if(ocrJobs.has(id))return ocrJobs.get(id);const promise=recognize(id,quiet);ocrJobs.set(id,promise);try{return await promise;}finally{ocrJobs.delete(id);}}
@@ -282,6 +333,17 @@ function configureWatchers() {
   for(const watcher of watchers)watcher.close();watchers=[];
   for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(()=>{});}catch{}},700));});watcher.on('error',()=>{});watchers.push(watcher);}catch{}}
 }
+const globalActions={
+  toggle:()=>desiredVisible?hide():show('shelves'),
+  search:()=>show('shelves',{search:true}),library:()=>show('library'),
+  copyLatest:async()=>{const image=store.data.items.filter(item=>item.kind==='image'&&!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];if(image){await writeClipboard([image]);notify('Copied');if(store.data.settings.sounds)shell.beep();}},
+  screenshot:capture
+};
+// Desktop environments without a GlobalShortcuts portal (or Xwayland key
+// grabs) can bind their own keyboard shortcuts to these commands instead.
+const LINUX_ACTIONS=Object.freeze({'--toggle':'toggle','--search':'search','--library':'library','--copy-latest':'copyLatest','--screenshot':'screenshot'});
+function linuxAction(argv){if(!linuxSession)return null;for(const value of argv)if(Object.hasOwn(LINUX_ACTIONS,value))return LINUX_ACTIONS[value];return null;}
+function linuxLaunchCommand(){return process.env.APPIMAGE?[process.env.APPIMAGE]:app.isPackaged?[process.execPath]:[process.execPath,app.getAppPath()];}
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){
   if(!shortcutRecording||(token!==null&&shortcutRecording.token!==token))return;
@@ -296,12 +358,7 @@ function startShortcutRecording(token){
 }
 
 function configureShortcuts(previousPreferences=null) {
-  shortcutRegistry??=new GlobalShortcuts(globalShortcut,{
-    toggle:()=>desiredVisible?hide():show('shelves'),
-    search:()=>show('shelves',{search:true}),library:()=>show('library'),
-    copyLatest:async()=>{const image=store.data.items.filter(item=>item.kind==='image'&&!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];if(image){await writeClipboard([image]);notify('Copied');if(store.data.settings.sounds)shell.beep();}},
-    screenshot:capture
-  },{failed:error=>notify(error.message)});
+  shortcutRegistry??=new GlobalShortcuts(globalShortcut,globalActions,{failed:error=>notify(error.message)});
   const rejected=shortcutRegistry.update(store.data.settings.shortcuts);
   if(rejected.length){
     if(previousPreferences)store.modify('setSettings',{patch:{shortcuts:Object.fromEntries(rejected.map(value=>[value.action,previousPreferences[value.action]||'']))}});
@@ -360,10 +417,10 @@ async function command(action,payload={}) {
   else if(action==='export'){
     const selected=store.selected(ids(payload.ids));if(!selected.length)throw new Error('Select an item first');
     const response=await dialog.showOpenDialog(window,{properties:['openDirectory','createDirectory']});if(response.filePaths[0]){
-      for(const item of selected){const label=(item.name||item.title||item.kind).replace(/[<>:"/\\|?*\x00-\x1F]/g,'-').replace(/[. ]+$/g,'').slice(0,100)||item.kind;const extension=item.kind==='image'?(item.recording?path.extname(store.mediaPath(item.id)):'.png'):item.kind==='link'?'.url':'.txt';let index=1,destination;
+      for(const item of selected){const label=(item.name||item.title||item.kind).replace(/[<>:"/\\|?*\x00-\x1F]/g,'-').replace(/[. ]+$/g,'').slice(0,100)||item.kind;const link=item.kind==='link'?linkFile(item.url):null,extension=item.kind==='image'?(item.recording?path.extname(store.mediaPath(item.id)):'.png'):link?link.extension:'.txt';let index=1,destination;
         do{destination=path.join(response.filePaths[0],label+(index>1?'-'+index:'')+extension);index++;}while(fs.existsSync(destination));
         if(item.kind==='image')await fs.promises.copyFile(store.mediaPath(item.id),destination,fs.constants.COPYFILE_EXCL);
-        else fs.writeFileSync(destination,Buffer.from(item.kind==='link'?'[InternetShortcut]\r\nURL='+item.url+'\r\n':item.text),{flag:'wx'});
+        else fs.writeFileSync(destination,Buffer.from(link?link.bytes:item.text),{flag:'wx'});
       }result={count:selected.length};message=`Exported ${selected.length} items.`;
     }
   }
@@ -379,11 +436,12 @@ async function command(action,payload={}) {
     if(Object.hasOwn(patch,'watchFolders'))throw new Error('Choose watched folders with the folder picker.');
     const previousShortcuts={...store.data.settings.shortcuts};
     store.modify('setSettings',{patch});if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
-    if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastFingerprint='';
-    if(Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
+    if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key))){lastFingerprint='';monitor?.refresh?.();}
+    if(Object.hasOwn(patch,'launchAtLogin')&&!testMode){if(linuxSession)setAutostart(patch.launchAtLogin===true,{command:linuxLaunchCommand()});else app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});}
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
   }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
   else if(action==='unwatchFolder'){const index=payload.index;if(!Number.isInteger(index)||index<0||index>=store.data.settings.watchFolders.length)throw new Error('Invalid watched folder');store.modify('setSettings',{patch:{watchFolders:store.data.settings.watchFolders.filter((_v,i)=>i!==index)}});configureWatchers();}
+  else if(action==='openReleases')await shell.openExternal(RELEASES);
   else if(action==='checkUpdates'||action==='refreshUpdates'){if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
   else if(action==='installUpdate'){
     if(development)throw new Error('Development builds cannot install official updates.');
@@ -404,8 +462,9 @@ function appIcon(){
 }
 if(!app.requestSingleInstanceLock())app.quit();
 else app.whenReady().then(async()=>{
-  store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
-  updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!development&&!testMode&&store.data.settings.autoCheckUpdates});
+  store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs'),linuxTools});try{dragFiles=new DragFiles(store.directory);}catch{}
+  updates=linuxSession?new ManualUpdates({build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast()}):new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
+  updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!development&&!testMode&&!linuxSession&&store.data.settings.autoCheckUpdates});
   const searchPaths=modelPaths({packaged:app.isPackaged,resourcesPath:process.resourcesPath,sourceDirectory:__dirname});
   let ortModule=null,runtimeDirectory=null;try{ortModule=require.resolve('onnxruntime-web/wasm').replace(/app[.]asar([\\/])/,'app.asar.unpacked$1');runtimeDirectory=path.dirname(ortModule);}catch{}
   imageSearch=new ImageSearch({...searchPaths,ortModule,runtimeDirectory,cacheDirectory:path.join(store.directory,'image-search'),items:()=>store.data.items,readImage:readSemanticImage,changed:()=>broadcast()});refreshImageSearch();
@@ -446,7 +505,7 @@ else app.whenReady().then(async()=>{
   window.webContents.on('render-process-gone',()=>finishShortcutRecording());
   window.webContents.on('did-start-navigation',()=>finishShortcutRecording());
   await window.loadURL(entry);
-  monitor=native.monitor(()=>{if(!testMode)void readClipboard();},error=>{monitor?.kill();monitor=null;pasteTargets.clear();if(!closing)notify(error.message+' Falling back to bounded clipboard polling.');},focus=>pasteTargets.observe(focus));
+  monitor=native.monitor(()=>{if(!testMode)void readClipboard();},error=>{if(error.recoverable){if(!closing)notify(error.message);return;}monitor?.kill();monitor=null;pasteTargets.clear();if(!closing)notify(error.message+' Falling back to bounded clipboard polling.');},focus=>pasteTargets.observe(focus));
   if(!testMode||testTray){
     if(process.platform==='win32')app.setAppUserModelId('com.clipboardline.desktop.windows');
     createTray();
@@ -461,10 +520,11 @@ else app.whenReady().then(async()=>{
     updateLaunchTimer=setTimeout(()=>void updateScheduler.tick(),10000);updateLaunchTimer.unref();
     powerMonitor.on('resume',()=>void updateScheduler.tick());
   }
-  await show('shelves');
+  const initialAction=linuxAction(process.argv);
+  await show(initialAction==='library'?'library':'shelves',initialAction==='search'?{search:true}:null);
   // Test hooks are main-process only and require an explicit isolated data path.
   if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
-app.on('second-instance',()=>{if(window)void show('shelves');});
+app.on('second-instance',(_event,argv)=>{if(!window)return;const action=linuxAction(argv);if(action)void Promise.resolve().then(()=>globalActions[action]()).catch(error=>notify(error.message));else void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});
 app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});

@@ -21,7 +21,7 @@ Official macOS builds keep their existing storage location for compatibility. A 
 - Official public update checks contact the public GitHub release/feed infrastructure; downloads use its asset hosts. No private GitHub token is needed. You control automatic checks, and choose when to install. A self-built Dev app has no update feed and makes no update checks.
 - Installing the application or building its source does not itself send clipboard contents to the project maintainers. Opening a URL or pasting/exporting content explicitly gives that content to the chosen application or service.
 
-Platform builds can differ. Consult the Windows documentation for its current capture defaults, storage and supported features rather than assuming every macOS behavior is identical.
+Platform builds can differ. Consult the Windows documentation for its current capture defaults, storage and supported features rather than assuming every macOS behavior is identical. The Linux build shares the Windows defaults and stores its Library in `~/.config/ClipBoardLine` (owner-only). It makes no update checks; Wayland screenshots go through the desktop's screenshot portal, whose temporary file is removed after import. See the [Linux guide](docs/linux.md).
 
 ## Türkçe
 
@@ -39,4 +39,4 @@ Resmî macOS sürümleri mevcut veri konumunu uyumluluk için korur. Kaynaktan d
 - Standart kaynak derlemesinde model indirilmez; yerel Vision OCR çalışır. `CLIPBOARDLINE_BUNDLE_MODELS=1` ile anlamsal arama modellerini seçerseniz derleme sırasında sabitlenmiş Apple/GitHub/Hugging Face dosyaları indirilir. Paketlenmiş modeller çalışma sırasında yerelde kullanılır.
 - Resmî public güncellemeler GitHub'a bağlanır; GitHub tokenı istemez. Otomatik kontrolü kapatabilir, kurulumu kendiniz başlatabilirsiniz. Dev derlemesinin güncelleyicisi kapalıdır.
 
-Windows sürümünün mevcut özellikleri, kayıt konumu ve varsayılanları için kendi platform belgesini okuyun; bütün macOS davranışlarının aynı olduğunu varsaymayın.
+Windows sürümünün mevcut özellikleri, kayıt konumu ve varsayılanları için kendi platform belgesini okuyun; bütün macOS davranışlarının aynı olduğunu varsaymayın. Linux derlemesi Windows varsayılanlarını kullanır, kütüphanesini yalnızca kullanıcıya açık `~/.config/ClipBoardLine` içinde tutar ve güncelleme kontrolü yapmaz. Wayland’de ekran görüntüsü masaüstünün portalıyla alınır; geçici dosya içe aktarıldıktan sonra silinir. Ayrıntılar [Linux rehberinde](docs/linux.md#türkçe).

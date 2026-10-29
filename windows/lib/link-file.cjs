@@ -1,0 +1,12 @@
+'use strict';
+// Native link file types: Windows Internet Shortcut (.url); freedesktop Link
+// desktop entries (.desktop) on Linux, which KDE and GNOME file managers open.
+function linkFile(url,{platform=process.platform}={}){
+ if(typeof url!=='string'||/[\r\n\0]/.test(url))throw new Error('Invalid link.');
+ if(platform==='linux'){
+  let name='Link';try{name=new URL(url).hostname||name;}catch{}
+  return{extension:'.desktop',bytes:'[Desktop Entry]\nType=Link\nName='+name+'\nURL='+url+'\nIcon=text-html\n'};
+ }
+ return{extension:'.url',bytes:'[InternetShortcut]\r\nURL='+url+'\r\n'};
+}
+module.exports={linkFile};

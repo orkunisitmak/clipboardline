@@ -4,7 +4,8 @@
 [Source](https://github.com/orkunisitmak/clipboardline) ·
 [Windows CI](https://github.com/orkunisitmak/clipboardline/actions/runs/39296605977)
 
-This folder contains the separate Electron/Windows implementation. Its source,
+This folder contains the separate Electron/Windows implementation, which also
+builds the Linux edition; see the [Linux guide](../docs/linux.md). Its source,
 packaged executable and installed application have separate native acceptance
 checks. A passing model or renderer test on another operating system does not
 certify native Windows paste, capture, global keys or installation. Check the
@@ -143,7 +144,8 @@ Windows [1.7.2 build 64](https://github.com/orkunisitmak/clipboardline/releases/
 
 **Build 62 → 63 için tek seferlik yükseltme notu:** kurulum biter ama ClipBoardLine yeniden açılmazsa bir kez kendin aç. Özgün 1.7.0 build 62 istemcisinde yeniden açma düzeltmesi yoktur. Değiştirilmemiş gerçek build62 istemcisi indirme ve kurulumu verileri koruyarak tamamladı; güncel build63 → 64 geçişinde otomatik yeniden açılma da geçti.
 
-Bu klasör, ayrı Electron/Windows uygulamasını içerir. Kaynak, paketlenmiş ve
+Bu klasör, ayrı Electron/Windows uygulamasını içerir; Linux sürümü de buradan
+derlenir ([Linux rehberi](../docs/linux.md#türkçe)). Kaynak, paketlenmiş ve
 kurulmuş uygulamanın yerel kabul testleri ayrıdır; başka sistemde geçen JavaScript
 testi, Windows'ta gerçek yapıştırma veya kurulumun geçtiği anlamına gelmez.
 Kullandığınız derlemenin Windows CI sonucuna ve sürüm dosyalarına bakın.
