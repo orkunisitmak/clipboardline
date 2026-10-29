@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Windows translations from the shared Apple .strings catalogs."""
+"""Generate Windows and Linux translations from the shared Apple .strings catalogs."""
 import argparse
 import json
 import re
@@ -32,12 +32,13 @@ def main():
     values = {source.parent.name[:-6]: catalog(source.read_text(encoding='utf-8'))
               for source in sorted((ROOT/'Sources/Tendedero/Resources').glob('*.lproj/Localizable.strings'))}
     content = '// Generated from the shared macOS localization resources.\n(function(root){const catalogs=Object.freeze(' + json.dumps(values, ensure_ascii=False, separators=(',', ':')) + ');if(typeof module===\"object\"&&module.exports)module.exports=catalogs;else root.clipboardLineTranslations=catalogs;})(typeof window===\"object\"?window:globalThis);\n'
-    target = ROOT/'windows/locales.js'
-    if args.check:
-        if target.read_text(encoding='utf-8') != content:
-            raise SystemExit('Windows translations differ; run scripts/sync-windows-locales.py')
-    else:
-        target.write_text(content, encoding='utf-8')
+    # Both Electron editions, Windows and Linux, ship the same catalogs.
+    for target in [ROOT/folder/'locales.js' for folder in ('windows', 'linux') if (ROOT/folder).exists()]:
+        if args.check:
+            if target.read_text(encoding='utf-8') != content:
+                raise SystemExit(target.parent.name.capitalize()+' translations differ; run scripts/sync-windows-locales.py')
+        else:
+            target.write_text(content, encoding='utf-8')
     print('Shared translation catalogs match: '+str(len(values))+' languages')
 
 

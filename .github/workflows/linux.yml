@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['windows/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-library-keyboard-parity.py', 'scripts/test-library-keyboard-parity.py', '.github/workflows/linux.yml']
+    paths: ['linux/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-library-keyboard-parity.py', 'scripts/test-library-keyboard-parity.py', '.github/workflows/linux.yml']
   pull_request:
-    paths: ['windows/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-library-keyboard-parity.py', 'scripts/test-library-keyboard-parity.py', '.github/workflows/linux.yml']
+    paths: ['linux/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-library-keyboard-parity.py', 'scripts/test-library-keyboard-parity.py', '.github/workflows/linux.yml']
 permissions:
   contents: read
 jobs:
@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        working-directory: windows
+        working-directory: linux
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: windows/package-lock.json
+          cache-dependency-path: linux/package-lock.json
       - name: Install disposable desktop sessions and optional Linux tools
         run: |
           sudo apt-get update
@@ -33,9 +33,14 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Install pinned dependencies
         run: npm ci --no-fund
+      - name: Prepare pinned offline image search models
+        run: |
+          python3 ../scripts/test-windows-search-models.py
+          python3 ../scripts/prepare-windows-search-models.py --config search-model-config.json --output assets/CLIP
+          python3 ../scripts/prepare-windows-search-models.py --config search-model-config.json --output assets/CLIP --check
       - name: Shared version and parity guard tests
         run: |
-          python3 ../scripts/check-release-version.py --require-windows
+          python3 ../scripts/check-release-version.py --require-windows --require-linux
           python3 ../scripts/sync-windows-locales.py --check
           python3 ../scripts/test-cross-platform-parity.py
           python3 ../scripts/test-library-keyboard-parity.py
@@ -82,9 +87,9 @@ jobs:
         with:
           name: clipboardline-linux-${{ github.sha }}
           path: |
-            windows/dist/ClipBoardLine-*.AppImage
-            windows/dist/ClipBoardLine-*.deb
-            windows/dist/ClipBoardLine-*.rpm
-            windows/validation/**
+            linux/dist/ClipBoardLine-*.AppImage
+            linux/dist/ClipBoardLine-*.deb
+            linux/dist/ClipBoardLine-*.rpm
+            linux/validation/**
           if-no-files-found: error
           retention-days: 14

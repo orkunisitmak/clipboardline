@@ -1,0 +1,39 @@
+'use strict';
+const assert=require('node:assert/strict');
+// Shared by the headless reference and the actual Windows source/package/install
+// suite. Commands go through real renderer keyboard handlers; state adapters are
+// explicit so a mock browser is never reported as native Windows evidence.
+module.exports=async function shelfDOMAcceptance({page,until,rows,packet,edit,editImage,refreshThumbnail,settings,show,check=()=>{}}){
+ const kinds=['image','text','link'],refs=label=>page.evaluate(label=>{window.__shelfDOMAcceptance||={};window.__shelfDOMAcceptance[label]={root:document.querySelector('.shelves'),rows:Object.fromEntries(Array.from(document.querySelectorAll('.shelf')).map(node=>[node.dataset.shelf,{node,cards:[...node.querySelectorAll('.card')],images:[...node.querySelectorAll('img')]}]))};},label);
+ const identity=(label,same,changed=[])=>page.evaluate(({label,same,changed})=>{const saved=window.__shelfDOMAcceptance[label],flags={};for(const kind of same){const row=saved.rows[kind],current=document.querySelector('.shelf[data-shelf="'+kind+'"]');flags[kind]=current===row.node&&row.node.isConnected&&row.cards.every(node=>node.isConnected&&node===current.querySelector('[data-item-id="'+node.dataset.itemId+'"]'))&&row.images.every(node=>node.isConnected);}for(const kind of changed)flags[kind]=saved.rows[kind].node!==document.querySelector('.shelf[data-shelf="'+kind+'"]')&&!saved.rows[kind].node.isConnected;return flags;},{label,same,changed});
+ const assertIdentity=async(label,same,changed=[])=>assert.deepEqual(await identity(label,same,changed),Object.fromEntries([...same,...changed].map(kind=>[kind,true])));
+ const selected=()=>page.locator('.shelves .card.selected').evaluateAll(nodes=>nodes.map(node=>node.dataset.itemId));
+ async function selection(id){await until(selected,value=>value.length===1&&value[0]===id);assert.deepEqual(await page.locator('.shelves .card[aria-selected="true"]').evaluateAll(nodes=>nodes.map(node=>node.dataset.itemId)),[id]);assert.equal(await page.locator('.shelves .card.focused').getAttribute('data-item-id'),id);}
+ async function key(value,id){await page.keyboard.press(value);if(id)await selection(id);}
+ const sizes=await page.locator('.shelf').evaluateAll(nodes=>Object.fromEntries(nodes.map(node=>[node.dataset.shelf,Number(node.dataset.pageSize)])));assert.deepEqual(Object.keys(sizes),kinds);assert.ok(sizes.image>=3&&sizes.image<=9);
+ await selection(rows.image[0]);await refs('navigation');
+ await key('ArrowRight',rows.image[1]);await assertIdentity('navigation',kinds);
+ await key('ArrowDown',rows.text[1]);await key('ArrowDown',rows.link[1]);await key('ArrowUp',rows.text[1]);await key('ArrowUp',rows.image[1]);await assertIdentity('navigation',kinds);
+ await key('Alt+ArrowRight',rows.image[1+sizes.image]);await assertIdentity('navigation',['text','link'],['image']);
+ const numbers=await page.locator('.shelf[data-shelf="image"] .card-number').allTextContents();assert.deepEqual(numbers,Array.from({length:sizes.image},(_,index)=>String(index+1)));
+ await key('3',rows.image[sizes.image+2]);await key('Control+ArrowRight',rows.image.at(-1));await key('Control+ArrowLeft',rows.image[0]);
+ await refs('extended');await page.keyboard.press('Shift+ArrowRight');await until(selected,value=>value.length===2);assert.deepEqual(await selected(),rows.image.slice(0,2));await assertIdentity('extended',kinds);await key('Control+ArrowLeft',rows.image[0]);
+ await refs('progress');await packet();await selection(rows.image[0]);await assertIdentity('progress',kinds);
+ check('three shelves retain connected cards/images during keyboard selection, vertical navigation and progress; page/quick-number/boundary/range selection stay correct');
+ await refs('textEdit');await edit(rows.text[0],{name:'Changed performance title',text:'Replacement performance needle\nExact original text is preserved.'});await until(()=>page.locator('[data-item-id="'+rows.text[0]+'"] .card-title').textContent(),value=>value==='Changed performance title');await assertIdentity('textEdit',['image','link'],['text']);assert.match(await page.locator('[data-item-id="'+rows.text[0]+'"] .card-body').textContent(),/^Replacement performance needle/);
+ await refs('linkEdit');await edit(rows.link[0],{title:'Changed performance link'});await until(()=>page.locator('[data-item-id="'+rows.link[0]+'"] .card-title').textContent(),value=>value==='Changed performance link');await assertIdentity('linkEdit',['image','text'],['link']);
+ await refs('thumbnail');await refreshThumbnail(rows.link[0]);await until(()=>page.locator('[data-item-id="'+rows.link[0]+'"] img').evaluate(node=>node.complete&&node.naturalWidth===80&&node.naturalHeight===40),Boolean);await assertIdentity('thumbnail',['image','text'],['link']);
+ await refs('imageEdit');await editImage(rows.image[0]);await until(()=>page.locator('[data-item-id="'+rows.image[0]+'"] img').evaluate(node=>node.complete&&node.naturalWidth===50&&node.naturalHeight===50),Boolean);await assertIdentity('imageEdit',['text','link'],['image']);
+ await refs('pin');const before=await page.locator('[data-item-id="'+rows.image[0]+'"] [data-action="card-pin"]').getAttribute('class');await page.keyboard.press('p');await until(()=>page.locator('[data-item-id="'+rows.image[0]+'"] [data-action="card-pin"]').getAttribute('class'),value=>value!==before);await assertIdentity('pin',['text','link'],['image']);
+ await refs('pinnedFilter');await key('Control+Shift+f',rows.image[7]);await assertIdentity('pinnedFilter',['text','link'],['image']);await key('f',rows.image[0]);
+ await key('s',rows.image[1]);assert.equal(await page.locator('[data-item-id="'+rows.image[0]+'"]').count(),0);await key('Backspace',rows.image[0]);
+ const englishTitles=await page.locator('.shelf-title').allTextContents();await settings({language:'tr'});await until(()=>page.locator('.shelf-title').allTextContents(),value=>value.every((title,index)=>title!==englishTitles[index]));await settings({language:'en'});await until(()=>page.locator('.shelf-title').allTextContents(),value=>value.every((title,index)=>title===englishTitles[index]));
+ await refs('theme');await settings({theme:'neutral'});await until(()=>page.locator('#app').getAttribute('class'),value=>value.includes('neutral'));await assertIdentity('theme',kinds);
+ const expectedSize=Math.max(1,Math.min(9,Math.floor(((await page.evaluate(()=>innerWidth))-48+24)/(202+24))));await settings({cardSize:'large'});await until(()=>page.locator('.shelf[data-shelf="image"]').getAttribute('data-page-size'),value=>Number(value)===expectedSize);await key('Control+ArrowLeft',rows.image[0]);
+ check('only changed shelf content refreshes, including title/text, recopy-enriched versioned thumbnails, pin/filter/undo and image edits; language/theme/card size invalidate safely');
+ await page.keyboard.press('Shift+s');await page.locator('#search-input').fill('replacement needle');await until(()=>page.locator('.shelves .card').count(),value=>value===1);assert.equal(await page.locator('.shelves .card').getAttribute('data-item-id'),rows.text[0]);await page.keyboard.press('Escape');await until(()=>page.locator('#search-input').count(),value=>value===0);await key('Control+ArrowLeft',rows.image[0]);
+ await page.keyboard.press('Shift+t');await until(()=>page.locator('.shelf[data-shelf="text"]').count(),value=>value===0);await selection(rows.image[0]);await page.keyboard.press('Shift+t');await until(()=>page.locator('.shelf[data-shelf="text"]').count(),value=>value===1);await selection(rows.image[0]);
+ await page.keyboard.press('Alt+ArrowRight');await show();await selection(rows.image[0]);assert.equal(await page.locator('.shelf[data-shelf="image"] .selection-info').textContent(),'1 / '+Math.ceil(rows.image.length/expectedSize));
+ check('shared search, enabled kinds and native reopen reset cached rows/pages without duplicate or stale selection');
+ await page.evaluate(()=>{delete window.__shelfDOMAcceptance;});
+};

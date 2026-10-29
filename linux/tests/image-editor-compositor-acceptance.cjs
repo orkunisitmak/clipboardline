@@ -1,0 +1,46 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {waitForImageEditorRaster}=require('./image-editor-ready.cjs');
+
+async function exerciseEditor({page,id,width,height,until,expectRetained=true}){
+ await page.evaluate(()=>{const draw=CanvasRenderingContext2D.prototype.drawImage,clear=CanvasRenderingContext2D.prototype.clearRect,png=HTMLCanvasElement.prototype.toDataURL;const p=window.__editorRendering={draw,clear,png,baseDraws:0,overlayPaints:0,exports:[],record:false};CanvasRenderingContext2D.prototype.drawImage=function(source,...args){if(this.canvas.id==='markup-canvas'&&source instanceof HTMLImageElement){p.baseDraws++;p.legacyBase=source;}return draw.call(this,source,...args);};CanvasRenderingContext2D.prototype.clearRect=function(...args){if(this.canvas.id==='markup-canvas')p.overlayPaints++;return clear.apply(this,args);};HTMLCanvasElement.prototype.toDataURL=function(...args){const result=png.apply(this,args);if(p.record)p.exports.push(result);return result;};});
+ try{
+  await page.locator('[data-item-id="'+id+'"]').click();await page.keyboard.press('Space');await page.keyboard.press('m');
+  if(expectRetained)await waitForImageEditorRaster(page,{width,height});
+  else await page.waitForFunction(({width,height})=>{const canvas=document.getElementById('markup-canvas');return canvas?.width===width&&canvas.height===height&&canvas.getContext('2d').getImageData(0,0,1,1).data[3]===255;},{width,height});
+  await page.evaluate(()=>{const p=window.__editorRendering;p.base=document.getElementById('markup-base')||p.legacyBase;p.canvas=document.getElementById('markup-canvas');});
+  await page.locator('[data-action="image-tool"][data-tool="pen"]').click();
+  const burst=await page.evaluate(async({width,height})=>{
+   await new Promise(requestAnimationFrame);const p=window.__editorRendering,canvas=document.getElementById('markup-canvas'),box=canvas.getBoundingClientRect(),samples=96;
+   p.baseDraws=0;p.overlayPaints=0;p.record=false;p.expected=[];
+   const at=index=>{const fx=.12+.72*index/samples,fy=.25+.1*Math.sin(index/9),x=box.x+box.width*fx,y=box.y+box.height*fy;return{x,y,point:{x:(x-box.x)/box.width*width,y:(y-box.y)/box.height*height}};};
+   const send=(type,index)=>{const value=at(index);if(type!=='pointerup')p.expected.push(value.point);canvas.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerId:41,clientX:value.x,clientY:value.y,buttons:type==='pointerup'?0:1}));};
+   const start=performance.now();send('pointerdown',0);for(let index=1;index<=samples;index++)send('pointermove',index);send('pointerup',samples);const inputMilliseconds=performance.now()-start;
+   await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);
+   const base=document.getElementById('markup-base'),overlay=document.getElementById('markup-canvas'),imageBox=base?.getBoundingClientRect(),overlayBox=overlay.getBoundingClientRect();
+   return{samples:samples+1,inputMilliseconds,baseDraws:p.baseDraws,overlayPaints:p.overlayPaints,baseRetained:base===p.base&&base?.isConnected,canvasRetained:overlay===p.canvas&&overlay.isConnected,matchingLayerBounds:!!imageBox&&['x','y','width','height'].every(key=>Math.abs(imageBox[key]-overlayBox[key])<.01),raster:{width:overlay.width,height:overlay.height}};
+  },{width,height});
+  if(expectRetained){assert.equal(burst.baseDraws,0,'Pointer movement must not copy the full original into the editor canvas');assert.ok(burst.overlayPaints>=1&&burst.overlayPaints<=2,'The input burst must coalesce to one scheduled overlay frame');assert.equal(burst.baseRetained,true);assert.equal(burst.canvasRetained,true);assert.equal(burst.matchingLayerBounds,true);}
+  else assert.ok(burst.baseDraws>=97,'Baseline must actually reproduce full-image redraws for this gesture');
+  await page.evaluate(()=>{window.__editorRendering.record=true;});await page.keyboard.press('Control+s');
+  await until(()=>page.evaluate(()=>window.__editorRendering.exports.length),value=>value>=1);await until(()=>page.evaluate(async id=>(await window.clipboardLine.state()).items.find(value=>value.id===id)?.annotations?.[0]?.points?.length,id),value=>value===97);
+  const pen=await page.evaluate(async id=>{
+   const p=window.__editorRendering;p.record=false;const state=await window.clipboardLine.state(),record=state.items.find(value=>value.id===id),points=record.annotations?.[0]?.points;
+   const pointsPreserved=points?.length===p.expected.length&&points.every((point,index)=>Math.abs(point.x-p.expected[index].x)<1e-7&&Math.abs(point.y-p.expected[index].y)<1e-7);
+   const reference=document.createElement('canvas');reference.width=p.base.naturalWidth;reference.height=p.base.naturalHeight;const c=reference.getContext('2d');c.drawImage(p.base,0,0);c.strokeStyle='#ff5252';c.lineWidth=7;c.lineCap='round';c.lineJoin='round';c.beginPath();p.expected.forEach((point,index)=>index?c.lineTo(point.x,point.y):c.moveTo(point.x,point.y));c.stroke();p.reference=reference;
+   const expected=p.png.call(reference,'image/png'),actual=p.exports.at(-1),stored=new Image();stored.crossOrigin='anonymous';stored.src=record.mediaUrl;await stored.decode();const decoded=document.createElement('canvas');decoded.width=stored.naturalWidth;decoded.height=stored.naturalHeight;decoded.getContext('2d').drawImage(stored,0,0);return{pointsPreserved,pointCount:points?.length,fullResolutionPNGExact:actual===expected,storedRasterExact:p.png.call(decoded,'image/png')===expected};
+  },id);
+  assert.equal(pen.pointsPreserved,true,'Every input sample must survive frame coalescing and persistence');assert.equal(pen.fullResolutionPNGExact,true,'Flattened export must be exactly the original-coordinate reference PNG');assert.equal(pen.storedRasterExact,true,'The persisted media raster must match the flattened export');
+  await page.evaluate(()=>{const stage=document.querySelector('.image-stage');stage.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:-100}));stage.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:-100}));stage.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,shiftKey:true,deltaY:25,deltaX:13}));window.__editorRendering.zoomPanTransform=document.querySelector('.image-document').style.transform;});
+  await page.locator('[data-action="image-tool"][data-tool="crop"]').click();
+  await page.evaluate(()=>{const p=window.__editorRendering,canvas=document.getElementById('markup-canvas'),box=canvas.getBoundingClientRect(),send=(type,fx,fy)=>canvas.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerId:42,clientX:box.x+box.width*fx,clientY:box.y+box.height*fy,buttons:type==='pointerup'?0:1}));p.exports=[];p.record=true;send('pointerdown',.2,.15);send('pointermove',.8,.75);send('pointerup',.8,.75);});
+  await page.keyboard.press('Enter');await until(()=>page.evaluate(()=>window.__editorRendering.exports.length),value=>value>=1);await until(()=>page.evaluate(async id=>(await window.clipboardLine.state()).items.find(value=>value.id===id)?.crop,id),value=>!!value&&Math.abs(value.x-width*.2)<=1&&Math.abs(value.width-width*.6)<=1);
+  const crop=await page.evaluate(async id=>{const p=window.__editorRendering;p.record=false;const state=await window.clipboardLine.state(),record=state.items.find(value=>value.id===id),crop=record.crop,reference=document.createElement('canvas');reference.width=crop.width;reference.height=crop.height;reference.getContext('2d').drawImage(p.reference,crop.x,crop.y,crop.width,crop.height,0,0,crop.width,crop.height);const stored=new Image();stored.crossOrigin='anonymous';stored.src=record.mediaUrl;await stored.decode();const decoded=document.createElement('canvas');decoded.width=stored.naturalWidth;decoded.height=stored.naturalHeight;decoded.getContext('2d').drawImage(stored,0,0);return{zoomPanPreserved:document.querySelector('.image-document').style.transform===p.zoomPanTransform,storedRasterExact:p.png.call(decoded,'image/png')===p.png.call(reference,'image/png'),crop,originalWidth:p.base.naturalWidth,originalHeight:p.base.naturalHeight,fullResolutionPNGExact:p.exports.at(-1)===p.png.call(reference,'image/png'),baseRetained:document.getElementById('markup-base')===p.base,canvasRetained:document.getElementById('markup-canvas')===p.canvas};},id);
+  assert.equal(crop.zoomPanPreserved,true,'Tool changes preserve the shared image/overlay zoom and pan transform');assert.equal(crop.fullResolutionPNGExact,true,'Crop must flatten exactly the same original-coordinate pixels');assert.equal(crop.storedRasterExact,true,'The saved crop must contain exactly the flattened reference pixels');for(const [key,expected]of Object.entries({x:Math.round(width*.2),y:Math.round(height*.15),width:Math.round(width*.6),height:Math.round(height*.6)}))assert.ok(Math.abs(crop.crop[key]-expected)<=1,key+' crop coordinate');
+  if(expectRetained){assert.equal(crop.baseRetained,true);assert.equal(crop.canvasRetained,true);}
+  return{width,height,burst,pen,crop};
+ }finally{
+  await page.evaluate(()=>{const p=window.__editorRendering;if(p){CanvasRenderingContext2D.prototype.drawImage=p.draw;CanvasRenderingContext2D.prototype.clearRect=p.clear;HTMLCanvasElement.prototype.toDataURL=p.png;delete window.__editorRendering;}});
+ }
+}
+module.exports={exerciseEditor};

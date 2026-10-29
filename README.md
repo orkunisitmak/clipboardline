@@ -345,12 +345,12 @@ npm run test:electron
 
 ### Linux source development and packages
 
-The same `windows/` project builds the Linux edition. Linux packages contain the
-same components and notices as the Windows edition; FFmpeg, `wl-clipboard` and
+The Linux edition lives in `linux/`, an Electron project derived from `windows/`.
+Linux packages contain the same components and notices as the Windows edition; FFmpeg, `wl-clipboard` and
 `xdotool` are optional distribution packages, never bundled.
 
 ```sh
-cd windows
+cd linux
 npm ci
 npm test
 npm start

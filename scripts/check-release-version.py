@@ -39,7 +39,7 @@ def load_release_version(root: Path = ROOT) -> str:
     return value
 
 
-def check_release_version(root: Path = ROOT, *, require_windows: bool = False,
+def check_release_version(root: Path = ROOT, *, require_windows: bool = False, require_linux: bool = False,
                           expected_version: str | None = None) -> str:
     root = Path(root)
     expected = load_release_version(root)
@@ -54,16 +54,18 @@ def check_release_version(root: Path = ROOT, *, require_windows: bool = False,
     if expected_version is not None:
         require(expected_version, "Selected release version")
     require(_read_object(root, "upstream-state.json").get("forkVersion"), "upstream-state.json forkVersion")
-    windows = root / "windows"
-    if require_windows or windows.exists():
-        package = _read_object(root, "windows/package.json")
-        lock = _read_object(root, "windows/package-lock.json")
-        require(package.get("version"), "windows/package.json version")
-        require(lock.get("version"), "windows/package-lock.json version")
+    # The Windows and Linux Electron editions each carry their own package.
+    for folder, required in (("windows", require_windows), ("linux", require_linux)):
+        if not (required or (root / folder).exists()):
+            continue
+        package = _read_object(root, f"{folder}/package.json")
+        lock = _read_object(root, f"{folder}/package-lock.json")
+        require(package.get("version"), f"{folder}/package.json version")
+        require(lock.get("version"), f"{folder}/package-lock.json version")
         packages = lock.get("packages")
         top_package = packages.get("") if isinstance(packages, dict) else None
         require(top_package.get("version") if isinstance(top_package, dict) else None,
-                'windows/package-lock.json packages[""] version')
+                f'{folder}/package-lock.json packages[""] version')
     return expected
 
 
@@ -71,10 +73,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT, help="Checkout to validate (defaults to this script's checkout)")
     parser.add_argument("--require-windows", action="store_true", help="Require the Windows source tree as in the public checkout")
+    parser.add_argument("--require-linux", action="store_true", help="Require the Linux source tree as in the public checkout")
     parser.add_argument("--expected-version", help="Require the selected publisher/payload version to equal the shared version")
     arguments = parser.parse_args()
     try:
         version = check_release_version(arguments.root, require_windows=arguments.require_windows,
+                                        require_linux=arguments.require_linux,
                                         expected_version=arguments.expected_version)
     except ReleaseVersionError as error:
         print(f"Release version check failed: {error}", file=sys.stderr)

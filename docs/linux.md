@@ -2,11 +2,12 @@
 
 English · [Türkçe](#türkçe)
 
-The Electron edition in [`windows/`](../windows) also builds for Linux x64 as an
-AppImage, a `.deb` and an `.rpm`. Linux runs the same renderer, Library, Tesseract
+The Linux edition in [`linux/`](../linux) is an Electron application derived from
+the Windows edition in [`windows/`](../windows). It builds for Linux x64 as an
+AppImage, a `.deb` and an `.rpm`, and keeps the Windows renderer, Library, Tesseract
 OCR (English/Turkish), offline MobileCLIP-S2 image search, nine language catalogs,
-settings and Control/Alt keyboard map as Windows. The Linux desktop integration
-lives in `windows/lib/linux-*.cjs`.
+settings and Control/Alt keyboard map. The Linux desktop integration lives in
+`linux/lib/linux-*.cjs`.
 
 **Status:** Linux is a source build. There is no official signed Linux release or
 in-app update channel yet; newer packages are installed over older ones and keep
@@ -51,6 +52,9 @@ integration** shows the active mode and any missing optional package.
 | Screen capture | Screenshot portal (the desktop may ask once) | Screenshot portal | Direct capture |
 | Ctrl+Enter | Copies, hides and returns focus; press Ctrl+V | Same as Wayland | Also pastes into the same, still active window when `xdotool` is installed |
 | Tray icon | StatusNotifierItem | Needs the AppIndicator extension (preinstalled on Ubuntu) | Most panels |
+| The line | Fills the monitor you are using; closes when another window takes focus (Wayland has no keep-above request) and slides in again on the next show | Stays above other windows | Stays above other windows |
+| Fill the whole screen (Settings → General) | Full screen over panels and the taskbar | Same | Same |
+| A copy whose app then quits (Spectacle screenshots) | Stays on the clipboard: ClipBoardLine serves the item it captured again, as Klipper does | Same | Same |
 
 Mutter (GNOME) offers no data-control protocol, which is why GNOME uses Xwayland.
 Without `wl-clipboard` on KDE or wlroots compositors, copies are captured only while
@@ -109,16 +113,17 @@ Node.js 24 and npm are required. Building `.rpm` also needs `rpm-build`
 `libxcrypt-compat`.
 
 ```sh
-cd windows
+cd linux
 npm ci
-python3 ../scripts/prepare-windows-search-models.py   # optional offline image search
+python3 ../scripts/prepare-windows-search-models.py --config search-model-config.json --output assets/CLIP   # offline image search; packages need it
 npm test
 npm start
 npm run dist:linux        # dist/ClipBoardLine-<version>-x86_64.AppImage, .deb and .rpm
 ```
 
 `npm run test:linux` launches the real app and checks capture, copying out, file
-lists, Ctrl+Enter, recordings, shortcut commands and the Linux settings pages. It
+lists, Ctrl+Enter, recordings, shortcut commands, the Linux settings pages and
+offline image search (always for a packaged app, which must bundle the model). It
 replaces the clipboard, so run it only in a disposable session such as
 `xvfb-run`, headless Sway or a nested compositor. Set `CLIPBOARDLINE_EXECUTABLE`
 to test `dist/linux-unpacked/clipboardline` or the AppImage.
@@ -132,11 +137,12 @@ writes `linux.json` and `library-linux.json`; both parity checkers verify them w
 
 ## Türkçe
 
-[`windows/`](../windows) klasöründeki Electron sürümü Linux x64 için AppImage,
-`.deb` ve `.rpm` olarak da derlenir. Linux; Windows ile aynı arayüzü, kütüphaneyi,
+[`linux/`](../linux) klasöründeki Linux sürümü, [`windows/`](../windows) klasöründeki
+Windows sürümünden türetilmiş bir Electron uygulamasıdır. Linux x64 için AppImage,
+`.deb` ve `.rpm` olarak derlenir; Windows ile aynı arayüzü, kütüphaneyi,
 İngilizce/Türkçe Tesseract OCR’ı, çevrimdışı MobileCLIP-S2 görsel aramasını, dokuz
 dil kataloğunu, ayarları ve Control/Alt kısayollarını kullanır. Linux masaüstü
-entegrasyonu `windows/lib/linux-*.cjs` dosyalarındadır.
+entegrasyonu `linux/lib/linux-*.cjs` dosyalarındadır.
 
 **Durum:** Linux kaynak koddan derlenir. Henüz resmî imzalı bir Linux sürümü veya
 uygulama içi güncelleme kanalı yoktur; yeni paket eskisinin üstüne kurulur,
@@ -174,6 +180,9 @@ Kaynaklar → Linux integration** etkin modu ve eksik isteğe bağlı paketleri 
 | Ekran yakalama | Screenshot portalı (masaüstü bir kez izin isteyebilir) | Screenshot portalı | Doğrudan yakalama |
 | Ctrl+Enter | Kopyalar, gizler ve odağı geri verir; Ctrl+V’ye basın | Wayland ile aynı | `xdotool` kuruluysa aynı, hâlâ etkin pencereye yapıştırır |
 | Tepsi simgesi | StatusNotifierItem | AppIndicator eklentisi gerekir (Ubuntu’da hazır gelir) | Çoğu panel |
+| Çizgi | Kullandığınız ekranı doldurur; başka bir pencere odağı aldığında kapanır (Wayland’de üstte tutma isteği yoktur) ve bir sonraki açılışta yeniden kayarak gelir | Diğer pencerelerin üstünde kalır | Diğer pencerelerin üstünde kalır |
+| Tüm ekranı doldur (Ayarlar → Genel) | Paneller ve görev çubuğu dahil tam ekran | Aynı | Aynı |
+| Uygulaması sonra kapanan kopya (Spectacle ekran görüntüleri) | Panoda kalır: ClipBoardLine, Klipper gibi yakaladığı öğeyi yeniden sunar | Aynı | Aynı |
 
 GNOME’un Mutter’ı data-control protokolü sunmadığı için GNOME’da Xwayland
 kullanılır. KDE veya wlroots tabanlı ortamlarda `wl-clipboard` yoksa kopyalar
@@ -227,15 +236,17 @@ Node.js 24 ve npm gerekir. `.rpm` için `rpm-build` (Ubuntu’da `rpm`), Fedora�
 electron-builder’ın paketleme aracı için ayrıca `libxcrypt-compat` gerekir.
 
 ```sh
-cd windows
+cd linux
 npm ci
+python3 ../scripts/prepare-windows-search-models.py --config search-model-config.json --output assets/CLIP   # çevrimdışı görsel arama; paketler için gerekli
 npm test
 npm start
 npm run dist:linux        # AppImage, .deb ve .rpm
 ```
 
 `npm run test:linux` gerçek uygulamayı açıp pano toplama, dışarı kopyalama,
-dosya listeleri, Ctrl+Enter, kayıtlar, kısayol komutları ve Linux ayar sayfalarını
+dosya listeleri, Ctrl+Enter, kayıtlar, kısayol komutları, Linux ayar sayfalarını ve
+çevrimdışı görsel aramayı (paketlenmiş uygulamada her zaman; paket modeli içermelidir)
 denetler. Panoyu değiştirdiği için yalnızca `xvfb-run`, başsız Sway veya iç içe bir
 compositor gibi geçici bir oturumda çalıştırın. [Linux iş akışı](../.github/workflows/linux.yml)
 X11 ve Wayland’de kabul testlerini çalıştırır, üç paketi derler ve paketlenmiş

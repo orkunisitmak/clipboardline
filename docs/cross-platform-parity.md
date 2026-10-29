@@ -49,8 +49,8 @@ The adapters execute application behavior:
   this adapter on Windows. Running it on a Mac is useful development feedback,
   but is explicitly rejected as Windows acceptance by the release checker.
 
-- Linux: the Linux packages ship the same `renderer.js`. On a Linux host,
-  `renderer-ui.test.cjs` writes `platform: "linux"` reports (`linux.json`,
+- Linux: the Linux edition in `linux/` ships a renderer derived from the Windows
+  `renderer.js`. On a Linux host, its `renderer-ui.test.cjs` writes `platform: "linux"` reports (`linux.json`,
   `library-linux.json`). Both checkers verify them with the optional
   `--linux-report`; the contracts list Linux under `additionalPlatforms`, and
   every OS-native exception documents its Linux behavior. The Mac and Windows

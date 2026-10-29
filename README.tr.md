@@ -345,12 +345,12 @@ npm run test:electron
 
 ### Linux kaynak geliştirme ve paketler
 
-Linux sürümü aynı `windows/` projesinden derlenir. Linux paketleri Windows ile aynı
-bileşenleri ve lisans bildirimlerini içerir; FFmpeg, `wl-clipboard` ve `xdotool`
+Linux sürümü, `windows/` projesinden türetilmiş `linux/` klasöründedir. Linux paketleri
+Windows ile aynı bileşenleri ve lisans bildirimlerini içerir; FFmpeg, `wl-clipboard` ve `xdotool`
 isteğe bağlı dağıtım paketleridir, pakete eklenmez.
 
 ```sh
-cd windows
+cd linux
 npm ci
 npm test
 npm start

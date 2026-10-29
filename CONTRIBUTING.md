@@ -41,16 +41,16 @@ Windows has its own implementation and build instructions. A macOS build/test ca
 
 ### Linux development
 
-The Electron project in `windows/` also builds Linux. Use Node.js 24 on Linux x64; see the [Linux guide](docs/linux.md) for optional packages.
+The Linux edition lives in `linux/`, an Electron project derived from `windows/`. Use Node.js 24 on Linux x64; see the [Linux guide](docs/linux.md) for optional packages.
 
 ```sh
-cd windows
+cd linux
 npm ci
 npm test
 npm run dist:linux
 ```
 
-`npm run test:linux` launches the real application and replaces the clipboard: run it only inside a disposable session (`xvfb-run`, headless Sway or a nested compositor), never on a desktop that holds personal clipboard data. A Linux run does not certify Windows or macOS behavior, and Windows acceptance on Linux is still rejected. Linux-specific code belongs in `windows/lib/linux-*.cjs`; keep Windows behavior unchanged unless the change is meant for both.
+`npm run test:linux` launches the real application and replaces the clipboard: run it only inside a disposable session (`xvfb-run`, headless Sway or a nested compositor), never on a desktop that holds personal clipboard data. A Linux run does not certify Windows or macOS behavior, and Windows acceptance on Linux is still rejected. Linux changes belong in `linux/`; a fix that applies to both Electron editions must be made in `windows/` and `linux/`.
 
 ## Türkçe
 
@@ -62,4 +62,4 @@ Anlamsal arama modelleri isteğe bağlıdır: `CLIPBOARDLINE_BUNDLE_MODELS=1 bas
 
 Testlerde yapay metin/görsel ve geçici dizin kullanın. Kişisel pano içeriği, hesap ekran görüntüsü, veritabanı, anahtar, özel URL veya imza dosyası commit etmeyin. Yeni kısayolları ve çevirileri güncel tutun. macOS'ta geçen testleri Windows'ta da geçmiş gibi sunmayın; gerçekten denediğiniz platformu ve paketi belirtin.
 
-Linux sürümü de `windows/` klasöründen derlenir: `npm ci`, `npm test` ve `npm run dist:linux`. `npm run test:linux` gerçek uygulamayı açar ve panoyu değiştirir; yalnızca geçici bir oturumda (`xvfb-run`, başsız Sway veya iç içe compositor) çalıştırın. Linux’a özgü kod `windows/lib/linux-*.cjs` dosyalarına aittir. Ayrıntılar için [Linux rehberine](docs/linux.md#türkçe) bakın.
+Linux sürümü, `windows/` projesinden türetilmiş `linux/` klasöründedir; orada `npm ci`, `npm test` ve `npm run dist:linux`. `npm run test:linux` gerçek uygulamayı açar ve panoyu değiştirir; yalnızca geçici bir oturumda (`xvfb-run`, başsız Sway veya iç içe compositor) çalıştırın. Linux değişiklikleri `linux/` klasörüne aittir; iki Electron sürümünü de etkileyen bir düzeltme hem `windows/` hem `linux/` içinde yapılmalıdır. Ayrıntılar için [Linux rehberine](docs/linux.md#türkçe) bakın.
