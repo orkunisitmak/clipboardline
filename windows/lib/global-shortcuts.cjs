@@ -25,8 +25,37 @@ class GlobalShortcuts{
   return resume;
  }
  update(shortcuts){
-  const rejected=[];
+  const rejected=[],swapped=new Set();
+  // A reciprocal swap only uses two shortcuts already owned by this instance.
+  // Release both together, then restore both on failure instead of rejecting
+  // valid bindings merely because each is still held by its old action.
+  if(!this.suspended&&!this.disposed)for(const action of ACTIONS){
+   if(swapped.has(action))continue;
+   const previous=this.registered.get(action),next=shortcuts[action]||'';
+   if(!previous||!next||next===previous||!this.active.has(action))continue;
+   const other=ACTIONS.find(candidate=>candidate!==action&&this.active.has(candidate)&&this.registered.get(candidate)===next&&(shortcuts[candidate]||'')===previous);
+   if(!other)continue;
+   const pair=[{action,previous,next},{action:other,previous:next,next:previous}],installed=[];
+   let success=true;
+   try{
+    for(const item of pair){this.registry.unregister(item.previous);this.active.delete(item.action);this.epochs.delete(item.action);}
+    for(const item of pair){if(!this.register(item.action,item.next)){success=false;break;}this.active.add(item.action);installed.push(item);}
+   }catch{success=false;}
+   if(success)for(const item of pair)this.registered.set(item.action,item.next);
+   else{
+    for(const item of installed){try{this.registry.unregister(item.next);}catch{}this.active.delete(item.action);this.epochs.delete(item.action);}
+    for(const item of pair){
+     if(this.active.has(item.action))continue;
+     let restored=false;try{restored=this.register(item.action,item.previous);}catch{}
+     if(restored)this.active.add(item.action);
+     else{this.registered.delete(item.action);this.failed(new Error('A shortcut could not be restored after a failed swap.'));}
+    }
+    rejected.push(...pair.map(item=>({action:item.action,shortcut:item.next,previous:item.previous})));
+   }
+   swapped.add(action);swapped.add(other);
+  }
   for(const action of ACTIONS){
+   if(swapped.has(action))continue;
    const next=shortcuts[action]||'',previous=this.registered.get(action)||'';
    if(next===previous)continue;
    if(this.suspended||this.disposed){rejected.push({action,shortcut:next,previous});continue;}

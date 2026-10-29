@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://docs.mergify.com/mergify-configuration-schema.json
+# Phase 1: informational labels only after App access and this policy are approved.
+# No merge/queue rules or auto_merge_conditions (even [] enables auto-merge).
+# All mutating commands are deliberately unsatisfiable during observation.
+commands_restrictions:
+  backport:
+    conditions: ["sender = orkunisitmak", "sender != orkunisitmak"]
+  copy:
+    conditions: ["sender = orkunisitmak", "sender != orkunisitmak"]
+  dequeue:
+    conditions: ["sender = orkunisitmak", "sender != orkunisitmak"]
+  queue:
+    conditions: ["sender = orkunisitmak", "sender != orkunisitmak"]
+  rebase:
+    conditions: ["sender = orkunisitmak", "sender != orkunisitmak"]
+  refresh:
+    conditions: ["sender = orkunisitmak", "sender != orkunisitmak"]
+  requeue:
+    conditions: ["sender = orkunisitmak", "sender != orkunisitmak"]
+  squash:
+    conditions: ["sender = orkunisitmak", "sender != orkunisitmak"]
+  update:
+    conditions: ["sender = orkunisitmak", "sender != orkunisitmak"]
+pull_request_rules:
+  - name: Observe - maintainer decision remains necessary
+    conditions: ["base = main", "-closed"]
+    actions:
+      label:
+        toggle: ["triage/needs-maintainer"]
+  - name: Observe - dependency changes
+    conditions:
+      - base = main
+      - -closed
+      - or:
+          - author = dependabot[bot]
+          - 'files ~= (^|/)(package(-lock)?\.json|Package\.(swift|resolved)|requirements[^/]*\.txt|dependabot\.ya?ml)$'
+    actions:
+      label:
+        toggle: ["triage/dependencies"]
+  - name: Observe - sensitive code and policy paths
+    conditions:
+      - base = main
+      - -closed
+      - 'files ~= ^(\.github/|\.coderabbit\.ya?ml$|\.mergify\.ya?ml$|AGENTS\.md$|CODEOWNERS$|SECURITY\.md$|PRIVACY\.md$|Package\.(swift|resolved)$|release-version\.json$|upstream-state\.json$|update-config\.json$|credential-broker-config\.json$|Sources/|Tests/|windows/|contracts/|scripts/)'
+    actions:
+      label:
+        toggle: ["triage/sensitive"]
+  - name: Observe - merge conflict
+    conditions: ["base = main", "-closed", "conflict"]
+    actions:
+      label:
+        toggle: ["triage/conflict"]
+  - name: Observe - CI needs attention
+    conditions:
+      - base = main
+      - -closed
+      - or:
+          - "#check-failure > 0"
+          - "#check-pending > 0"
+          - "#check-stale > 0"
+    actions:
+      label:
+        toggle: ["triage/ci-attention"]
+  - name: Observe - shared localization changes
+    conditions:
+      - base = main
+      - -closed
+      - 'files ~= ^(Sources/Tendedero/Resources/[^/]+\.lproj/Localizable\.strings|windows/locales\.js)$'
+    actions:
+      label:
+        toggle: ["triage/localization"]

@@ -1,0 +1,3 @@
+# Reviewer tooling only; never part of the shipped Mac/Windows application.
+PyYAML==6.0.3
+jsonschema==4.25.1

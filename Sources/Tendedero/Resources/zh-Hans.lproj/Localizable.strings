@@ -78,7 +78,7 @@
 "Last 30 days" = "Last 30 days";
 "Last 7 days" = "Last 7 days";
 "Last copied" = "Last copied";
-"Let Tendedero handle your screenshots?" = "让 Tendedero 接管你的截图？";
+"Let ClipBoardLine handle your screenshots?" = "让 ClipBoardLine 接管你的截图？";
 "Library" = "Library";
 "Library could not be opened. Existing history is kept; capture is paused." = "Library could not be opened. Existing history is kept; capture is paused.";
 "Library could not be saved or opened" = "Library could not be saved or opened";
@@ -94,7 +94,7 @@
 "Markup" = "标记";
 "Medium" = "中";
 "Move %d items to recoverable Trash?" = "Move %d items to recoverable Trash?";
-"Move Tendedero to the Applications folder and try again." = "请先把 Tendedero 移到「应用程序」文件夹，再试一次。";
+"Move ClipBoardLine to the Applications folder and try again." = "请先把 ClipBoardLine 移到「应用程序」文件夹，再试一次。";
 "Move app copies to Trash" = "将应用副本移到废纸篓";
 "Move selected texts to recoverable Trash?" = "将所选文本移到可恢复的废纸篓？";
 "Move this text to recoverable Trash?" = "将此文本移至可恢复的废纸篓？";
@@ -153,7 +153,7 @@
 "Save to library" = "Save to library";
 "Screenshots" = "Screenshots";
 "Screenshots hang instantly and skip the Desktop. Your macOS screenshot settings are restored when the app quits." = "Screenshots hang instantly and skip the Desktop. Your macOS screenshot settings are restored when the app quits.";
-"Screenshots will hang on the line the instant you take them, without the floating thumbnail, and will not pile up on your Desktop. Drag one to a folder to keep it, or discard it with the cross. You can turn this off in Settings, and your settings come back when Tendedero quits." = "Screenshots will hang on the line the instant you take them, without the floating thumbnail, and will not pile up on your Desktop. Drag one to a folder to keep it, or discard it with the cross. You can turn this off in Settings, and your settings come back when Tendedero quits.";
+"Screenshots will hang on the line the instant you take them, without the floating thumbnail, and will not pile up on your Desktop. Drag one to a folder to keep it, or discard it with the cross. You can turn this off in Settings, and your settings come back when ClipBoardLine quits." = "Screenshots will hang on the line the instant you take them, without the floating thumbnail, and will not pile up on your Desktop. Drag one to a folder to keep it, or discard it with the cross. You can turn this off in Settings, and your settings come back when ClipBoardLine quits.";
 "Search this view" = "Search this view";
 "Select an item to view its details" = "Select an item to view its details";
 "Selected files could not be read; nothing was copied" = "Selected files could not be read; nothing was copied";

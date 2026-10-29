@@ -709,3 +709,16 @@ test('IME composing Enter Escape and arrows stay native in Library search, text 
 test('an old shortcut save completion cannot close a newer recorder or release its owned global-shortcut lease',async()=>{
  const f=fixture();await f.ready();await f.api.command('settings');await f.ready();await f.click('record-local',{keyAction:'pin'});await f.ready();await f.key('KeyO');const release=f.deferReply('setSettings');await f.click('confirm-modal');await f.key('Escape');await f.click('record-local',{keyAction:'copy'});await f.ready();const begin=f.commands.filter(value=>value.action==='beginShortcutRecording').at(-1);assert.ok(begin);release();await f.ready();assert.match(f.overlay,/Record shortcut/);assert.equal(f.commands.some(value=>value.action==='endShortcutRecording'&&value.payload.token===begin.payload.token),false);await f.key('Escape');assert.equal(f.commands.some(value=>value.action==='endShortcutRecording'&&value.payload.token===begin.payload.token),true);
 });
+
+test('a capture crop owns Enter before the next render tick can copy and hide the shelves',async()=>{
+ const f=fixture();await f.ready();
+ f.api.emit({viewEvent:{serial:'immediate-capture-crop',selectId:f.image,kind:'image',preview:true,crop:true}});
+ await f.key('Enter');
+ assert.equal(f.commands.filter(value=>value.action==='copy').length,0,'Enter belongs to the capture crop immediately');
+ assert.equal(f.state.windowVisible,true,'Applying the crop keeps its preview open');
+ await f.ready();
+ assert.doesNotMatch(f.overlay,/id="markup-canvas"/,'An unchanged crop finishes back in preview');
+ await f.key('Enter');
+ assert.equal(f.commands.filter(value=>value.action==='copy').length,1,'Enter in the finished preview copies normally');
+ assert.equal(f.state.windowVisible,false);
+});

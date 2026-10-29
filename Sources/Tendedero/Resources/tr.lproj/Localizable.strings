@@ -78,7 +78,7 @@
 "Last 30 days" = "Son 30 gün";
 "Last 7 days" = "Son 7 gün";
 "Last copied" = "Son kopyalanan";
-"Let Tendedero handle your screenshots?" = "Ekran görüntülerini Tendedero yönetsin mi?";
+"Let ClipBoardLine handle your screenshots?" = "Ekran görüntülerini ClipBoardLine yönetsin mi?";
 "Library" = "Kütüphane";
 "Library could not be opened. Existing history is kept; capture is paused." = "Kütüphane açılamadı. Mevcut geçmiş korundu; yakalama duraklatıldı.";
 "Library could not be saved or opened" = "Kütüphane kaydedilemedi veya açılamadı";
@@ -94,7 +94,7 @@
 "Markup" = "İşaretle";
 "Medium" = "Orta";
 "Move %d items to recoverable Trash?" = "%d içerik geri alınabilir Çöp’e taşınsın mı?";
-"Move Tendedero to the Applications folder and try again." = "Tendedero'yu Uygulamalar klasörüne taşıyın ve tekrar deneyin.";
+"Move ClipBoardLine to the Applications folder and try again." = "ClipBoardLine'ı Uygulamalar klasörüne taşıyın ve tekrar deneyin.";
 "Move app copies to Trash" = "Uygulama kopyalarını Çöp Kutusu’na taşı";
 "Move selected texts to recoverable Trash?" = "Seçili metinler geri alınabilir Çöp Kutusu’na taşınsın mı?";
 "Move this text to recoverable Trash?" = "Bu metin geri alınabilir Çöp Kutusu’na taşınsın mı?";
@@ -153,7 +153,7 @@
 "Save to library" = "Kütüphaneye kaydet";
 "Screenshots" = "Ekran görüntüleri";
 "Screenshots hang instantly and skip the Desktop. Your macOS screenshot settings are restored when the app quits." = "Ekran görüntüleri anında askıya gelir, masaüstüne birikmez. Uygulama kapandığında macOS ekran görüntüsü ayarlarınız geri yüklenir.";
-"Screenshots will hang on the line the instant you take them, without the floating thumbnail, and will not pile up on your Desktop. Drag one to a folder to keep it, or discard it with the cross. You can turn this off in Settings, and your settings come back when Tendedero quits." = "Ekran görüntüleri, yüzen küçük resim olmadan çekildiği anda askıya gelir ve masaüstünüzde birikmez. Saklamak için bir klasöre sürükleyin veya çarpı düğmesiyle kaldırın. Ayarlar’dan kapatabilirsiniz; Tendedero kapandığında önceki ekran görüntüsü ayarlarınız geri yüklenir.";
+"Screenshots will hang on the line the instant you take them, without the floating thumbnail, and will not pile up on your Desktop. Drag one to a folder to keep it, or discard it with the cross. You can turn this off in Settings, and your settings come back when ClipBoardLine quits." = "Ekran görüntüleri, yüzen küçük resim olmadan çekildiği anda askıya gelir ve masaüstünüzde birikmez. Saklamak için bir klasöre sürükleyin veya çarpı düğmesiyle kaldırın. Ayarlar’dan kapatabilirsiniz; ClipBoardLine kapandığında önceki ekran görüntüsü ayarlarınız geri yüklenir.";
 "Search this view" = "Bu görünümde ara";
 "Select an item to view its details" = "Ayrıntıları görmek için bir içerik seçin";
 "Selected files could not be read; nothing was copied" = "Seçili dosyalar okunamadı; hiçbir şey kopyalanmadı";

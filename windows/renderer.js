@@ -45,7 +45,9 @@ function languageCode(){const configured=state.settings.language||'system',code=
 const t = text => window.clipboardLineTranslations?.[languageCode()]?.[text] || (languageCode()==='tr'?TR[text]:null) || text;
 const esc = value => String(value ?? '').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const attr = esc;
-const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();
+// Match the Mac folding: strip diacritics, then a locale-independent lower case.
+// A Turkish default locale must not turn a typed I into dotless ı.
+const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 let indexedItems=null,itemIndex=new Map();
 const item = id => {if(indexedItems!==state.items){indexedItems=state.items;itemIndex=new Map(state.items.map(value=>[value.id,value]));}return itemIndex.get(id);};
 const saved = value => value.pinned || value.retainedAt!=null || value.folderIds?.length || value.tags?.length;
@@ -252,7 +254,7 @@ function applyState(next,{initial=false}={}) {
  // Showing a hidden native window can broadcast resize before it is visible.
  // Leave its search/capture event pending until the visible packet arrives;
  // otherwise the fresh-reveal reset would erase an already-consumed event.
- if(lastVisibility!==false&&signature&&signature!==ui.lastEvent){ui.lastEvent=signature;const event=next.viewEvent;if(event.settingsTab)ui.settingsTab=event.settingsTab;if(event.selectId){ui.active=event.kind||item(event.selectId)?.kind||ui.active;ui.focus=event.selectId;ui.selected=new Set([event.selectId]);ui.preview=event.preview?event.selectId:null;ui.editingText=false;ui.editor=null;ui.zoom=1;ui.pan={x:0,y:0};if(event.crop)setTimeout(()=>beginImageEdit('crop'),0);}if(event.search){ui.searchOpen=true;ui.searchEditing=true;setTimeout(()=>document.getElementById('search-input')?.focus(),0);}}
+ if(lastVisibility!==false&&signature&&signature!==ui.lastEvent){ui.lastEvent=signature;const event=next.viewEvent;if(event.settingsTab)ui.settingsTab=event.settingsTab;if(event.selectId){ui.active=event.kind||item(event.selectId)?.kind||ui.active;ui.focus=event.selectId;ui.selected=new Set([event.selectId]);ui.preview=event.preview?event.selectId:null;ui.editingText=false;ui.editor=null;ui.zoom=1;ui.pan={x:0,y:0};if(event.crop)void beginImageEdit('crop');}if(event.search){ui.searchOpen=true;ui.searchEditing=true;setTimeout(()=>document.getElementById('search-input')?.focus(),0);}}
  if(ui.focus&&!item(ui.focus))ui.focus=null;
  if(!ui.focus&&!ui.preview&&lastVisibility!==false)focusFirst();
  render();if(fresh&&ui.view==='library'&&lastVisibility!==false)focusLibraryResults();

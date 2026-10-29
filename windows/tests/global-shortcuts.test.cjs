@@ -8,6 +8,32 @@ test('replacements register before releasing a working shortcut and a rejected k
 test('an in-use combination cannot steal another action and Off unregisters only its own binding',()=>{const f=fixture();f.shortcuts.update({toggle:'Control+Alt+T',library:'Control+Alt+L'});assert.equal(f.shortcuts.update({toggle:'Control+Alt+T',library:'Control+Alt+T'}).length,1);assert.equal(f.callbacks.has('Control+Alt+L'),true);f.shortcuts.update({toggle:'Control+Alt+T',library:''});assert.equal(f.callbacks.has('Control+Alt+L'),false);assert.equal(f.callbacks.has('Control+Alt+T'),true);assert.deepEqual(f.shortcuts.update({toggle:'Control+Alt+T',unknown:'Control+Alt+Z'}),[]);assert.equal(f.callbacks.has('Control+Alt+Z'),false);});
 test('a synchronous or asynchronous shortcut action failure reports once instead of escaping the OS callback',async()=>{const f=fixture(),errors=[];f.shortcuts.failed=error=>errors.push(error.message);f.shortcuts.handlers.library=()=>{throw new Error('Library unavailable');};f.shortcuts.handlers.copyLatest=async()=>{throw new Error('Image unavailable');};f.shortcuts.update({library:'Control+Alt+L',copyLatest:'Control+Alt+C'});f.callbacks.get('Control+Alt+L')();f.callbacks.get('Control+Alt+C')();await Promise.resolve();assert.deepEqual(errors,['Library unavailable','Image unavailable']);});
 
+test('a pair of owned global shortcuts can swap atomically without leaving old callbacks active',async()=>{
+ const f=fixture();
+ assert.deepEqual(f.shortcuts.update({toggle:'Control+Alt+T',search:'Control+Alt+S'}),[]);
+ const stale=[...f.callbacks.values()];
+ assert.deepEqual(f.shortcuts.update({toggle:'Control+Alt+S',search:'Control+Alt+T'}),[]);
+ assert.deepEqual([...f.shortcuts.registered],[['toggle','Control+Alt+S'],['search','Control+Alt+T']]);
+ for(const callback of stale)callback();await Promise.resolve();assert.deepEqual(f.fired,[]);
+ f.callbacks.get('Control+Alt+S')();f.callbacks.get('Control+Alt+T')();await Promise.resolve();
+ assert.deepEqual(f.fired,['toggle','search']);
+});
+
+test('failed atomic swap restores each previous working registration',async()=>{
+ const f=fixture(),errors=[];f.shortcuts.failed=error=>errors.push(error.message);
+ f.shortcuts.update({toggle:'Control+Alt+T',search:'Control+Alt+S'});
+ const original=f.shortcuts.registry.register;let failOnce=true;
+ f.shortcuts.registry.register=(key,callback)=>{if(failOnce&&key==='Control+Alt+S'){failOnce=false;return false;}return original(key,callback);};
+ const rejected=f.shortcuts.update({toggle:'Control+Alt+S',search:'Control+Alt+T'});
+ assert.equal(failOnce,false,'the registry should actually attempt the swap before rolling back');
+ assert.ok(f.events.filter(event=>event[0]==='unregister').length>=2,'an owned pair must be released before trying the new bindings');
+ assert.deepEqual(rejected.map(value=>value.action).sort(),['search','toggle']);
+ assert.deepEqual([...f.shortcuts.registered],[['toggle','Control+Alt+T'],['search','Control+Alt+S']]);
+ assert.deepEqual([...f.callbacks.keys()].sort(),['Control+Alt+S','Control+Alt+T']);
+ f.callbacks.get('Control+Alt+T')();f.callbacks.get('Control+Alt+S')();
+ assert.deepEqual(f.fired,['toggle','search']);assert.deepEqual(errors,[]);
+});
+
 test('recording leases release every owned shortcut and suppress stale callbacks until the final recorder closes',async()=>{
  const f=fixture(),values={toggle:'Control+Alt+T',search:'Control+Alt+S',library:'Control+Alt+L',copyLatest:'Control+Alt+C',screenshot:'Control+Alt+A'};
  assert.deepEqual(Object.keys(values),[...recordingContract.commonGlobalActions,...recordingContract.windowsAdditionalGlobalActions]);f.shortcuts.update(values);const stale=[...f.callbacks.values()];f.callbacks.set('Control+Alt+Unrelated',()=>{});
