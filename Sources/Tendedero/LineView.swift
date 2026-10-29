@@ -11,12 +11,15 @@ struct LineView: View {
     static let searchPanelID = UUID()
     private static let noticeID = UUID()
     var body: some View {
+        if line.isIsland { IslandView(line: line) } else { rows }
+    }
+    private var rows: some View {
         GeometryReader { geo in
             let width = geo.size.width
             VStack(spacing: 0) {
                 ForEach(line.presentation.shelves, id: \.self) { shelf in
                     ZStack(alignment: .topLeading) {
-                        Rope(width: width)
+                        Rope(width: width, motion: line.rope(shelf))
                         if shelf == .texts { TextShelfView(line: line, texts: texts, width: width) }
                         else if shelf == .links { LinkShelfView(line: line, links: links, width: width) }
                         else {
@@ -31,9 +34,10 @@ struct LineView: View {
                             ForEach(range.map { (index: $0, item: displayed[$0]) }, id: \.item.id) { index, item in
                                 let x = Layout.x(index: index, scrollOffset: line.scrollOffset)
                                 let ropeY = Layout.ropeY(x: x, width: width)
-                                PeggedView(item: item, line: line, quickNumber: quickNumbers[item.id])
+                                PeggedView(item: item, line: line, quickNumber: quickNumbers[item.id], hangX: x)
                                     .frame(width: Layout.cardWidth, height: Layout.panelHeight - ropeY, alignment: .top)
                                     .position(x: x, y: ropeY - Layout.pinAbove + (Layout.panelHeight - ropeY) / 2)
+                                    .hung(on: line.rope(.images), x: x)
                             }
                         }
                         HStack(spacing: 7) {
@@ -50,6 +54,10 @@ struct LineView: View {
                     }.frame(width: width, height: Layout.panelHeight).clipped()
                 }
             }.frame(width: width, height: line.panelHeight, alignment: .topLeading)
+                // A card in flight joins the rope when it lands; a falling one has already left.
+                .onChange(of: line.displayItems.filter { !$0.flying && !$0.falling }.map(\.id)) { old, new in
+                    line.rope(.images).react(from: old, to: new) { Layout.x(index: $0, scrollOffset: line.scrollOffset) }
+                }
                 .overlay(alignment: .top) {
                     if width >= 700, line.isShelfSearchActive, line.searchEditingShelf == nil {
                         ShelfSearchSummary(line: line, shelf: line.activeShelf)
@@ -136,14 +144,31 @@ private struct ShelfNotice: View {
 
 struct Rope: View {
     let width: CGFloat
-    private var path: Path {
+    @ObservedObject var motion: HangMotion
+    private var restingPath: Path {
         Path { p in
             p.move(to: CGPoint(x: -20, y: Layout.ropeTop))
             p.addQuadCurve(to: CGPoint(x: width + 20, y: Layout.ropeTop),
                 control: CGPoint(x: width / 2, y: Layout.ropeTop + 2 * Layout.sag(width: width)))
         }
     }
+    /// While a ripple runs, the rope is traced through the same dip the cards follow.
+    private func movingPath(at time: TimeInterval) -> Path {
+        Path { p in
+            var x: CGFloat = -20
+            p.move(to: CGPoint(x: x, y: Layout.ropeY(x: x, width: width) + motion.dip(at: x, time: time)))
+            while x < width + 20 {
+                x = min(width + 20, x + 8)
+                p.addLine(to: CGPoint(x: x, y: Layout.ropeY(x: x, width: width) + motion.dip(at: x, time: time)))
+            }
+        }
+    }
     var body: some View {
+        TimelineView(.animation(paused: !motion.running)) { context in
+            strands(motion.running ? movingPath(at: context.date.timeIntervalSinceReferenceDate) : restingPath)
+        }
+    }
+    private func strands(_ path: Path) -> some View {
         ZStack {
             path.stroke(Color.black.opacity(0.22), lineWidth: 1.4).offset(y: 1.2).blur(radius: 1.2)
             path.stroke(Color(white: 0.55), lineWidth: 1.2)

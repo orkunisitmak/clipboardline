@@ -6,8 +6,12 @@ struct PeggedView: View {
     let item: Pegged
     @ObservedObject var line: Line
     let quickNumber: Int?
+    /// Where the clip sits on the rope; the breeze reaches it in turn.
+    var hangX: CGFloat = 0
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var swing: Double = 0
+    @State private var clipOpen = false
     @State private var arrived = false
     @State private var hovering = false
 
@@ -18,7 +22,9 @@ struct PeggedView: View {
 
     var body: some View {
         VStack(spacing: -12) {
-            Clothespin()
+            Clothespin(seed: item.id)
+                // The clip opens as the card arrives and pinches shut on the rope.
+                .scaleEffect(x: clipOpen ? 1.3 : 1, y: clipOpen ? 0.9 : 1, anchor: .top)
                 .zIndex(1)
             card
         }
@@ -84,7 +90,7 @@ struct PeggedView: View {
             .shadow(color: .black.opacity(hovering ? 0.26 : 0.18), radius: hovering ? 14 : 10, y: hovering ? 8 : 5)
             // Holding presses the photo in slowly, so a long press feels like
             // it is building up to something.
-            .scaleEffect(pressed ? 0.95 : (hovering ? 1.035 : 1), anchor: .top)
+            .scaleEffect(pressed ? 0.95 : (hovering ? 1.035 : selected ? 1.02 : 1), anchor: .top)
             .animation(pressed ? .easeInOut(duration: 0.45) : .spring(response: 0.3, dampingFraction: 0.6), value: pressed)
             .opacity(dragging ? 0.45 : 1)
             .overlay(alignment: .topLeading) {
@@ -124,6 +130,7 @@ struct PeggedView: View {
                 }
             }
             .animation(.easeOut(duration: 0.18), value: hovering)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: selected)
             .animation(.easeOut(duration: 0.2), value: copied)
             .onHover { hovering = $0 }
             .background(
@@ -140,10 +147,12 @@ struct PeggedView: View {
             arrived = true
             return
         }
-        guard line.consumeArrival(item.id) else { arrived = true; return }
-        swing = 16
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) { arrived = true }
-        withAnimation(.interpolatingSpring(stiffness: 46, damping: 2.6)) { swing = 0 }
+        guard line.consumeArrival(item.id), !reduceMotion else { arrived = true; return }
+        swing = Swing.arrivalDegrees
+        clipOpen = true
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) { arrived = true }
+        withAnimation(Swing.spring) { swing = 0 }
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.55).delay(0.12)) { clipOpen = false }
     }
 
     /// Landing after the flight: no jump, just a small sway from rest.
@@ -152,16 +161,16 @@ struct PeggedView: View {
     }
 
     private func breeze() {
-        let delay = Double.random(in: 0...0.35)
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            nudge(Double.random(in: 1.6...3.4))
+        DispatchQueue.main.asyncAfter(deadline: .now() + Swing.breezeDelay(x: hangX)) {
+            nudge(Double.random(in: 1.6...2.4))
         }
     }
 
     private func nudge(_ degrees: Double) {
+        guard !reduceMotion else { return }
         withAnimation(.easeOut(duration: 0.3)) { swing = degrees }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.interpolatingSpring(stiffness: 38, damping: 2.4)) { swing = 0 }
+            withAnimation(Swing.spring) { swing = 0 }
         }
     }
 }
@@ -193,6 +202,9 @@ extension View {
 /// A minimal aluminium clip: a brushed metal pill with a slot where it
 /// grips the line, and a soft shadow so it reads on any background.
 struct Clothespin: View {
+    /// On the island each card hangs from its own one of thirty hangers.
+    var seed: UUID?
+    @Environment(\.usesHangers) private var usesHangers
     private let metal = LinearGradient(
         stops: [
             .init(color: Color(white: 0.70), location: 0),
@@ -203,6 +215,10 @@ struct Clothespin: View {
         startPoint: .leading, endPoint: .trailing)
 
     var body: some View {
+        if usesHangers, let seed { HangerView(seed: seed) } else { metalClip }
+    }
+
+    private var metalClip: some View {
         RoundedRectangle(cornerRadius: 3.5, style: .continuous)
             .fill(metal)
             .frame(width: 9, height: 26)

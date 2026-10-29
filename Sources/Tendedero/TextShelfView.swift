@@ -31,12 +31,16 @@ private struct TextShelfContents: View, Equatable {
                 TextCard(entry: entry, line: line, texts: texts, renderState: renderState, quickNumber: quickNumbers[entry.id])
                     .position(x: Layout.x(index: index, scrollOffset: texts.scrollOffset),
                         y: Layout.ropeY(x: Layout.x(index: index, scrollOffset: texts.scrollOffset), width: width) - Layout.pinAbove + 65)
+                    .hung(on: line.rope(.texts), x: Layout.x(index: index, scrollOffset: texts.scrollOffset))
             }
+        }
+        .onChange(of: entries.map(\.id)) { old, new in
+            line.rope(.texts).react(from: old, to: new) { Layout.x(index: $0, scrollOffset: texts.scrollOffset) }
         }
     }
 }
 
-private struct TextCard: View {
+struct TextCard: View {
     let entry: TextHistory.Entry
     let line: Line
     @ObservedObject var texts: TextHistory
@@ -46,7 +50,7 @@ private struct TextCard: View {
     private var dragging: Bool { renderState.draggingID == entry.id }
     var body: some View {
         VStack(spacing: -8) {
-            Clothespin().zIndex(1)
+            Clothespin(seed: entry.id).zIndex(1)
             VStack(alignment: .leading, spacing: 5) {
                 if let title = entry.title, !title.isEmpty {
                     Text(title).font(.system(size: 12, weight: .semibold)).lineLimit(2)

@@ -186,15 +186,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let line, let shelf = line.searchEditingShelf else { return nil }
             return ShelfSearchFocus(shelf: shelf, request: line.searchFocusRequests[shelf, default: 0])
         }
+        panel.onPlaced = { [weak self] screen in
+            guard let self else { return }
+            let notch = IslandNotch.of(screen)
+            if self.line.islandNotch != notch { self.line.islandNotch = notch }
+            if self.panel.contentHeight != self.line.panelHeight { self.panel.contentHeight = self.line.panelHeight }
+        }
+        applyLayoutMode()
+        line.onLayoutModeChanged = { [weak self] in
+            guard let self else { return }
+            self.applyLayoutMode()
+            self.panel.placeOnScreen(self.panel.screen)
+        }
         panel.contentHeight = line.panelHeight
         panel.onScrollLocation = { [weak self] point in
-            guard let self else { return }
+            guard let self, !self.line.isIsland else { return }
             let index = max(0, min(self.line.presentation.shelves.count - 1, Int((self.panel.frame.height - point.y) / Layout.panelHeight)))
             self.line.focusShelf(self.line.presentation.shelves[index], requestFocus: false)
         }
         panel.onScroll = { [weak self] x, y, precise in
             guard let self else { return }
-            if self.line.showingTexts {
+            if self.line.isIsland {
+                self.line.scrollIsland((abs(x) > abs(y) ? x : y) * (precise ? 1 : 24))
+            } else if self.line.showingTexts {
                 let delta = abs(x) > abs(y) ? x : y
                 self.line.texts.scroll(delta * (precise ? 1 : 24), width: self.line.viewportWidth)
             } else if self.line.activeShelf == .links { self.line.links.scroll((abs(x) > abs(y) ? x : y) * (precise ? 1 : 24), width: self.line.viewportWidth) }
@@ -799,6 +813,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if panel.screen != screen { panel.placeOnScreen(screen); updateCapacity() }
             refresh(); reveal(); focusLine(preservePasteTarget: true); pointerFocus = true
         }
+    }
+
+    /// The island grows out of the notch over the menu bar; the classic rows
+    /// slide down beneath it.
+    private func applyLayoutMode() {
+        panel.islandReveal = line.isIsland ? { [weak self] on in self?.line.islandExpanded = on } : nil
+        panel.contentHeight = line.panelHeight
     }
 
     /// The panel spans the whole width of the screen, so it only accepts the

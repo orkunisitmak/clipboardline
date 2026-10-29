@@ -209,6 +209,14 @@ private struct SettingsView: View {
                     Toggle(shelf.title, isOn: model.binding(get: { line.presentation.shelves.contains(shelf) }, set: { line.setShelfVisible(shelf, visible: $0) }))
                         .disabled(line.presentation.shelves == [shelf])
                 }
+                Picker(L("Layout"), selection: model.binding(get: { line.layoutMode }, set: { line.setLayoutMode($0) })) {
+                    ForEach(ShelfLayoutMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                if line.isIsland {
+                    Picker(L("Island surface"), selection: model.binding(get: { line.islandSurface }, set: { line.setIslandSurface($0) })) {
+                        ForEach(IslandSurface.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }.pickerStyle(.segmented)
+                }
                 Picker(L("Colors"), selection: model.binding(get: { line.theme }, set: { line.setTheme($0) })) {
                     ForEach(ShelfTheme.allCases, id: \.self) { Text($0.title).tag($0) }
                 }

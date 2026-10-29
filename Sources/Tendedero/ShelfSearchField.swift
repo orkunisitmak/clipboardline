@@ -156,11 +156,11 @@ struct ShelfSearchBar: View {
         .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(.primary.opacity(0.12), lineWidth: 1) }
         .shadow(color: .black.opacity(0.26), radius: 22, x: 0, y: 8)
         .accessibilityIdentifier("shelf-search-panel")
-        .help(line.presentation.shelves.contains(.images) ? (line.library?.imageSearchStatus.isEmpty == false ? line.library!.imageSearchStatus : L("Search text and OCR")) : L("Search shelves"))
+        .help(line.searchShelves.contains(.images) ? (line.library?.imageSearchStatus.isEmpty == false ? line.library!.imageSearchStatus : L("Search text and OCR")) : L("Search shelves"))
     }
     private func scopeBadges(compact: Bool) -> some View {
         HStack(spacing: 6) {
-            ForEach(line.presentation.shelves, id: \.self) { scope in
+            ForEach(line.searchShelves, id: \.self) { scope in
                 HStack(spacing: 4) {
                     Image(systemName: scope.icon)
                     if !compact { Text(scope.title) }

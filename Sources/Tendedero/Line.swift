@@ -38,6 +38,9 @@ struct Pegged: Identifiable, Equatable {
 final class Line: ObservableObject {
     @Published private(set) var items: [Pegged] = [] { didSet { filteredItems = nil; cachedSelectedItems = nil } }
     @Published private(set) var gust = 0
+    /// One rope per shelf; it moves on its own clock, outside `objectWillChange`.
+    let ropes = Dictionary(uniqueKeysWithValues: Shelf.allCases.map { ($0, HangMotion()) })
+    func rope(_ shelf: Shelf) -> HangMotion { ropes[shelf]! }
     @Published var copiedID: UUID?
     private var copyFeedbackGeneration = 0
     @Published var draggingID: UUID?
@@ -69,6 +72,95 @@ final class Line: ObservableObject {
     @Published private(set) var size: Layout.Size = .medium
     @Published private(set) var theme: ShelfTheme = .soft
     func setTheme(_ value: ShelfTheme) { theme = value; defaults.set(value.rawValue, forKey: "shelfTheme") }
+
+    // MARK: Island
+
+    @Published private(set) var layoutMode: ShelfLayoutMode = .classic
+    func setLayoutMode(_ value: ShelfLayoutMode) {
+        layoutMode = value; defaults.set(value.rawValue, forKey: "shelfLayoutMode")
+        onLayoutModeChanged?()
+    }
+    var onLayoutModeChanged: (() -> Void)?
+    @Published private(set) var islandSurface: IslandSurface = .black
+    func setIslandSurface(_ value: IslandSurface) { islandSurface = value; defaults.set(value.rawValue, forKey: "islandSurface") }
+    /// nil shows every kind on the one rope.
+    @Published private(set) var islandFilter: Shelf?
+    @Published var islandExpanded = false
+    @Published var islandNotch = IslandNotch()
+    @Published private(set) var islandScroll: CGFloat = 0
+    private(set) var islandViewportWidth: CGFloat = 1024
+    var isIsland: Bool { layoutMode == .island }
+
+    var islandEntries: [IslandEntry] {
+        var entries = [IslandEntry]()
+        if islandFilter == nil || islandFilter == .images {
+            // Cards and history entries share the file, not always the ID.
+            let dates = Dictionary(history.entries.map { ($0.path, $0.capturedAt) }, uniquingKeysWith: { first, _ in first })
+            entries += displayItems.filter { !$0.falling }.map {
+                IslandEntry(id: $0.id, shelf: .images, date: dates[$0.url.standardizedFileURL.path] ?? .distantFuture)
+            }
+        }
+        if islandFilter == nil || islandFilter == .texts {
+            entries += texts.displayEntries.map { IslandEntry(id: $0.id, shelf: .texts, date: $0.capturedAt) }
+        }
+        if islandFilter == nil || islandFilter == .links {
+            entries += links.displayEntries.map { IslandEntry(id: $0.id, shelf: .links, date: $0.lastCapturedAt ?? $0.createdAt) }
+        }
+        return entries.sorted { $0.date > $1.date }
+    }
+    func islandCount(_ shelf: Shelf?) -> Int {
+        switch shelf {
+        case nil: displayItems.filter { !$0.falling }.count + texts.displayEntries.count + links.displayEntries.count
+        case .images: displayItems.filter { !$0.falling }.count
+        case .texts: texts.displayEntries.count
+        case .links: links.displayEntries.count
+        }
+    }
+    /// A capture still flying in joins the rope when it lands.
+    func isLanded(_ id: UUID) -> Bool { items.first { $0.id == id }?.flying != true }
+    func setIslandFilter(_ shelf: Shelf?) {
+        islandFilter = shelf; islandScroll = 0
+        synchronizeShelfSearchScope()
+        selectFirstIslandItem()
+    }
+    func cycleIslandFilter(_ delta: Int = 1) {
+        let order: [Shelf?] = [nil, .images, .texts, .links]
+        let index = order.firstIndex { $0 == islandFilter } ?? 0
+        setIslandFilter(order[(index + delta + order.count) % order.count])
+    }
+    func setIslandViewportWidth(_ width: CGFloat) {
+        islandViewportWidth = width.isFinite ? max(1, width) : 1
+        setIslandScroll(islandScroll)
+    }
+    func setIslandScroll(_ offset: CGFloat) {
+        guard offset.isFinite else { return }
+        let clamped = max(0, min(Layout.maximumOffset(count: islandEntries.count, width: islandViewportWidth), offset))
+        if islandScroll != clamped { islandScroll = clamped }
+    }
+    func scrollIsland(_ delta: CGFloat) { setIslandScroll(islandScroll - delta) }
+    func selectFirstIslandItem() {
+        cancelSelection(); texts.cancelSelection(); links.cancelSelection()
+        guard let first = islandEntries.first else { return }
+        focusShelf(first.shelf, requestFocus: false); selectItem(first.id, on: first.shelf)
+    }
+    /// Arrows walk the one rope across kinds; the selection moves to whichever
+    /// shelf owns the next card, so every existing action keeps working.
+    func islandStep(_ delta: Int) {
+        let entries = islandEntries
+        guard !entries.isEmpty else { return }
+        let current = focusedItemID(for: activeShelf)
+        let index = entries.firstIndex { $0.id == current }.map { max(0, min(entries.count - 1, $0 + delta)) } ?? 0
+        let next = entries[index]
+        for shelf in Shelf.allCases where shelf != next.shelf {
+            switch shelf { case .images: cancelSelection(); case .texts: texts.cancelSelection(); case .links: links.cancelSelection() }
+        }
+        focusShelf(next.shelf, requestFocus: false); selectItem(next.id, on: next.shelf)
+        let x = Layout.x(index: index), half = Layout.cardWidth / 2 + Layout.edgePadding
+        if x - half < islandScroll { setIslandScroll(x - half) }
+        else if x + half > islandScroll + islandViewportWidth { setIslandScroll(x + half - islandViewportWidth) }
+    }
+    private var islandThumbnailIDs = Set<UUID>()
+    func refreshIslandThumbnails(_ ids: [UUID]) { islandThumbnailIDs = Set(ids); refreshThumbnails() }
     func setSize(_ value: Layout.Size) {
         size = value; Layout.size = value
         defaults.set(value.rawValue, forKey: "lineSize")
@@ -91,7 +183,7 @@ final class Line: ObservableObject {
         get { activeShelf == .texts }
         set { setPresentation(newValue ? .texts : .images, requestFocus: false) }
     }
-    var panelHeight: CGFloat { Layout.panelHeight * CGFloat(presentation.shelves.count) }
+    var panelHeight: CGFloat { isIsland ? Island.height(notch: islandNotch) : Layout.panelHeight * CGFloat(presentation.shelves.count) }
     var activeSelectionCount: Int { switch activeShelf { case .texts: texts.selectedEntries.count; case .links: links.selectedEntries.count; case .images: selectedItems.count } }
     var activeFavoritesOnly: Bool { switch activeShelf { case .texts: texts.favoritesOnly; case .links: links.favoritesOnly; case .images: favoritesOnly } }
     var activeIDs: Set<UUID> { switch activeShelf { case .texts: texts.selectedIDs; case .links: links.selectedIDs; case .images: selectedIDs } }
@@ -161,10 +253,10 @@ final class Line: ObservableObject {
         case .links: links.displayEntries.map(\.id)
         }
     }
-    private func focusedItemID(for shelf: Shelf) -> UUID? {
+    func focusedItemID(for shelf: Shelf) -> UUID? {
         switch shelf { case .images: focusedID; case .texts: texts.focusedID; case .links: links.focusedID }
     }
-    private func selectItem(_ id: UUID, on shelf: Shelf) {
+    func selectItem(_ id: UUID, on shelf: Shelf) {
         switch shelf {
         case .images: select(id)
         case .texts: texts.select(id, width: viewportWidth)
@@ -184,6 +276,7 @@ final class Line: ObservableObject {
     /// Do not request keyboard focus: automatic capture peeks share this path.
     func selectFirstShelfItems(_ shelves: [Shelf]) {
         guard revealed else { return }
+        if isIsland { islandScroll = 0; selectFirstIslandItem(); return }
         cancelSelection(); texts.cancelSelection(); links.cancelSelection()
         let visible = presentation.shelves.filter(shelves.contains)
         for shelf in visible { resetShelfStart(shelf) }
@@ -389,14 +482,16 @@ final class Line: ObservableObject {
         shelfSearch?.setFavoritesOnly(value, for: activeShelf.libraryKind)
     }
 
+    /// Search covers the visible rows, or on the island the kinds its filter shows.
+    var searchShelves: [Shelf] { isIsland ? islandFilter.map { [$0] } ?? Shelf.allCases : presentation.shelves }
     var shelfSearchResultCount: Int {
-        presentation.shelves.reduce(0) { $0 + searchResultCount(for: $1) }
+        searchShelves.reduce(0) { $0 + searchResultCount(for: $1) }
     }
     var shelfSearchIsSearching: Bool {
-        presentation.shelves.contains { shelfSearch?.isSearching(for: $0.libraryKind) == true }
+        searchShelves.contains { shelfSearch?.isSearching(for: $0.libraryKind) == true }
     }
     var shelfSearchError: String? {
-        presentation.shelves.compactMap { shelfSearch?.error(for: $0.libraryKind) }.first
+        searchShelves.compactMap { shelfSearch?.error(for: $0.libraryKind) }.first
     }
     private func searchResultCount(for shelf: Shelf) -> Int {
         switch shelf { case .images: displayItems.count; case .texts: texts.displayEntries.count; case .links: links.displayEntries.count }
@@ -430,7 +525,7 @@ final class Line: ObservableObject {
         guard shelfSearch != nil else { return }
         // The anchor owns native focus only. Opening search never reveals a
         // row that the user turned off, and never changes the common phrase.
-        let target = shelf.flatMap { presentation.shelves.contains($0) ? $0 : nil } ?? activeShelf
+        let target = shelf.flatMap { searchShelves.contains($0) ? $0 : nil } ?? (searchShelves.contains(activeShelf) ? activeShelf : searchShelves[0])
         focusShelf(target)
         pendingSearchSelection = false
         isShelfSearchActive = true
@@ -442,6 +537,7 @@ final class Line: ObservableObject {
         guard shelfSearch != nil, shelfSearchQuery != query || !isShelfSearchActive else { return }
         pendingSearchSelection = false
         for shelf in Shelf.allCases { clearSearchSelection(shelf) }
+        islandScroll = 0
         shelfSearchQuery = query
         isShelfSearchActive = true
         synchronizeShelfSearchScope()
@@ -456,7 +552,7 @@ final class Line: ObservableObject {
     private func synchronizeShelfSearchScope() {
         guard let shelfSearch, isShelfSearchActive else { return }
         for shelf in Shelf.allCases {
-            if presentation.shelves.contains(shelf) {
+            if searchShelves.contains(shelf) {
                 shelfSearch.setFavoritesOnly(favoritesOnly(for: shelf), for: shelf.libraryKind)
                 shelfSearch.setActive(true, for: shelf.libraryKind)
                 shelfSearch.update(shelfSearchQuery, for: shelf.libraryKind)
@@ -467,7 +563,7 @@ final class Line: ObservableObject {
         applyShelfSearchStates(shelfSearch.states)
     }
     func shelfSearchBeganEditing(_ shelf: Shelf) {
-        guard isShelfSearchActive, presentation.shelves.contains(shelf) else { return }
+        guard isShelfSearchActive, searchShelves.contains(shelf) else { return }
         focusShelf(shelf, requestFocus: false); searchEditingShelf = shelf
     }
     func finishShelfSearchEditing(_ shelf: Shelf, selectFirst: Bool = true) {
@@ -500,7 +596,7 @@ final class Line: ObservableObject {
         links.setSearchMatchingIDs(states[.link]?.matchingIDs, width: viewportWidth)
         if pendingSearchSelection, !shelfSearchIsSearching {
             pendingSearchSelection = false
-            let choices = [activeShelf] + presentation.shelves.filter { $0 != activeShelf }
+            let choices = [activeShelf] + searchShelves.filter { $0 != activeShelf }
             if let shelf = choices.first(where: { searchResultCount(for: $0) > 0 }) {
                 focusShelf(shelf, requestFocus: false)
                 switch shelf {
@@ -740,7 +836,8 @@ final class Line: ObservableObject {
     /// two-row layouts, accept a swipe in their gaps when that row overflows.
     /// Looking only at the image row made text/link gaps pass through instead.
     func scrollableShelfBandContains(_ point: CGPoint) -> Bool {
-        guard point.x >= 0, point.x < viewportWidth, point.y >= 0,
+        // The island reports its whole outline as a hit rect; nothing outside it takes the mouse.
+        guard !isIsland, point.x >= 0, point.x < viewportWidth, point.y >= 0,
               point.y < panelHeight else { return false }
         let index = Int(point.y / Layout.panelHeight)
         guard presentation.shelves.indices.contains(index) else { return false }
@@ -851,6 +948,8 @@ final class Line: ObservableObject {
         self.defaults = defaults
         keyboardBindings = KeyboardBindings(defaults: defaults)
         theme = ShelfTheme(rawValue: defaults.string(forKey: "shelfTheme") ?? "") ?? .soft
+        layoutMode = ShelfLayoutMode(rawValue: defaults.string(forKey: "shelfLayoutMode") ?? "") ?? .classic
+        islandSurface = IslandSurface(rawValue: defaults.string(forKey: "islandSurface") ?? "") ?? .black
         let savedSize = Layout.Size(rawValue: defaults.string(forKey: "lineSize") ?? "") ?? .medium
         size = savedSize
         Layout.size = savedSize
@@ -1144,8 +1243,10 @@ final class Line: ObservableObject {
 
     private func refreshThumbnails(force: Bool = false) {
         let displayed = displayItems
+        // The island loads thumbnails for the cards on its own rope, not the classic row's.
+        let islandIDs = isIsland ? islandThumbnailIDs : nil
         let range = Layout.visibleRange(count: displayed.count, width: viewportWidth, offset: scrollOffset)
-        let visible = range.map { displayed[$0] }
+        let visible = islandIDs.map { ids in displayed.filter { ids.contains($0.id) } } ?? range.map { displayed[$0] }
         let visibleIDs = Set(visible.map(\.id)), pixels = Int(320 * size.scale)
         guard force || visibleIDs != lastThumbnailIDs || pixels != lastThumbnailPixels else { return }
         lastThumbnailIDs = visibleIDs; lastThumbnailPixels = pixels

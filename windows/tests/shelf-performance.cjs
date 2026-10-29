@@ -29,7 +29,7 @@ async function rendererPage(browser,{source,perKind=1000,width=1600}={}){
    if(url.hostname!=='media'||!hash||!mediaGenerationMatches(url.search,match[2],hash+'.png'))return route.fulfill({status:404,body:'Not found'});
    return route.fulfill({contentType:'image/png',headers:{'Cache-Control':'no-store'},body:files.get(hash)});
   }
-  const file=url.pathname.slice(1)||'index.html';if(!['index.html','renderer.js','styles.css','locales.js','lib/shelf-motion.cjs'].includes(file))return route.abort();return route.fulfill({contentType:/[.]c?js$/.test(file)?'text/javascript':file.endsWith('.css')?'text/css':'text/html',body:file==='renderer.js'?source.replace(/\}\)\(\);\s*$/,'window.__shelfPerformance.renderer={ui,perform,render,rowItems,item,focusFirst,selectedIds,select,applyState};})();'):fs.readFileSync(path.join(root,file),'utf8')});
+  const file=url.pathname.slice(1)||'index.html';if(!['index.html','renderer.js','styles.css','locales.js','lib/shelf-motion.cjs','lib/hang-motion.cjs'].includes(file))return route.abort();return route.fulfill({contentType:/[.]c?js$/.test(file)?'text/javascript':file.endsWith('.css')?'text/css':'text/html',body:file==='renderer.js'?source.replace(/\}\)\(\);\s*$/,'window.__shelfPerformance.renderer={ui,perform,render,rowItems,item,focusFirst,selectedIds,select,applyState};})();'):fs.readFileSync(path.join(root,file),'utf8')});
  });
  await page.addInitScript(state=>{
   let current=state,subscriber,removed=[];const commands=[];

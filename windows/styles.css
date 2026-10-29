@@ -518,3 +518,7 @@ svg.rope path, svg.line path { fill: none; stroke: #a3a3a9; stroke-width: 1.1; v
 .dialog .video-trim-times input[type="number"] { width: 68px; min-height: 25px; padding: 3px 4px; font-size: 10px; font-variant-numeric: tabular-nums; }
 .video-trim-times output { color: #f1d17b; font-variant-numeric: tabular-nums; }
 .video-trim-hint { min-height: 18px; padding-top: 3px; color: var(--muted); font-size: 10px; }
+/* Hanging motion: cards pivot under their clip; translate/rotate are driven by lib/hang-motion.cjs. */
+.shelf .card { transform-origin: 50% -16px; transition: box-shadow .15s ease, background .15s ease, scale .3s cubic-bezier(.2,.9,.3,1); }
+.shelf .card.selected, .shelf .card.focused { scale: 1.02; }
+@media (prefers-reduced-motion: reduce) { .shelf .card { transition: box-shadow .15s ease, background .15s ease; } .shelf .card.selected, .shelf .card.focused { scale: 1; } }

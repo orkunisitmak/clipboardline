@@ -31,9 +31,13 @@ private struct LinkShelfContents: View, Equatable {
                 LinkCard(entry: entry, line: line, links: links, renderState: renderState, quickNumber: quickNumbers[entry.id])
                     .position(x: Layout.x(index: index, scrollOffset: links.scrollOffset),
                         y: Layout.ropeY(x: Layout.x(index: index, scrollOffset: links.scrollOffset), width: width) - Layout.pinAbove + (18 + 112 * Layout.scale) / 2)
+                    .hung(on: line.rope(.links), x: Layout.x(index: index, scrollOffset: links.scrollOffset))
             }
         }.onAppear { requestThumbnails(payload) }
             .onChange(of: payload) { _, value in requestThumbnails(value) }
+            .onChange(of: entries.map(\.id)) { old, new in
+                line.rope(.links).react(from: old, to: new) { Layout.x(index: $0, scrollOffset: links.scrollOffset) }
+            }
     }
     private func requestThumbnails(_ payload: [VisibleLinkPayload]) {
         links.thumbnails.request(payload.compactMap { $0.thumbnailPath.map { URL(fileURLWithPath: $0) } }, pixels: 320)
@@ -41,7 +45,7 @@ private struct LinkShelfContents: View, Equatable {
     }
 }
 
-private struct LinkCard: View {
+struct LinkCard: View {
     let entry: LibraryRecord
     let line: Line
     @ObservedObject var links: LinkHistory
@@ -51,7 +55,7 @@ private struct LinkCard: View {
     private var thumbnail: NSImage? { entry.thumbnailPath.flatMap { links.thumbnails.image(for: URL(fileURLWithPath: $0), pixels: 320) } }
     var body: some View {
         VStack(spacing: -8) {
-            Clothespin().zIndex(1)
+            Clothespin(seed: entry.id).zIndex(1)
             VStack(alignment: .leading, spacing: 5 * Layout.scale) {
                 ZStack {
                     renderState.theme.wash(.links)

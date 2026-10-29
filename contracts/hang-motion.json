@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "description": "Shared rope physics for the hanging shelves. Both adapters implement the same closed-form wave so a card arriving or leaving moves the rope identically on macOS and Windows. Distances are points/CSS pixels, time is seconds.",
+  "rope": {
+    "arrivalAmplitude": 6,
+    "removalAmplitude": -4,
+    "falloff": 260,
+    "waveSpeed": 1100,
+    "frequency": 2.0,
+    "decay": 5.5,
+    "lifetime": 1.2,
+    "maximumDip": 10,
+    "maximumChanges": 3
+  },
+  "swing": {
+    "arrivalDegrees": 10,
+    "stiffness": 70,
+    "damping": 7,
+    "breezeSpeed": 1800,
+    "breezeMaximumDelay": 0.6
+  },
+  "reduceMotion": "Plucks are ignored and cards do not swing; content changes still appear immediately.",
+  "samples": [
+    { "plucks": [{ "x": 0, "time": 0, "amplitude": 6 }], "x": 0, "time": 0, "dip": 0 },
+    { "plucks": [{ "x": 0, "time": 0, "amplitude": 6 }], "x": 0, "time": 0.125, "dip": 3.017 },
+    { "plucks": [{ "x": 0, "time": 0, "amplitude": 6 }], "x": 260, "time": 0.36, "dip": 1.1181 },
+    { "plucks": [{ "x": 0, "time": 0, "amplitude": 6 }], "x": 0, "time": 1.3, "dip": 0 },
+    { "plucks": [{ "x": 0, "time": 0, "amplitude": 6 }, { "x": 0, "time": 0, "amplitude": 6 }], "x": 0, "time": 0.125, "dip": 6.034 }
+  ]
+}

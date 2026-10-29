@@ -64,6 +64,11 @@ final class LineKeyboard {
     /// Return's focused-item copy; a chosen Copy command copies the selection.
     @discardableResult func perform(_ action: KeyboardAction, event: NSEvent? = nil) -> Bool {
         switch action {
+        // The island is one rope: arrows walk it across kinds, Tab changes the filter.
+        case .up where line.isIsland, .down where line.isIsland: break
+        case .previous where line.isIsland, .next where line.isIsland: line.islandStep(action == .previous ? -1 : 1)
+        case .first where line.isIsland, .last where line.isIsland: line.islandStep(action == .last ? 1_000_000 : -1_000_000)
+        case .switchShelf where line.isIsland: line.cycleIslandFilter()
         case .paste: line.onPasteRequested?(line.activeActionIDs)
         case .tag: if !line.activeActionIDs.isEmpty { line.onTagRequested?(line.activeActionIDs) }
         case .copyImageText: if line.activeShelf == .images, let id = line.focusedID { line.onImageTextCopyRequested?(id) }

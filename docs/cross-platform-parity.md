@@ -155,3 +155,15 @@ The genuine Windows upgrade baseline is 1.7.7/build70: 545777945 bytes, SHA256
 source `1c93c163e7e45d102d13c1077dd8baa969eab8ba`. Stage
 `clipboardline-1.7.8-build78`, then publish `windows-1.7.8-build71` with that
 verified counterpart. Latest must contain both signed 1.7.8 feeds and packages.
+
+## Living rope
+
+[`contracts/hang-motion.json`](../contracts/hang-motion.json) defines one
+closed-form rope wave for both platforms. A card that arrives pulls the rope
+down at its clip; a removed card lets it spring back; the ripple travels to
+neighbours and settles within 1.2 seconds. Changes of more than three cards at
+once (search, filters, paging) do not move the rope. Arrivals open and pinch the
+clip and swing the card on a calm spring; the reveal breeze travels left to
+right. Reduce Motion disables plucks, swings and the breeze. Mac `HangMotion`
+and Windows `lib/hang-motion.cjs` both test their constants and samples against
+the contract; the motion itself still needs native visual review on each OS.

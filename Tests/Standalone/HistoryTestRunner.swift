@@ -142,6 +142,8 @@ enum HistoryTestRunner {
         let textDedupStore = TextDedupStoreTests()
         let textDedupLegacy = TextDedupLegacyTests()
         let dual = DualShelfTests()
+        let hangMotion = HangMotionTests()
+        let island = IslandTests()
         let merge = UpstreamMergeTests()
         let imageTextCopyTests = ImageTextCopyTests()
         let directPasteCoordinatorTests = DirectPasteCoordinatorTests()
@@ -583,6 +585,11 @@ enum HistoryTestRunner {
             ("testToggleShortcutValidationAndUpstreamLinkAreForkSafe", merge.testToggleShortcutValidationAndUpstreamLinkAreForkSafe),
 
             ("testShelfModesPersistAndTabPreservesBothSelections", dual.testShelfModesPersistAndTabPreservesBothSelections),
+            ("testRopeConstantsAndSamplesMatchSharedContract", hangMotion.testRopeConstantsAndSamplesMatchSharedContract),
+            ("testSmallChangesPluckButRowSwapsAndReduceMotionDoNot", hangMotion.testSmallChangesPluckButRowSwapsAndReduceMotionDoNot),
+            ("testBreezeTravelsLeftToRightWithinItsLimit", hangMotion.testBreezeTravelsLeftToRightWithinItsLimit),
+            ("testHangerCatalogAndAssignmentMatchSharedContract", island.testHangerCatalogAndAssignmentMatchSharedContract),
+            ("testIslandRopeMergesKindsNewestFirstAndArrowsWalkAcrossThem", island.testIslandRopeMergesKindsNewestFirstAndArrowsWalkAcrossThem),
             ("testShiftArrowsAndEnterCopyEverySelectedImageInOrder", dual.testShiftArrowsAndEnterCopyEverySelectedImageInOrder),
             ("testTextRangeEnterCommandAAndDeleteAreSymmetric", dual.testTextRangeEnterCommandAAndDeleteAreSymmetric),
             ("testDeselectingFocusedItemStillCopiesOnlyRemainingSelection", dual.testDeselectingFocusedItemStillCopiesOnlyRemainingSelection),

@@ -34,7 +34,16 @@ final class LinePanel: NSPanel {
     static let shelfAnimationKey = "shelfRevealTranslation"
     var shelfModelOffset: CGFloat { compositor.layer?.sublayerTransform.m42 ?? 0 }
     var shelfPresentationOffset: CGFloat { compositor.layer?.presentation()?.sublayerTransform.m42 ?? shelfModelOffset }
-    private var hiddenShelfOffset: CGFloat { -(contentHeight + 12) }
+    private var hiddenShelfOffset: CGFloat { islandReveal == nil ? -(contentHeight + 12) : 0 }
+    /// Island mode: the panel stays put over the menu bar and the island
+    /// morphs out of the notch itself instead of the rows sliding down.
+    var islandReveal: ((Bool) -> Void)? {
+        didSet {
+            level = islandReveal == nil ? .floating : .statusBar
+            if !shelfRevealed && !isShelfTransitioning { setShelfOffset(hiddenShelfOffset) }
+        }
+    }
+    var onPlaced: ((NSScreen) -> Void)?
 #if STANDALONE_TESTS
     @objc var shelfAnimationLayerForTesting: CALayer? { compositor.layer }
     @objc var shelfHostingLayoutCountForTesting: Int { (hostedContent as? ShelfHostingLayoutCounting)?.shelfLayoutCount ?? 0 }
@@ -166,6 +175,7 @@ final class LinePanel: NSPanel {
         compositor.layer?.removeAnimation(forKey: Self.shelfAnimationKey)
         shelfRevealed = on
         let target: CGFloat = on ? 0 : hiddenShelfOffset
+        if let islandReveal { revealIsland(on, animated: animated, generation: generation, morph: islandReveal, completion: completion); return }
         let duration: TimeInterval = animated && !reduceMotion() ? (on ? 0.42 : 0.22) : 0
         isShelfTransitioning = duration > 0 && abs(current - target) > 0.01
         // NSView hit testing uses the unchanged model geometry. Accept pointer
@@ -193,6 +203,20 @@ final class LinePanel: NSPanel {
         }
     }
 
+    private func revealIsland(_ on: Bool, animated: Bool, generation: Int, morph: (Bool) -> Void, completion: (() -> Void)?) {
+        alphaValue = 1
+        setShelfOffset(0)
+        let duration = animated && !reduceMotion() ? (on ? Island.openDuration : Island.closeDuration) : 0
+        isShelfTransitioning = duration > 0
+        if isShelfTransitioning { ignoresMouseEvents = true }
+        morph(on)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self, self.visibilityGeneration == generation else { return }
+            self.isShelfTransitioning = false
+            completion?()
+        }
+    }
+
     /// The line hangs on the screen you are using, which is the one with the
     /// pointer: that is where you just took the screenshot.
     static func screenUnderPointer() -> NSScreen? {
@@ -202,7 +226,10 @@ final class LinePanel: NSPanel {
     }
 
     func placeOnScreen(_ screen: NSScreen? = nil) {
-        guard let visible = (screen ?? LinePanel.screenUnderPointer())?.visibleFrame else { return }
+        guard let screen = screen ?? LinePanel.screenUnderPointer() else { return }
+        onPlaced?(screen)
+        // The island hangs from the very top edge, over the menu bar and notch.
+        let visible = islandReveal == nil ? screen.visibleFrame : screen.frame
         let target = NSRect(x: visible.minX, y: visible.maxY - contentHeight,
                             width: visible.width, height: contentHeight)
         // Presentation follows placement/capacity in the same turn. Do not
