@@ -53,6 +53,40 @@ class CrossPlatformParityTests(unittest.TestCase):
         self.assertEqual(result['platforms'], ['macos', 'windows'])
         self.assertEqual(result['observationsPerPlatform'], len(self.expected))
 
+    def verify_linux(self):
+        self.save()
+        return CHECKER.verify(self.contract_path, self.directory / 'macos.json', self.directory / 'windows.json',
+                              REVISION, self.directory / 'linux.json')
+
+    def test_linux_renderer_report_is_verified_when_supplied(self):
+        result = self.verify_linux()
+        self.assertEqual(result['platforms'], ['macos', 'windows', 'linux'])
+        self.assertEqual(self.verify()['platforms'], ['macos', 'windows'], 'Mac and Windows gates are unchanged')
+
+    def test_linux_report_from_another_host_or_with_other_behavior_is_rejected(self):
+        for key, value in [('hostPlatform', 'win32'), ('hostPlatform', 'darwin'), ('platform', 'windows'), ('mode', 'model')]:
+            original = copy.deepcopy(self.reports['linux']); self.reports['linux'][key] = value
+            with self.assertRaises(CHECKER.ParityError): self.verify_linux()
+            self.reports['linux'] = original
+        self.reports['linux']['observations'][0]['actual'].update({'focused': 't1', 'selected': ['t1'], 'activeKind': 'text'})
+        with self.assertRaises(CHECKER.ParityError): self.verify_linux()
+
+    def test_linux_policy_requires_documented_linux_exceptions(self):
+        for item in self.contract['policy']['nativeExceptions']: self.assertTrue(item['linux'].strip())
+        del self.contract['policy']['nativeExceptions'][0]['linux']
+        self.contract_path.write_text(json.dumps(self.contract)); self.rejected()
+
+    def test_unknown_additional_platform_or_missing_linux_policy_is_rejected(self):
+        original = copy.deepcopy(self.contract)
+        self.contract['policy']['additionalPlatforms'] = ['linux', 'freebsd']
+        self.contract_path.write_text(json.dumps(self.contract)); self.rejected()
+        self.contract = original; del self.contract['policy']['additionalPlatforms']
+        self.contract_path.write_text(json.dumps(self.contract))
+        digest = hashlib.sha256(self.contract_path.read_bytes()).hexdigest()
+        for report in self.reports.values(): report['contractSHA256'] = digest
+        self.assertTrue(self.verify()['passed'])
+        with self.assertRaises(CHECKER.ParityError): self.verify_linux()
+
     def test_wrong_source_revision_is_rejected(self):
         self.reports['windows']['sourceRevision'] = 'b' * 40
         self.rejected()

@@ -16,7 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 KINDS = ['image', 'text', 'link']
 FIELDS = {'activeKind', 'focused', 'selected', 'visibleKinds', 'searchEditing'}
 ACTIONS = {'open', 'close', 'up', 'down', 'left', 'right', 'toggle', 'openSearch', 'finishSearch', 'remap', 'key'}
-PLATFORMS = {'macos': ('darwin', 'model'), 'windows': ('win32', 'renderer')}
+PLATFORMS = {'macos': ('darwin', 'model'), 'windows': ('win32', 'renderer'), 'linux': ('linux', 'renderer')}
+# Linux ships the Windows Electron renderer. Its report is verified when supplied;
+# the Mac and Windows reports remain mandatory for every publication.
+ADDITIONAL_PLATFORMS = ['linux']
 
 
 class ParityError(ValueError):
@@ -83,10 +86,12 @@ def load_contract(path):
             isinstance(policy.get('futureUserVisibleChanges'), str) and policy['futureUserVisibleChanges'].strip() and
             isinstance(policy.get('scope'), str) and policy['scope'].strip(),
             'Contract must retain both default platforms and the extension policy')
+    additional = policy.get('additionalPlatforms', [])
+    require(additional in ([], ADDITIONAL_PLATFORMS), 'Unknown additional platform policy')
     exceptions = policy.get('nativeExceptions')
     require(isinstance(exceptions, list) and all(isinstance(item, dict) and all(
-        isinstance(item.get(key), str) and item[key].strip() for key in ['id', 'macos', 'windows', 'reason'])
-        for item in exceptions), 'OS-native exceptions require an explicit reason on both platforms')
+        isinstance(item.get(key), str) and item[key].strip() for key in ['id', 'macos', 'windows', *additional, 'reason'])
+        for item in exceptions), 'OS-native exceptions require an explicit reason on every platform')
     require(len({item['id'] for item in exceptions}) == len(exceptions), 'Duplicate OS-native exception')
     item_sets, scenarios = contract.get('itemSets'), contract.get('scenarios')
     require(isinstance(item_sets, dict) and bool(item_sets) and isinstance(scenarios, list) and bool(scenarios),
@@ -156,14 +161,18 @@ def validate_platform_report(path, platform, source_revision, contract, contract
     return report
 
 
-def verify(contract_path, macos_report, windows_report, source_revision):
+def verify(contract_path, macos_report, windows_report, source_revision, linux_report=None):
     require(isinstance(source_revision, str) and re.fullmatch(r'[0-9a-f]{40}', source_revision),
             'An exact full public source revision is required')
     contract, digest, expected, aliases = load_contract(contract_path)
-    for platform, path in [('macos', macos_report), ('windows', windows_report)]:
+    reports = [('macos', macos_report), ('windows', windows_report)]
+    if linux_report is not None:
+        require('linux' in contract['policy'].get('additionalPlatforms', []), 'Contract does not include the Linux adapter')
+        reports.append(('linux', linux_report))
+    for platform, path in reports:
         validate_platform_report(path, platform, source_revision, contract, digest, expected, aliases)
     return {'passed': True, 'sourceRevision': source_revision, 'contractId': contract['contractId'],
-            'contractSHA256': digest, 'platforms': ['macos', 'windows'],
+            'contractSHA256': digest, 'platforms': [platform for platform, _ in reports],
             'scenarios': len(contract['scenarios']), 'observationsPerPlatform': len(expected),
             'scope': contract['policy']['scope']}
 
@@ -173,11 +182,13 @@ def main():
     parser.add_argument('--contract', type=Path, default=ROOT / 'contracts/shelf-behavior.json')
     parser.add_argument('--macos-report', type=Path, required=True)
     parser.add_argument('--windows-report', type=Path, required=True)
+    parser.add_argument('--linux-report', type=Path, help='Optional Linux renderer report from a Linux host')
     parser.add_argument('--source-revision', required=True)
     parser.add_argument('--report', type=Path)
     arguments = parser.parse_args()
     try:
-        result = verify(arguments.contract, arguments.macos_report, arguments.windows_report, arguments.source_revision)
+        result = verify(arguments.contract, arguments.macos_report, arguments.windows_report, arguments.source_revision,
+                        arguments.linux_report)
         if arguments.report:
             arguments.report.parent.mkdir(parents=True, exist_ok=True)
             arguments.report.write_text(json.dumps(result, indent=2) + '\n')

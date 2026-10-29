@@ -1,0 +1,15 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const {Store}=require('../lib/model.cjs');
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
+function fixture(fn){const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-media-revision-'));let now=1000;try{const store=new Store(directory,{clock:()=>now});fn(store,value=>{now=value;});}finally{fs.rmSync(directory,{recursive:true,force:true});}}
+function otherPNG(){const next=Buffer.from(png);next[next.length-1]^=1;return next;}
+test('same-title link recopy then same-URL enrichment publishes a new media generation without touching history or pin metadata',()=>fixture((store,time)=>{
+ const item=store.insert('link','https://example.com/recopy',{title:'Unchanged title'});item.thumbnailFile=store.putPNG(png);store.modify('pin',{id:item.id,value:true});store.persist();const old=store.publicState().items[0];
+ time(2000);const copied=store.insert('link',item.url,{title:'Unchanged title'});assert.equal(copied.id,item.id);const recopy=store.publicState().items[0];assert.equal(recopy.mediaRevision,old.mediaRevision);assert.equal(recopy.thumbnailUrl,old.thumbnailUrl);assert.equal(recopy.createdAt,2000);assert.equal(recopy.updatedAt,2000);
+ copied.thumbnailFile=store.putPNG(otherPNG());store.persist();const enriched=store.publicState().items[0];assert.notEqual(enriched.mediaRevision,recopy.mediaRevision);assert.match(enriched.mediaRevision,/^[a-f0-9]{64}$/);assert.notEqual(enriched.thumbnailUrl,recopy.thumbnailUrl);assert.equal(enriched.thumbnailUrl.split('?')[0],recopy.thumbnailUrl.split('?')[0]);const {mediaRevision:_prior,thumbnailUrl:_priorURL,...before}=recopy,{mediaRevision:_next,thumbnailUrl:_nextURL,...after}=enriched;assert.deepEqual(after,before);assert.equal(after.pinned,true);assert.equal(after.thumbnailFile,undefined);assert.equal(store.data.items.length,1);
+ const read=fs.readFileSync;try{fs.readFileSync=()=>{throw new Error('Public projection must not read image bytes');};assert.equal(store.publicState().items[0].mediaRevision,enriched.mediaRevision);}finally{fs.readFileSync=read;}
+}));
+test('a same-clock still-image edit changes only the rendered media generation while preserving original managed image identity',()=>fixture(store=>{
+ const item=store.insert('image',png),before=store.publicState().items[0],original=item.imageFile;store.modify('saveImage',{id:item.id,dataUrl:'data:image/png;base64,'+otherPNG().toString('base64'),annotations:[],crop:null});const after=store.publicState().items[0];assert.notEqual(after.mediaUrl,before.mediaUrl);assert.equal(after.mediaUrl.split('?')[0],before.mediaUrl.split('?')[0]);assert.equal(after.originalMediaUrl,before.originalMediaUrl);assert.equal(after.updatedAt,before.updatedAt);assert.notEqual(after.mediaRevision,before.mediaRevision);assert.equal(item.imageFile,original);assert.equal(after.mediaRevision,item.renderedFile.slice(0,64));assert.equal(after.imageFile,undefined);assert.equal(after.renderedFile,undefined);
+}));

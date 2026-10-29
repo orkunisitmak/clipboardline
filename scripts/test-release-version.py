@@ -82,6 +82,20 @@ class ReleaseVersionTests(unittest.TestCase):
         with self.assertRaisesRegex(guard.ReleaseVersionError, "Cannot read windows/package-lock.json"):
             guard.check_release_version(self.root)
 
+    def test_linux_edition_matches_and_its_drift_is_rejected(self):
+        self.windows()
+        self.write("linux/package.json", {"version": "1.7.2", "clipboardLineLinuxBuild": 2})
+        self.write("linux/package-lock.json", {"version": "1.7.2", "packages": {"": {"version": "1.7.2"}}})
+        self.assertEqual(guard.check_release_version(self.root, require_windows=True, require_linux=True), "1.7.2")
+        self.write("linux/package-lock.json", {"version": "1.7.2", "packages": {"": {"version": "1.7.1"}}})
+        with self.assertRaisesRegex(guard.ReleaseVersionError, 'linux/package-lock.json packages\\[""\\] version'):
+            guard.check_release_version(self.root)
+
+    def test_public_checkout_must_include_linux_when_required(self):
+        self.windows()
+        with self.assertRaisesRegex(guard.ReleaseVersionError, "Cannot read linux/package.json"):
+            guard.check_release_version(self.root, require_linux=True)
+
     def test_missing_mac_version_is_rejected(self):
         self.write("upstream-state.json", {})
         with self.assertRaises(guard.ReleaseVersionError):

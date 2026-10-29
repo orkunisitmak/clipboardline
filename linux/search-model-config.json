@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "version": "mobileclip-s2-onnx-fp32-v1",
+  "model": "MobileCLIP-S2",
+  "sourceRevision": "341ef058802f0e4e5ab13c02f0cb32a3a94e367b",
+  "checkpointSHA256": "063a87b2a846791bcffafa9f7670ec3968d572a3e7f99e5e4b14348006631d6f",
+  "tokenizerRevision": "48faa0fea4b08d74188b3841771aca6ff2c92852",
+  "archive": {
+    "url": "https://github.com/orkunisitmak/clipboardline-desktop/releases/download/models-mobileclip-s2-v1/ClipBoardLine-MobileCLIP-S2-ONNX-v1.zip",
+    "sha256": "0d1227faa4c9cbfbcbc1fb2391369195e9a52a364b3d94ddb543c3e9ff0baa07",
+    "bytes": 401283648
+  },
+  "files": {
+    "ACKNOWLEDGEMENTS-MobileCLIP": {
+      "sha256": "1fdf63aae2e325e2efde1aed1d3cc9addb063ea60a31f40d2a564bd7c29ac283",
+      "bytes": 22903
+    },
+    "LICENSE-Apple-code": {
+      "sha256": "7be983907ac2fa52c53e29ad8eca89d67d1e77bcc46a0271702845d0a1f4114d",
+      "bytes": 1529
+    },
+    "LICENSE-MobileCLIP-S2": {
+      "sha256": "a94a7a9c59509751580a31fa1ab3b418a97b01304549d382b8b96ca8fa85a179",
+      "bytes": 2791
+    },
+    "clip-merges.txt": {
+      "sha256": "7e0847f6fced8bd28a736dcaeab20e64ac19010771700197ba479a0a8e517d4f",
+      "bytes": 3194958
+    },
+    "clip-vocab.json": {
+      "sha256": "7aeb221a2a93047170070379743b49204c13d6993d9947323cd94b75c1f657ba",
+      "bytes": 1197317
+    },
+    "mobileclip-s2-image.onnx": {
+      "sha256": "3ba0f859ff01bd576e7b1e0cd4eee9f7d6b5fdbf692c3fdd778bb90110594c10",
+      "bytes": 143029229
+    },
+    "mobileclip-s2-text.onnx": {
+      "sha256": "d7ed1d99655f54c80741c77bf1a473c5580c5221b41cfc70bc66d5cfcf21b8f3",
+      "bytes": 253830588
+    },
+    "model-source.json": {
+      "sha256": "b631665d8fe2c1b22b8067e8d50ee7225bf3b00e2f4b7c4b479d08bfa233c14e",
+      "bytes": 3383
+    }
+  }
+}
