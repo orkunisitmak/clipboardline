@@ -73,6 +73,23 @@ class ReleaseVersionTests(unittest.TestCase):
         with self.assertRaisesRegex(guard.ReleaseVersionError, 'packages\[""\] version'):
             guard.check_release_version(self.root)
 
+    def pkgbuild(self, contents):
+        path = self.root / "packaging/arch/PKGBUILD"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+    def test_arch_pkgbuild_matches_shared_version(self):
+        self.windows()
+        self.pkgbuild("pkgname=clipboardline\npkgver=1.7.2\npkgrel=1\n")
+        self.assertEqual(guard.check_release_version(self.root, require_windows=True), "1.7.2")
+
+    def test_arch_pkgbuild_drift_is_rejected(self):
+        for contents in ["pkgver=1.7.1\n", "pkgrel=1\n", "pkgver=1.7.2\npkgver=1.7.2\n"]:
+            with self.subTest(contents=contents):
+                self.pkgbuild(contents)
+                with self.assertRaisesRegex(guard.ReleaseVersionError, "PKGBUILD pkgver"):
+                    guard.check_release_version(self.root)
+
     def test_public_checkout_must_include_windows(self):
         with self.assertRaisesRegex(guard.ReleaseVersionError, "Cannot read windows/package.json"):
             guard.check_release_version(self.root, require_windows=True)
