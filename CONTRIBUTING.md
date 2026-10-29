@@ -48,3 +48,10 @@ macOS geliştirmesi için seçilmiş bir Xcode/Swift araç zinciri ve Python 3 g
 Anlamsal arama modelleri isteğe bağlıdır: `CLIPBOARDLINE_BUNDLE_MODELS=1 bash scripts/build-community.sh`. Model olmadan yerel Vision OCR kullanılabilir. Çıplak `swift run` yerine, kaynakları ve ayrı veri alanı hazırlanan Dev paketini UI testi için kullanın.
 
 Testlerde yapay metin/görsel ve geçici dizin kullanın. Kişisel pano içeriği, hesap ekran görüntüsü, veritabanı, anahtar, özel URL veya imza dosyası commit etmeyin. Yeni kısayolları ve çevirileri güncel tutun. macOS'ta geçen testleri Windows'ta da geçmiş gibi sunmayın; gerçekten denediğiniz platformu ve paketi belirtin.
+
+### Linux preview development
+
+The Linux port shares `windows/` Electron sources and uses Linux native adapters.
+See [linux/README.md](linux/README.md) for X11/XWayland dependencies, AppImage/Debian
+packaging and isolated native acceptance. Linux checks do not certify Windows
+or Mac behavior; their existing native release gates remain required.

@@ -1,7 +1,7 @@
 {
   "name": "clipboardline-desktop",
   "version": "1.7.8",
-  "description": "Keyboard-first local clipboard shelves and saved library for Windows",
+  "description": "Keyboard-first local clipboard shelves and saved library for Windows and Linux",
   "author": "ClipBoardLine contributors",
   "license": "MIT",
   "private": true,
@@ -10,7 +10,12 @@
     "start": "electron .",
     "test": "node --test --test-concurrency=1 tests/*.test.cjs",
     "test:electron": "node tests/electron-smoke.cjs",
-    "dist": "electron-builder --win nsis --x64 --publish never"
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "build:linux-native": "node ../linux/build-native.cjs",
+    "start:linux": "npm run build:linux-native && electron --ozone-platform=x11 .",
+    "test:linux": "node --test --test-concurrency=1 ../linux/tests/*.test.cjs",
+    "test:linux:electron": "node ../linux/tests/electron-smoke.cjs",
+    "dist:linux": "npm run build:linux-native && electron-builder --config ../linux/electron-builder.cjs --linux AppImage deb --x64 --publish never"
   },
   "dependencies": {
     "@tesseract.js-data/eng": "1.0.0",
@@ -113,5 +118,6 @@
       "node_modules/onnxruntime-common/**"
     ]
   },
-  "clipboardLineBuild": 71
+  "clipboardLineBuild": 71,
+  "clipboardLineLinuxBuild": 1
 }

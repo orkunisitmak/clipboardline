@@ -61,13 +61,13 @@ class MediaJobs {
  }
  run(mode,source,options={}){return this.scheduler.schedule(mode,signal=>this.execute(mode,source,{...options,signal}),{signal:options.signal,onDiscard:result=>this.release(result)});}
  async execute(mode,source,{startMs,endMs,signal,verifyAudio=false}={}){
-  if(process.platform!=='win32')throw new Error('Native recording processing requires Windows.');
+  if(!['win32','linux'].includes(process.platform))throw new Error('Native recording processing requires Windows or Linux.');
   if(signal?.aborted)throw aborted();const before=validVideo(source);safeDirectory(this.directory);
   if(mode==='Trim'&&(!Number.isFinite(startMs)||!Number.isFinite(endMs)||startMs<0||endMs-startMs<50))throw new Error('Choose a nonempty trim interval.');
   const directory=fs.mkdtempSync(path.join(this.directory,'job-'));fs.writeFileSync(path.join(directory,MARKER),JSON.stringify({owner:OWNER}),{flag:'wx',mode:0o600});
   let keep=false;
   try{
-   const result=await new Promise((resolve,reject)=>{
+   const result=process.platform==='linux'?await require('./linux-media.cjs').runLinuxMedia({mode,source,directory,startMs,endMs,verifyAudio,signal,timeout:this.timeout,jobs:this.jobs}):await new Promise((resolve,reject)=>{
     const executable=path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
     const child=spawn(executable,['-NoLogo','-NoProfile','-MTA','-NonInteractive','-ExecutionPolicy','Bypass','-File',this.script,'-Mode',mode],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:windowsEnvironment()});
     let stdout='',stderr='',failure=null,finished=false;this.jobs.set(directory,child);

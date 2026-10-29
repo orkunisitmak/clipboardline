@@ -92,6 +92,10 @@ class Store {
     this.directory = path.resolve(directory); this.clock = clock; this.undoStack = []; this.trashUndoStack = []; this.textIdentities = new WeakMap();this.revision=0;
     fs.mkdirSync(this.directory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.directory).isSymbolicLink())fail('Application data must not be a symlink.');
+    if(process.platform==='linux'){
+      if(fs.statSync(this.directory).uid!==process.getuid())fail('Application data must belong to the current user.');
+      fs.chmodSync(this.directory,0o700);
+    }
     if(process.platform==='win32'){
       const script=__dirname.includes('app.asar')?path.join(process.resourcesPath,'native','protect-directory.ps1'):path.join(__dirname,'..','native','protect-directory.ps1');
       const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
@@ -100,6 +104,7 @@ class Store {
     }
     this.mediaDirectory = path.join(this.directory, 'media'); fs.mkdirSync(this.mediaDirectory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
+    if(process.platform==='linux'){if(fs.statSync(this.mediaDirectory).uid!==process.getuid())fail('Managed media must belong to the current user.');fs.chmodSync(this.mediaDirectory,0o700);}
     this.file = path.join(this.directory, 'library.json');
     this.data = {schema: 1, items: [], folders: [], settings: clone(DEFAULTS)};
     if (fs.existsSync(this.file)) {

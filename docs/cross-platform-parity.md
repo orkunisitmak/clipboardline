@@ -155,3 +155,13 @@ The genuine Windows upgrade baseline is 1.7.7/build70: 545777945 bytes, SHA256
 source `1c93c163e7e45d102d13c1077dd8baa969eab8ba`. Stage
 `clipboardline-1.7.8-build78`, then publish `windows-1.7.8-build71` with that
 verified counterpart. Latest must contain both signed 1.7.8 feeds and packages.
+
+## Linux preview
+
+The Linux port reuses the actual Electron renderer and Store adapters, including
+both shared shelf and Library contracts. Linux-host reports identify themselves
+as Linux and do not substitute for native Windows or Mac evidence. Existing
+`defaultPlatforms` and signed release gates remain unchanged; the additional
+preview platform and its display, direct-paste, codec and update exceptions are
+explicit in the shelf contract. See [the Linux guide](../linux/README.md) and
+`linux.yml` for isolated source/packaged runtime acceptance.
