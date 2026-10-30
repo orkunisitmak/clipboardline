@@ -949,7 +949,7 @@ document.addEventListener('dragstart',event=>{
  if(!ids.length){event.preventDefault();if(deferred)render();return;}
  const text=values.filter(value=>value.kind!=='image').map(value=>value.kind==='link'?value.url:value.text).join('\n\n');event.dataTransfer.effectAllowed='copy';if(text)event.dataTransfer.setData('text/plain',text);event.dataTransfer.setData(libraryDragType,JSON.stringify(ids));
  if(ui.view==='library'&&!event.altKey){libraryDragIDs=ids;libraryRenderDeferred=deferred;}
- else if(event.altKey||values.some(value=>value.kind==='image')){event.preventDefault();if(deferred)render();void command('startDrag',{ids}).then(result=>{if(!result)toast(t('Use Copy or Export to transfer these items.'));});}
+ else {event.preventDefault();if(deferred)render();if(ui.view==='shelves')document.body.classList.add('dragging-out');void command('startDrag',{ids}).then(result=>{if(!result)toast(t('Use Copy or Export to transfer these items.'));}).finally(()=>{document.body.classList.remove('dragging-out');});}
 });
 document.addEventListener('dragover',event=>{const folder=libraryDropFolder(event);if(!folder){clearFolderDropTarget();return;}event.preventDefault();event.dataTransfer.dropEffect='copy';if(folderDropTarget!==folder.row){clearFolderDropTarget();folderDropTarget=folder.row;folderDropTarget.classList.add('folder-drop-target');}});
 document.addEventListener('dragleave',event=>{if(folderDropTarget&&!folderDropTarget.contains(event.relatedTarget))clearFolderDropTarget();});
@@ -963,7 +963,7 @@ document.addEventListener('drop',async event=>{
   await command('folder',{ids,folderId:folder.id,pinning:false});
  }finally{if(deferred)render();}
 });
-document.addEventListener('dragend',clearLibraryDrag);
+document.addEventListener('dragend',()=>{document.body.classList.remove('dragging-out');clearLibraryDrag();});
 window.addEventListener('blur',clearLibraryDrag);
 window.addEventListener('resize',()=>{if(ui.view==='shelves'&&!dirtyPreview()){const current=item(ui.focus);if(current)select(current);render();}});
 window.addEventListener('blur',()=>{if(ui.modal?.type==='record')closeModal();ui.spacePan=false;finishPointerGesture();});

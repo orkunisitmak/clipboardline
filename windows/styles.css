@@ -23,6 +23,7 @@
 /* Translated pixels must not accept pointer hits at their old layout position.
    Keyboard handlers remain active; this switches only at transition boundaries. */
 body[data-shelf-motion],body[data-shelf-motion] * { pointer-events: none !important; }
+body.dragging-out .shelves { opacity: 0 !important; pointer-events: none !important; transition: opacity 0.12s ease; }
 * { box-sizing: border-box; }
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
 html { background: transparent; }
