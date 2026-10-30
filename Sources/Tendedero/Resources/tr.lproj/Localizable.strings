@@ -21,10 +21,10 @@
 "Capture copied links" = "Kopyalanan linkleri kaydet";
 "Change Shortcut" = "Kısayolu değiştir";
 "Change Shortcut…" = "Kısayolu değiştir…";
-"Changes could not be saved; keep this draft open" = "Değişiklikler kaydedilemedi; taslağı açık tutun";
+"Changes could not be saved; keep this draft open" = "Değişiklikler kaydedilemedi; taslağı açık tut";
 "Changes saved" = "Değişiklikler kaydedildi";
 "Check upstream releases…" = "Orijinal sürüm notlarına bak…";
-"Choose a valid destination or a unique name (1–64 characters)" = "Geçerli bir konum veya benzersiz bir ad seçin (1–64 karakter)";
+"Choose a valid destination or a unique name (1–64 characters)" = "Geçerli bir konum veya benzersiz bir ad seç (1–64 karakter)";
 "Clear filters" = "Filtreleri temizle";
 "Clipboard" = "Pano";
 "Close" = "Kapat";
@@ -71,7 +71,7 @@
 "Image preview" = "Görsel önizleme";
 "Image, text and link shelves, with a private local library." = "Görsel, metin ve link askıları; bu Mac’te saklanan özel kütüphane.";
 "Images" = "Görseller";
-"Its contents stay in your library." = "İçerikleri kütüphanenizde kalır.";
+"Its contents stay in your library." = "İçerikleri kütüphanende kalır.";
 "Keep for %d days" = "%d gün tut";
 "Keyboard shortcuts" = "Klavye kısayolları";
 "Large" = "Büyük";
@@ -94,7 +94,7 @@
 "Markup" = "İşaretle";
 "Medium" = "Orta";
 "Move %d items to recoverable Trash?" = "%d içerik geri alınabilir Çöp’e taşınsın mı?";
-"Move ClipBoardLine to the Applications folder and try again." = "ClipBoardLine'ı Uygulamalar klasörüne taşıyın ve tekrar deneyin.";
+"Move ClipBoardLine to the Applications folder and try again." = "ClipBoardLine'ı Uygulamalar klasörüne taşı ve tekrar dene.";
 "Move app copies to Trash" = "Uygulama kopyalarını Çöp Kutusu’na taşı";
 "Move selected texts to recoverable Trash?" = "Seçili metinler geri alınabilir Çöp Kutusu’na taşınsın mı?";
 "Move this text to recoverable Trash?" = "Bu metin geri alınabilir Çöp Kutusu’na taşınsın mı?";
@@ -127,10 +127,10 @@
 "Open screenshots folder" = "Ekran görüntüleri klasörünü aç";
 "Over full screen apps" = "Tam ekran uygulamaların üzerinde";
 "Pin favorite" = "Sabitle";
-"Press a key with Control or Command" = "Control veya Command ile bir tuşa basın";
-"Press the new shortcut" = "Yeni kısayolu basın";
+"Press a key with Control or Command" = "Control veya Command ile bir tuşa bas";
+"Press the new shortcut" = "Yeni kısayola bas";
 "Preview" = "Önizleme";
-"Preview unavailable; your link is saved" = "Önizleme alınamadı; linkiniz kayıtlı";
+"Preview unavailable; your link is saved" = "Önizleme alınamadı; linkin kayıtlı";
 "Previous item" = "Önceki öğe";
 "Quick Look" = "Hızlı Bakış";
 "Quit %@" = "%@ uygulamasından çık";
@@ -152,10 +152,10 @@
 "Save to Desktop" = "Masaüstüne kaydet";
 "Save to library" = "Kütüphaneye kaydet";
 "Screenshots" = "Ekran görüntüleri";
-"Screenshots hang instantly and skip the Desktop. Your macOS screenshot settings are restored when the app quits." = "Ekran görüntüleri anında askıya gelir, masaüstüne birikmez. Uygulama kapandığında macOS ekran görüntüsü ayarlarınız geri yüklenir.";
-"Screenshots will hang on the line the instant you take them, without the floating thumbnail, and will not pile up on your Desktop. Drag one to a folder to keep it, or discard it with the cross. You can turn this off in Settings, and your settings come back when ClipBoardLine quits." = "Ekran görüntüleri, yüzen küçük resim olmadan çekildiği anda askıya gelir ve masaüstünüzde birikmez. Saklamak için bir klasöre sürükleyin veya çarpı düğmesiyle kaldırın. Ayarlar’dan kapatabilirsiniz; ClipBoardLine kapandığında önceki ekran görüntüsü ayarlarınız geri yüklenir.";
+"Screenshots hang instantly and skip the Desktop. Your macOS screenshot settings are restored when the app quits." = "Ekran görüntüleri anında askıya gelir, masaüstüne birikmez. Uygulama kapandığında macOS ekran görüntüsü ayarların geri yüklenir.";
+"Screenshots will hang on the line the instant you take them, without the floating thumbnail, and will not pile up on your Desktop. Drag one to a folder to keep it, or discard it with the cross. You can turn this off in Settings, and your settings come back when ClipBoardLine quits." = "Ekran görüntüleri, yüzen küçük resim olmadan çekildiği anda askıya gelir ve masaüstünde birikmez. Saklamak için bir klasöre sürükle veya çarpı düğmesiyle kaldır. Ayarlar’dan kapatabilirsin; ClipBoardLine kapandığında önceki ekran görüntüsü ayarların geri yüklenir.";
 "Search this view" = "Bu görünümde ara";
-"Select an item to view its details" = "Ayrıntıları görmek için bir içerik seçin";
+"Select an item to view its details" = "Ayrıntıları görmek için bir içerik seç";
 "Selected files could not be read; nothing was copied" = "Seçili dosyalar okunamadı; hiçbir şey kopyalanmadı";
 "Set copy-latest shortcut" = "Son görseli kopyalama kısayolunu ayarla";
 "Settings" = "Ayarlar";
@@ -192,28 +192,28 @@
 "Text copied" = "Metin kopyalandı";
 "Text preview" = "Metin önizleme";
 "Texts" = "Metinler";
-"Texts appear here after you enable Hang copied text" = "Kopyalanan metinleri as seçeneğini açınca metinler burada görünür";
-"This selection is too large to copy; select fewer items" = "Bu seçim kopyalamak için çok büyük; daha az içerik seçin";
+"Texts appear here after you enable Hang copied text" = "“Kopyalanan metinleri as” seçeneğini açınca metinler burada görünür";
+"This selection is too large to copy; select fewer items" = "Bu seçim kopyalamak için çok büyük; daha az içerik seç";
 "Title" = "Başlık";
 "Toggle full screen" = "Tam ekranı aç/kapat";
 "Trash" = "Çöp";
-"Try another filter or view your recent copies." = "Başka filtre deneyin veya son kopyalarınıza bakın.";
+"Try another filter or view your recent copies." = "Başka filtre dene veya son kopyalarına bak.";
 "Turn on" = "Etkinleştir";
 "Unorganized" = "Düzenlenmemiş";
 "Unpin" = "Sabitlemeyi kaldır";
 "Unsaved copies are kept for %d days" = "Kaydedilmemiş kopyalar %d gün saklanır";
 "Unsaved copies expire to recoverable Trash. Saved items and original files are kept." = "Kaydedilmemiş kopyalar süresi dolunca geri alınabilir Çöp’e gider. Kalıcı içerikler ve orijinal dosyalar korunur.";
 "Untitled note" = "Başlıksız not";
-"Use Control or Command with a key" = "Bir tuşla Control veya Command kullanın";
+"Use Control or Command with a key" = "Bir tuşla Control veya Command kullan";
 "Use ⌃⌥L" = "⌃⌥L kullan";
 "Version" = "Sürüm";
 "View" = "Görünüm";
 "View recent copies" = "Son kopyaları göster";
 "Watch" = "İzle";
-"Watch up to three folders for new images. Removing a folder leaves its files untouched." = "Yeni görseller için en fazla üç klasör izleyin. İzlemeyi durdurmak dosyaları değiştirmez.";
+"Watch up to three folders for new images. Removing a folder leaves its files untouched." = "Yeni görseller için en fazla üç klasörü izle. İzlemeyi durdurmak dosyaları değiştirmez.";
 "When something new hangs" = "Yeni bir şey asıldığında";
 "When the pointer rests in the menu bar" = "İşaretçi menü çubuğunda durduğunda";
-"You can restore them from Library → Trash. Original files stay in place." = "Kütüphane → Çöp’ten geri yükleyebilirsiniz. Orijinal dosyalar yerinde kalır.";
+"You can restore them from Library → Trash. Original files stay in place." = "Kütüphane → Çöp’ten geri yükleyebilirsin. Orijinal dosyalar yerinde kalır.";
 
 // Standard text editing
 "Edit" = "Düzenle";
@@ -255,7 +255,7 @@
 "System default" = "Sistem dili";
 "Reopen to apply language" = "Dili uygulamak için yeniden aç";
 "Open edits are saved before the app reopens." = "Uygulama yeniden açılmadan önce açık düzenlemeler kaydedilir.";
-"The app could not reopen. Quit and open it to apply the language." = "Uygulama yeniden açılamadı. Dili uygulamak için kapatıp tekrar açın.";
+"The app could not reopen. Quit and open it to apply the language." = "Uygulama yeniden açılamadı. Dili uygulamak için kapatıp tekrar aç.";
 "The line is empty" = "Askılar boş";
 "%d images · %d texts · %d links on the line" = "Askılarda %d görsel · %d metin · %d link";
 "Reading images… %d of %d" = "Görseller okunuyor… %d / %d";
@@ -378,7 +378,7 @@
 
 "Markup image" = "Görseli işaretle";
 
-"Image changes could not be saved. Your edits are still here." = "Görsel değişiklikleri kaydedilemedi. Düzenlemeleriniz burada korunuyor.";
+"Image changes could not be saved. Your edits are still here." = "Görsel değişiklikleri kaydedilemedi. Düzenlemelerin burada korunuyor.";
 
 "Image changes saved" = "Görsel değişiklikleri kaydedildi";
 
@@ -401,10 +401,10 @@
 "Name and pin…" = "İsim ver ve sabitle…";
 "Add a name for search…" = "Arama için bir isim ekle…";
 "Pin with name" = "İsimle sabitle";
-"Enter a name (1–160 characters)" = "Bir isim girin (1–160 karakter)";
+"Enter a name (1–160 characters)" = "Bir isim gir (1–160 karakter)";
 "Item %d of %d" = "Öğe %d / %d";
 "Save and next" = "Kaydet ve sonraki";
-"This item is no longer available. Press Esc to leave." = "Bu öğe artık kullanılamıyor. Çıkmak için Esc tuşuna basın.";
+"This item is no longer available. Press Esc to leave." = "Bu öğe artık kullanılamıyor. Çıkmak için Esc tuşuna bas.";
 "Annotation style" = "İşaretleme stili";
 "More annotation actions" = "Diğer işaretleme işlemleri";
 "Annotation tool" = "İşaretleme aracı";
@@ -466,7 +466,7 @@
 "Drag to select the crop area. Enter applies; Esc cancels." = "Kırpılacak alanı seçmek için sürükle. Enter uygular; Esc iptal eder.";
 
 // macOS 27 names the former Accessibility permission differently.
-"Allow this app in Privacy & Security → Device Control and Data Access to paste into another app." = "Başka bir uygulamaya yapıştırmak için Gizlilik ve Güvenlik → Device Control and Data Access bölümünde bu uygulamaya izin verin.";
+"Allow this app in Privacy & Security → Device Control and Data Access to paste into another app." = "Başka bir uygulamaya yapıştırmak için Gizlilik ve Güvenlik → Device Control and Data Access bölümünde bu uygulamaya izin ver.";
 "Open Device Control and Data Access" = "Device Control and Data Access bölümünü aç";
 "Last checked" = "Son kontrol";
 
