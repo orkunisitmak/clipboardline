@@ -96,7 +96,7 @@ svg.rope path, svg.line path { fill: none; stroke: #a3a3a9; stroke-width: 1.1; v
 .card.kind-text { background: #36312fed; border-color: #ffffff12; }
 .card.kind-link { background: #2b3530ed; border-color: #ffffff12; }
 .card.kind-image { height: auto; min-height: 0; padding: 0; align-items: center; background: transparent; border: 0; box-shadow: none; }
-.card img { display: block; max-width: 100%; min-height: 0; object-fit: contain; border-radius: 12px; }
+.card img { display: block; max-width: 100%; min-height: 0; object-fit: contain; border-radius: 12px; pointer-events: none; }
 .card.kind-image > img, .image-frame, .photo-frame { width: auto; max-width: calc(var(--card-width) - 6px); height: auto; max-height: var(--photo-height); padding: 4px; border: 1px solid #ffffff62; border-radius: 16px; background: #47474b66; box-shadow: 0 6px 13px #0004, inset 0 0 0 1px #0002; object-fit: contain; }
 .image-frame img, .photo-frame img { max-height: calc(var(--photo-height) - 8px); max-width: 100%; padding: 0; border: 0; box-shadow: none; border-radius: 11px; }
 .card:hover { box-shadow: 0 9px 18px #0005; }

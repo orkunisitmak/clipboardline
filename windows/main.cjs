@@ -386,7 +386,7 @@ async function command(action,payload={}) {
   else if(action==='startDrag'){
     const selected=store.selected(ids(payload.ids));if(!selected.length||selected.length>1000)throw new Error('Select up to 1000 items to drag.');
     dragFiles??=new DragFiles(store.directory);const batch=dragFiles.prepare(selected,id=>store.mediaPath(id));
-    const image=selected.find(item=>item.kind==='image'),icon=image?nativeImage.createFromPath(store.posterPath(image.id)).resize({width:64}):appIcon();
+    let icon;try{const image=selected.find(item=>item.kind==='image');icon=image?nativeImage.createFromPath(store.posterPath(image.id)).resize({width:64}):appIcon();if(!icon||icon.isEmpty())icon=appIcon();}catch{icon=appIcon();}
     try{window.webContents.startDrag({files:batch.files,icon});}catch(error){if(batch.batch)dragFiles.remove(batch.batch);throw error;}
   }
   else if(action==='setSettings'){
