@@ -14,6 +14,24 @@ test('media range parsing rejects malformed values and supports bounded suffixes
  assert.deepEqual(byteRange('bytes=-100',10),{start:0,end:9,partial:true});assert.equal(byteRange({},10),null);assert.equal(byteRange('bytes='+'1'.repeat(200)+'-',10),null);
 });
 
+test('large but valid HTTP byte-range ends and suffix lengths clamp to the managed video length',async()=>{
+ const folder=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-big-range-')),file=path.join(folder,'recording.mp4');
+ fs.writeFileSync(file,'0123456789');
+ try{
+  for(const [range,expected,contentRange]of [
+   ['bytes=0-18446744073709551615','0123456789','bytes 0-9/10'],
+   ['bytes=8-18446744073709551615','89','bytes 8-9/10'],
+   ['bytes=-18446744073709551615','0123456789','bytes 0-9/10'],
+  ]){
+   const result=mediaResponse(file,{mime:'video/mp4',range});
+   assert.equal(result.status,206,range);
+   assert.equal(await result.text(),expected,range);
+   assert.equal(result.headers.get('content-range'),contentRange,range);
+  }
+  assert.equal(mediaResponse(file,{range:'bytes=18446744073709551615-'}).status,416);
+ }finally{fs.rmSync(folder,{recursive:true,force:true});}
+});
+
 test('only the exact active recording generation accepts a cache-busting query',()=>{
  const hash='a'.repeat(64),file=path.join(os.tmpdir(),hash+'.mp4');
  assert.equal(mediaGenerationMatches('?v='+hash,'/video',file),true);

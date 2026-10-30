@@ -75,3 +75,8 @@ test('oversized native metadata is rejected before allocating its buffer',async(
   assert.equal(await readClipboardContent({clipboard,sequence:async()=>1,marker,plainURL}),null);assert.equal(buffers,0);
  }
 });
+test('a standalone URL is ordinary exact text while link capture is off, as on macOS',async()=>{
+ const url=' https://example.com/a?b=1\r\n';
+ const on=await read(board([{'text/plain':url}]));assert.deepEqual([on.kind,on.value],['link','https://example.com/a?b=1']);
+ const off=await readClipboardContent({...board([{'text/plain':url}]),marker,plainURL,captureLinks:false});assert.deepEqual([off.kind,off.value],['text',url]);
+});

@@ -15,7 +15,7 @@ class DragFiles {
     if(!Array.isArray(selected)||!selected.length||selected.length>1000)throw new Error('Select up to 1000 items to drag.');
     const records=selected.map(value=>{
       if(!value||typeof value.id!=='string'||!/^[-0-9a-f]{36}$/.test(value.id)||!['image','text','link'].includes(value.kind)||value.trashedAt)throw new Error('A dragged item is no longer available.');
-      if(value.kind!=='image'&&(typeof(value.kind==='link'?value.url:value.text)!=='string'||(value.kind==='link'?value.url:value.text).length>1024*1024))throw new Error('Invalid drag content.');
+      if(value.kind!=='image'&&(typeof(value.kind==='link'?value.url:value.text)!=='string'||Buffer.byteLength(value.kind==='link'?value.url:value.text,'utf8')>1024*1024))throw new Error('Invalid drag content.');
       if(value.kind==='link'){let url;try{url=new URL(value.url);}catch{}if(!url||!['http:','https:'].includes(url.protocol)||/[\r\n\0]/.test(value.url))throw new Error('Invalid dragged link.');}
       return{id:value.id,kind:value.kind,text:value.text,url:value.url};
     });

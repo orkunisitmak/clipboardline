@@ -30,7 +30,7 @@
     if(this.motion?.matches||!this.body.animate){this.finish(pending);return;}
     this.body.style.transform=target;
     this.animation=this.body.animate([{transform:from},{transform:target}],{duration:phase==='open'?OPEN_MS:CLOSE_MS,easing:phase==='open'?OPEN_CURVE:CLOSE_CURVE,fill:'both'});
-    this.animation.finished.then(()=>this.finish(pending),()=>{if(this.pending===pending){this.pending=null;resolve({completed:false});}});
+    this.animation.finished.then(()=>this.finish(pending),()=>this.finish(pending));
    });
   }
  }

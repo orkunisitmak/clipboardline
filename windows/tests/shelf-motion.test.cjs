@@ -30,6 +30,18 @@ test('rapid close during opening preserves the current pixels and latest closing
 test('reduced motion creates no animation and reset clears the transform for Library',async()=>{
  const f=fixture();f.motion.matches=true;await f.controller.run({phase:'prepare',hidden:true});await f.controller.run({phase:'open'});assert.equal(f.body.dataset.shelfMotion,undefined);await f.controller.run({phase:'close'});assert.equal(f.body.dataset.shelfMotion,'hidden');await f.controller.run({phase:'reset'});assert.equal(f.animations.length,0);assert.equal(f.body.style.transform,'');assert.equal(f.body.dataset.shelfMotion,undefined);
 });
+test('an unexpectedly canceled Web Animation settles the latest open layer instead of leaving it stuck',async()=>{
+ const f=fixture();
+ await f.controller.run({phase:'prepare',hidden:true});
+ const opening=f.controller.run({phase:'open'});
+ f.animations[0].cancel(); // Browser cancels the native animation without a new app transition.
+ assert.deepEqual(await opening,{completed:true});
+ assert.equal(f.body.dataset.shelfMotion,undefined);
+ assert.equal(f.body.style.transform,'translate3d(0,0,0)');
+ assert.equal(f.body.style.willChange,'');
+ assert.equal(f.controller.phase,'shown');
+});
+
 test('changing reduced-motion preference settles the latest active transition immediately',async()=>{
  const f=fixture(),opening=f.controller.run({phase:'open'});f.motion.matches=true;f.motion.change();assert.deepEqual(await opening,{completed:true});assert.equal(f.animations[0].canceled,true);assert.equal(f.body.dataset.shelfMotion,undefined);
 });

@@ -5,6 +5,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {spawn}=require('node:child_process');
 const {windowsEnvironment}=require('../lib/windows-environment.cjs');
+const {readJsonRetry}=require('./read-json-retry.cjs');
 
 // This consumer test never replaces the app's native paste with fixture input.
 // The PowerShell helper only opens/selects/observes its own UUID-named document.
@@ -31,7 +32,7 @@ module.exports=async function notepadAcceptance({page,application,textItem,check
       if(exited)throw new Error('Notepad fixture exited before reporting: '+helperError);
       return null;
     }
-    return JSON.parse(fs.readFileSync(output,'utf8'));
+    return readJsonRetry(output);
   };
   const command=async action=>{
     const serial=crypto.randomUUID();fs.writeFileSync(commands+'.tmp',JSON.stringify({action,serial}));fs.renameSync(commands+'.tmp',commands);

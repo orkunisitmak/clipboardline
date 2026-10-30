@@ -78,6 +78,12 @@ import XCTest
         XCTAssertThrowsError(try parser.append(Data(repeating: 65, count: 32_769)))
     }
 
+    func testHTMLDecodesCommonNamedEntitiesInTitles() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let parsed = try PublicLinkHTMLMetadata(data: Data("<title>G&uuml;nl&uuml;k &mdash; &Ccedil;i&ccedil;ek &unknown;</title>".utf8), url: url)
+        XCTAssertEqual(parsed.title, "Günlük — Çiçek &unknown;")
+    }
+
     func testHTMLExtractsBoundedTextAndOneSafeThumbnailWithoutExecutingOrFollowingOtherResources() throws {
         let url = URL(string: "https://public.example.org/page")!
         let html = #"<html><!--<meta property='og:title' content='comment'>--><script><meta property='og:title' content='script'>fetch('http://localhost')</script><title>fallback</title><meta content='A &amp; B &#x1F30D;' property='og:title'><meta name=author content='Writer'><meta property='og:image' content='/cover.png'><img src='http://localhost/tracking'><iframe src='http://localhost'></iframe></html>"#

@@ -27,6 +27,20 @@
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
       }
+    ],
+    "sharedBehaviors": [
+      {
+        "id": "localized-notices",
+        "behavior": "Main-process notices (copy, export, import and error results) and the browsing-shortcut conflict message are shown in the language selected in Settings, using the shared catalog keys, including the \"Exported %d · failed %d\" and \"This shortcut is already used for %@\" templates with their real counts and action names.",
+        "macos": "Notices and the shortcut conflict use L(...) and String(format:) with the shared Localizable.strings catalog.",
+        "windows": "The renderer looks main-process notices up in the shared catalog, refills numeric templates, and formats the conflict with the catalog key; renderer-ui.test.cjs runs the shipped export through the Export shortcut in Turkish."
+      },
+      {
+        "id": "localized-selection-count",
+        "behavior": "The Library footer and the multi-selection details panel show the number of selected items with the shared \"%d selected\" catalog entry in the language selected in Settings.",
+        "macos": "LibraryWindow uses String(format: L(\"%d selected\"), count) for the footer and the multi-selection title.",
+        "windows": "The renderer formats the count with the shared \"%d selected\" catalog entry (selectedLabel); renderer-ui.test.cjs checks the footer and the details panel in Turkish, Spanish, Simplified Chinese and English. The Windows folder picker also shows its count with this entry and is checked by the same test."
+      }
     ]
   },
   "itemSets": {
@@ -104,7 +118,19 @@
         "text": "Shared contract l2"
       }
     ],
-    "empty": []
+    "empty": [],
+    "images-only": [
+      {
+        "id": "i1",
+        "kind": "image",
+        "text": "Shared contract i1"
+      },
+      {
+        "id": "i2",
+        "kind": "image",
+        "text": "Shared contract i2"
+      }
+    ]
   },
   "scenarios": [
     {
@@ -1501,6 +1527,141 @@
               "link"
             ],
             "searchEditing": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "empty-active-shelf-ignores-item-commands",
+      "itemSet": "images-only",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i1",
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "switchShelf",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "Enter",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyS",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyP",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "Space",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyC",
+          "ctrl": true,
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
           }
         }
       ]

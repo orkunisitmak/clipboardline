@@ -1110,7 +1110,9 @@ final class Line: ObservableObject {
     private func scheduleGust() {
         DispatchQueue.main.asyncAfter(deadline: .now() + .random(in: 7...16)) { [weak self] in
             guard let self else { return }
-            if !self.items.isEmpty && self.draggingID == nil { self.gust += 1 }
+            // Tucked away, nobody sees the sway; a gust would still re-render
+            // every view that watches the line.
+            if self.revealed && !self.items.isEmpty && self.draggingID == nil { self.gust += 1 }
             self.scheduleGust()
         }
     }

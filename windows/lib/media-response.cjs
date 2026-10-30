@@ -16,9 +16,17 @@ function byteRange(value,size){
  if(typeof value!=='string'||value.length>100)return null;
  const match=/^bytes=(\d*)-(\d*)$/.exec(value);
  if(!match||(!match[1]&&!match[2]))return null;
+ if(!Number.isSafeInteger(size)||size<=0)return null;
+ const length=BigInt(size);
  let start,end;
- if(!match[1]){const suffix=Number(match[2]);if(!Number.isSafeInteger(suffix)||suffix<=0)return null;start=Math.max(0,size-suffix);end=size-1;}
- else{start=Number(match[1]);end=match[2]?Number(match[2]):size-1;if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||start>=size||end<start)return null;end=Math.min(end,size-1);}
+ if(!match[1]){
+  const suffix=BigInt(match[2]);if(suffix===0n)return null;
+  start=Number(suffix>=length?0n:length-suffix);end=size-1;
+ }else{
+  const first=BigInt(match[1]),last=match[2]?BigInt(match[2]):length-1n;
+  if(first>=length||last<first)return null;
+  start=Number(first);end=Number(last>=length?length-1n:last);
+ }
  return{start,end,partial:true};
 }
 

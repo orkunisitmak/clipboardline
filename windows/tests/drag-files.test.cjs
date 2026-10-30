@@ -26,6 +26,15 @@ test('tampered manifests or unknown files cannot broaden cleanup to originals or
   const marker=path.join(batch.batch,'.clipboardline-drag.json');fs.writeFileSync(marker,JSON.stringify({owner:'clipboardline-native-drag-v1',files:['../keep.txt']}));
   assert.equal(drag.remove(batch.batch),false);assert.equal(fs.readFileSync(outside,'utf8'),'keep');assert.equal(fs.readFileSync(batch.files[0],'utf8'),'Synthetic text');
 });
+test('drag export applies its 1 MiB limit to UTF-8 bytes, not JavaScript string units', t => {
+  const root=fixture(t),drag=new DragFiles(root);
+  const oversized='é'.repeat(600000);
+  assert.ok(oversized.length<1024*1024);
+  assert.ok(Buffer.byteLength(oversized,'utf8')>1024*1024);
+  assert.throws(()=>drag.prepare([text(1,oversized)],()=>''),/Invalid drag content/);
+  assert.deepEqual(fs.readdirSync(drag.directory),[]);
+});
+
 test('drag staging cannot redirect writes through a directory symlink',t=>{
   const root=fixture(t),outside=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-drag-outside-'));t.after(()=>fs.rmSync(outside,{recursive:true,force:true}));
   try{fs.symlinkSync(outside,path.join(root,'native-drag'),'junction');}catch(error){if(error.code==='EPERM'){t.skip('This host cannot create directory links');return;}throw error;}
