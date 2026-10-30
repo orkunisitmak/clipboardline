@@ -387,7 +387,19 @@ async function command(action,payload={}) {
   else if(action==='startDrag'){
     const selected=store.selected(ids(payload.ids));if(!selected.length||selected.length>1000)throw new Error('Select up to 1000 items to drag.');
     dragFiles??=new DragFiles(store.directory);const batch=dragFiles.prepare(selected,id=>store.mediaPath(id));
-    let icon;try{const image=selected.find(item=>item.kind==='image');icon=image?nativeImage.createFromPath(store.posterPath(image.id)).resize({width:64}):appIcon();if(!icon||icon.isEmpty())icon=appIcon();}catch{icon=appIcon();}
+    let icon;try{
+      const image=selected.find(item=>item.kind==='image');
+      if(image){
+        const raw=nativeImage.createFromPath(store.posterPath(image.id));
+        const sz=raw.getSize(),maxD=64,scale=Math.min(1,maxD/Math.max(sz.width||1,sz.height||1));
+        icon=raw.resize({width:Math.max(16,Math.round((sz.width||maxD)*scale)),height:Math.max(16,Math.round((sz.height||maxD)*scale))});
+      }else{
+        icon=appIcon().resize({width:48,height:48});
+      }
+      if(!icon||icon.isEmpty())icon=appIcon().resize({width:48,height:48});
+    }catch{
+      try{icon=appIcon().resize({width:48,height:48});}catch{}
+    }
     try{
       if(window&&view==='shelves'){
         try{window.setIgnoreMouseEvents(true);}catch{}
