@@ -34,6 +34,12 @@
         "behavior": "Main-process notices (copy, export, import and error results) and the browsing-shortcut conflict message are shown in the language selected in Settings, using the shared catalog keys, including the \"Exported %d · failed %d\" and \"This shortcut is already used for %@\" templates with their real counts and action names.",
         "macos": "Notices and the shortcut conflict use L(...) and String(format:) with the shared Localizable.strings catalog.",
         "windows": "The renderer looks main-process notices up in the shared catalog, refills numeric templates, and formats the conflict with the catalog key; renderer-ui.test.cjs runs the shipped export through the Export shortcut in Turkish."
+      },
+      {
+        "id": "watched-folder-failures",
+        "behavior": "An image added to a watched folder is imported once its writes settle. If it cannot be imported, a notice uses the shared \"File could not be read or safely saved\" catalog key in the selected language; only a source file removed before it is imported produces no notice and no item. A folder that cannot be watched is skipped without a notice.",
+        "macos": "ImageHistory.add sets the library notice to HistoryFiles.Failure.unsafeFile (\"File could not be read or safely saved\") when a watched image cannot be hung. ScreenshotWatcher logs and skips a folder it cannot open.",
+        "windows": "lib/folder-watchers.cjs reports the same catalog key through the main-process notice path, suppresses ENOENT only when the watched source no longer exists, and skips a folder it cannot watch; folder-watchers.test.cjs drives real file-system events with the actual Store."
       }
     ]
   },

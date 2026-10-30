@@ -44,6 +44,8 @@ entry missing either platform. `localized-notices` requires notices and the
 shortcut-conflict message to follow the selected language, including refilled
 templates such as `Exported %d · failed %d`. Its Windows evidence is the
 renderer test that runs the shipped export through the Export shortcut.
+`watched-folder-failures` records the shared failure notice for an image that
+cannot be imported from a watched folder.
 
 The adapters execute application behavior:
 
