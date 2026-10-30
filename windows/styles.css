@@ -89,8 +89,9 @@ body.view-shelves, body.view-shelves #app, body.view-shelves .shell, .shelf-shel
 .shelf-tools kbd { height: 15px; min-width: 17px; font-size: 8px; }
 .line, svg.rope { position: absolute; z-index: 0; top: 0; left: 0; width: 100%; height: 96px; overflow: visible; border: 0; background: none; pointer-events: none; }
 svg.rope path, svg.line path { fill: none; stroke: #a3a3a9; stroke-width: 1.1; vector-effect: non-scaling-stroke; filter: drop-shadow(0 1px 1px #0007); }
-.cards { position: absolute; inset: 0; display: flex; align-items: flex-start; gap: 24px; overflow-x: auto; overflow-y: hidden; padding: 46px 24px 28px; min-height: 0; scrollbar-width: none; scroll-behavior: smooth; }
+.cards { position: absolute; inset: 0; display: flex; align-items: flex-start; overflow-x: auto; overflow-y: hidden; padding: 46px 0 28px; min-height: 0; scrollbar-width: none; scroll-behavior: smooth; scroll-snap-type: x mandatory; }
 .cards::-webkit-scrollbar { display: none; }
+.shelf-page { display: flex; align-items: flex-start; gap: 24px; min-width: 100%; width: 100%; flex: 0 0 100%; padding: 0 24px; scroll-snap-align: start; scroll-snap-stop: always; }
 .card { position: relative; flex: 0 0 var(--card-width); width: var(--card-width); min-width: var(--card-width); max-width: var(--card-width); height: var(--text-height); margin-top: var(--sag, 0px); padding: 21px 10px 10px; display: flex; flex-direction: column; gap: 5px; border: 1px solid #ffffff23; border-radius: 16px; background: #333336ed; box-shadow: 0 6px 13px #0003; text-align: left; cursor: pointer; user-select: none; outline: 0; transition: box-shadow .15s ease, background .15s ease; }
 .card:before { content: ""; position: absolute; z-index: 3; top: -21px; left: calc(50% - 4.5px); width: 9px; height: 26px; border: 1px solid #d4d4d871; border-radius: 4px; background: linear-gradient(90deg, #a7a7aa, #efeff1 38%, #d3d3d6 64%, #9d9da0); box-shadow: 0 2px 3px #0004; pointer-events: none; }
 .card:after { content: ""; position: absolute; z-index: 4; top: -12px; left: calc(50% - 2.5px); width: 5px; height: 1px; border-radius: 2px; background: #5252569c; pointer-events: none; }
