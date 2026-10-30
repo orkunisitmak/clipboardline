@@ -120,7 +120,7 @@ test('messages use the shared catalogs in English and Turkish and keep both addr
   assert.equal(english.body,'Your copied address was replaced by another address. This is how clipboard malware steals crypto.');
   assert.deepEqual(english.rows.map(row=>row.value),['0xORIGINAL','0xREPLACEMENT']);assert.equal(english.persistent,true);
   const turkish=walletGuardMessage(hijack,key=>translated('tr',key));
-  assert.equal(turkish.title,'Kopyalanan adres değiştirildi');assert.match(messageSummary(turkish),/Kopyaladığınız: 0xORIGINAL\nPanodaki şu an: 0xREPLACEMENT/);
+  assert.equal(turkish.title,'Kopyalanan adres değiştirildi');assert.match(messageSummary(turkish),/Kopyaladığınız: 0xORIGINAL\nPanodaki adres: 0xREPLACEMENT/);
   for(const [notice,english] of Object.entries(contract.notices)){
     const message=walletGuardMessage({save:false,notice,alert:null},key=>translated('en',key));
     assert.equal(message.body,english);assert.equal(message.persistent,false);
