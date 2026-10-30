@@ -42,6 +42,14 @@ ONNX Runtime Web/Common 1.30.0 supplies the local WASM CPU engine. Preserve the
 and [complete upstream third-party notices](windows/assets/licenses/THIRD_PARTY_NOTICES-ONNXRuntime.txt)
 with the installed application, alongside the Windows dependency notices.
 
+## BIP39 English wordlist
+
+Wallet Guard bundles the unmodified [BIP39 English wordlist](https://github.com/bitcoin/bips/blob/master/bip-0039/english.txt) as `Sources/Tendedero/BIP39English.swift` and `windows/lib/bip39-english.cjs` (SHA-256 of the newline-terminated list: `2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda`). BIP-0039 by Marek Palatinus, Pavol Rusnak, Aaron Voisine and Sean Bowe is published under the MIT License (the BIP header states `License: MIT` and its Copyright section reads "This BIP falls under the MIT License."; upstream has no separate copyright line, so the holders and year below are taken from the BIP's Authors and Assigned 2013-09-10 header fields):
+
+> Copyright (c) 2013 Marek Palatinus, Pavol Rusnak, Aaron Voisine, Sean Bowe.
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 ## Platform components
 
 macOS uses operating-system frameworks including AppKit, SwiftUI, Vision, Core ML and SQLite's system interface. They are not copied into this source repository. Windows dependencies and their bundled notices are described in the Windows package documentation and dependency lockfile; audit them independently when adding or changing a package.
@@ -51,3 +59,5 @@ macOS uses operating-system frameworks including AppKit, SwiftUI, Vision, Core M
 Uygulama kodu, modeller, framework'ler ve görseller ayrı lisanslara tabidir. Projenin MIT lisansı diğer bileşenlerin lisansının yerine geçmez. Alejandro Buján'ın telif bildirimi ve Tendedero'nun isim/ikon koşulları [LICENSE](LICENSE) içinde korunur; ClipBoardLine kendi adını ve özgün ikonunu kullanır.
 
 Sparkle dağıtımında tam lisans metnini; model kullanıldığında Apple'ın model lisansını, kod lisansını, `ACKNOWLEDGEMENTS` dosyasını ve model kaynak kaydını koruyun. Özgün MobileCLIP-S2 ağırlıkları bu proje tarafından MIT olarak yeniden lisanslanmaz. Kaynak kod paketine özel imza anahtarı, Keychain dosyası veya kullanıcı geçmişi dahil edilmez.
+
+Cüzdan Koruması, değiştirilmemiş BIP39 İngilizce kelime listesini MIT lisansı ve yukarıdaki yazar bildirimiyle birlikte paketler.

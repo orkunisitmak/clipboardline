@@ -46,4 +46,15 @@ async function readClipboardContent({clipboard,sequence,marker,plainURL,captureL
   if(!await current())return changed;
   return{kind,value,owned:false,fingerprint:kind+':'+crypto.createHash('sha256').update(bytes).digest('hex')};
 }
-module.exports={privateClipboard,readClipboardContent};
+// Admission after decoding. Text reaches Wallet Guard only while text or
+// link capture is on (as on macOS, where the text watcher stops when both are
+// off); the per-kind setting then decides whether the item is saved.
+const CAPTURE_SETTING=Object.freeze({image:'captureImages',text:'captureText',link:'captureLinks'});
+function admitClipboardContent(content,settings,admitText){
+  if(content.kind!=='image'){
+    if(!settings.captureText&&!settings.captureLinks)return false;
+    if(!admitText(content.value))return false;
+  }
+  return !!settings[CAPTURE_SETTING[content.kind]];
+}
+module.exports={privateClipboard,readClipboardContent,admitClipboardContent};

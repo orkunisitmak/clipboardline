@@ -1,0 +1,1333 @@
+{
+  "schemaVersion": 1,
+  "description": "Wallet Guard: local crypto clipboard safety. Recovery phrases and private keys are withheld from history; same-chain address replacement inside a short window and lookalike addresses raise warnings. Replacement needs no front application change between the two copies; an unknown context (null) on either copy counts as no change, so the warning still fires. A lookalike is a different same-chain address of the same length whose distinctive part (after a fixed prefix such as 0x, bc1q or a base58 version character) shares the first lookalikePrefix and last lookalikeSuffix characters. All values are public test vectors or synthetic data that hold no funds.",
+  "setting": {
+    "default": true,
+    "macOSDefaultsKey": "walletGuardEnabled",
+    "windowsSettingsKey": "walletGuard"
+  },
+  "wordlist": {
+    "name": "BIP39 English",
+    "count": 2048,
+    "sha256OfNewlineTerminatedList": "2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda"
+  },
+  "limits": {
+    "maximumInspectedCharacters": 16384,
+    "maximumMnemonicRunWords": 48,
+    "hijackWindowMs": 3000,
+    "lookalikePrefix": 4,
+    "lookalikeSuffix": 4,
+    "historyAddresses": 200,
+    "sessionAddresses": 32
+  },
+  "notices": {
+    "recoveryPhrase": "Recovery phrase not saved. Never paste it into websites or chats.",
+    "privateKey": "Private key not saved. Never paste it into websites or chats."
+  },
+  "classify": [
+    {
+      "name": "BIP39 official vector, 12 words",
+      "value": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "expect": {
+        "kind": "secret",
+        "secret": "recoveryPhrase",
+        "format": "bip39"
+      }
+    },
+    {
+      "name": "BIP39 official vector, 12 words, legal winner",
+      "value": "legal winner thank year wave sausage worth useful legal winner thank yellow",
+      "expect": {
+        "kind": "secret",
+        "secret": "recoveryPhrase",
+        "format": "bip39"
+      }
+    },
+    {
+      "name": "BIP39 derived vector, 15 words (zero entropy)",
+      "value": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "expect": {
+        "kind": "secret",
+        "secret": "recoveryPhrase",
+        "format": "bip39"
+      }
+    },
+    {
+      "name": "BIP39 official vector, 18 words",
+      "value": "letter advice cage absurd amount doctor acoustic avoid letter advice cage above",
+      "expect": {
+        "kind": "secret",
+        "secret": "recoveryPhrase",
+        "format": "bip39"
+      }
+    },
+    {
+      "name": "BIP39 derived vector, 21 words (0x7f entropy)",
+      "value": "legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth useful legal winner thank year viable",
+      "expect": {
+        "kind": "secret",
+        "secret": "recoveryPhrase",
+        "format": "bip39"
+      }
+    },
+    {
+      "name": "BIP39 official vector, 24 words",
+      "value": "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote",
+      "expect": {
+        "kind": "secret",
+        "secret": "recoveryPhrase",
+        "format": "bip39"
+      }
+    },
+    {
+      "name": "BIP39 official vector, 24 words, mixed entropy",
+      "value": "hamster diagram private dutch cause delay private meat slide toddler razor book happy fancy gospel tennis maple dilemma loan word shrug inflict delay length",
+      "expect": {
+        "kind": "secret",
+        "secret": "recoveryPhrase",
+        "format": "bip39"
+      }
+    },
+    {
+      "name": "numbered wallet backup layout",
+      "value": "1. legal\n2. winner\n3. thank\n4. year\n5. wave\n6. sausage\n7. worth\n8. useful\n9. legal\n10. winner\n11. thank\n12. yellow",
+      "expect": {
+        "kind": "secret",
+        "secret": "recoveryPhrase",
+        "format": "bip39"
+      }
+    },
+    {
+      "name": "upper case, commas and padding",
+      "value": "  ABANDON, ABANDON, ABANDON, ABANDON, ABANDON, ABANDON, ABANDON, ABANDON, ABANDON, ABANDON, ABANDON, ABOUT\n",
+      "expect": {
+        "kind": "secret",
+        "secret": "recoveryPhrase",
+        "format": "bip39"
+      }
+    },
+    {
+      "name": "phrase inside a labelled note",
+      "value": "Seed phrase for the synthetic test wallet:\nabandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about\nKeep this note offline.",
+      "expect": {
+        "kind": "secret",
+        "secret": "recoveryPhrase",
+        "format": "bip39"
+      }
+    },
+    {
+      "name": "12 wordlist words with an invalid checksum",
+      "value": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "11 words of a valid phrase",
+      "value": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "13 wordlist words without a valid 12 or 15 word window",
+      "value": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "ordinary English sentence",
+      "value": "Please review the attached draft and send your notes before the meeting on Friday.",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "first 60 wordlist words are not a backup",
+      "value": "abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual adapt add addict address adjust admit adult advance advice aerobic affair afford afraid again age agent agree ahead aim air airport aisle alarm album alcohol alert alien all alley allow almost alone alpha already also alter",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "raw secp256k1 key, value 1",
+      "value": "0000000000000000000000000000000000000000000000000000000000000001",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "hex"
+      }
+    },
+    {
+      "name": "raw secp256k1 key with 0x prefix",
+      "value": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "hex"
+      }
+    },
+    {
+      "name": "largest valid secp256k1 key (n - 1)",
+      "value": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "hex"
+      }
+    },
+    {
+      "name": "all-zero 32 byte hex is not a key",
+      "value": "0000000000000000000000000000000000000000000000000000000000000000",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "curve order n is not a key",
+      "value": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "64 hex digits inside a sentence (transaction id context)",
+      "value": "txid abababababababababababababababababababababababababababababababab",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "63 hex digits",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "65 hex digits",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "sha256 checksum line",
+      "value": "2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda  english.txt",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "WIF uncompressed mainnet, key 1",
+      "value": "5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "wif"
+      }
+    },
+    {
+      "name": "WIF compressed mainnet, key 1",
+      "value": "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "wif"
+      }
+    },
+    {
+      "name": "WIF compressed testnet, key 1",
+      "value": "cMahea7zqjxrtgAbB7LSGbcQUr1uX1ojuat9jZodMN87JcbXMTcA",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "wif"
+      }
+    },
+    {
+      "name": "WIF with a broken checksum",
+      "value": "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWa",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP32 test vector 1 master xprv",
+      "value": "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "extendedKey"
+      }
+    },
+    {
+      "name": "BIP32 test vector 1 master as tprv",
+      "value": "tprv8ZgxMBicQKsPeDgjzdC36fs6bMjGApWDNLR9erAXMs5skhMv36j9MV5ecvfavji5khqjWaWSFhN3YcCUUdiKH6isR4Pwy3U5y5egddBr16m",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "extendedKey"
+      }
+    },
+    {
+      "name": "BIP32 test vector 1 master as yprv",
+      "value": "yprvABrGsX5C9jantheLAR8A97LcTCTVsvThwu2FZpdxFtyH2CS4JPYxToNLixTWvGygnuRmFxVEZ18ny3GJ57nPGH8skkt4tbZXKhxuaUFh6jt",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "extendedKey"
+      }
+    },
+    {
+      "name": "BIP32 test vector 1 master as zprv",
+      "value": "zprvAWgYBBk7JR8GjzqSzmunMCS7dAbwpYTCs1YUMDXqduMA5JFHZ3iX5s2UkAR6vBdcCYYa1S5o1fVLrKsrnpCQ4WpUd6aVUWP1bS2Yy5DoaKv",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "extendedKey"
+      }
+    },
+    {
+      "name": "xprv with a broken checksum",
+      "value": "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHa",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP32 test vector 1 master xpub is public",
+      "value": "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "Solana keypair, base58 64 bytes",
+      "value": "EEse2bnuRpbMi93zKtqw1aF5ZJSEiUE4bowbWVZvNBVbE4oFJJcFBhBbsKPGQG7uX3qAmqYvopNSoJ6UzoMxmSv",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "solanaKeypair"
+      }
+    },
+    {
+      "name": "Solana keypair, JSON byte array",
+      "value": "[11,106,190,236,28,20,179,152,234,157,213,126,235,17,88,150,233,63,30,181,205,97,35,96,106,23,57,139,228,232,138,172,254,205,163,24,232,229,18,108,0,182,216,240,141,162,205,16,122,82,184,217,77,18,210,157,246,60,109,149,151,162,253,103]",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "solanaKeypair"
+      }
+    },
+    {
+      "name": "Solana keypair, pretty-printed JSON byte array",
+      "value": "[\n  11,\n  106,\n  190,\n  236,\n  28,\n  20,\n  179,\n  152,\n  234,\n  157,\n  213,\n  126,\n  235,\n  17,\n  88,\n  150,\n  233,\n  63,\n  30,\n  181,\n  205,\n  97,\n  35,\n  96,\n  106,\n  23,\n  57,\n  139,\n  228,\n  232,\n  138,\n  172,\n  254,\n  205,\n  163,\n  24,\n  232,\n  229,\n  18,\n  108,\n  0,\n  182,\n  216,\n  240,\n  141,\n  162,\n  205,\n  16,\n  122,\n  82,\n  184,\n  217,\n  77,\n  18,\n  210,\n  157,\n  246,\n  60,\n  109,\n  149,\n  151,\n  162,\n  253,\n  103\n]",
+      "expect": {
+        "kind": "secret",
+        "secret": "privateKey",
+        "format": "solanaKeypair"
+      }
+    },
+    {
+      "name": "Solana transaction signature (64 bytes, not a keypair)",
+      "value": "sJWmPp5mncS3PxpoJ1ywDFfyuSmiKcxNT1YBYEJN8qfqrNK2XgjaNNS1Sd63kwWMz9NSQqAaTSa7SvhhGfXz336",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "JSON byte array whose public half does not match",
+      "value": "[11,106,190,236,28,20,179,152,234,157,213,126,235,17,88,150,233,63,30,181,205,97,35,96,106,23,57,139,228,232,138,172,254,205,163,24,232,229,18,108,1,182,216,240,141,162,205,16,122,82,184,217,77,18,210,157,246,60,109,149,151,162,253,103]",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "JSON array of 32 bytes",
+      "value": "[11,106,190,236,28,20,179,152,234,157,213,126,235,17,88,150,233,63,30,181,205,97,35,96,106,23,57,139,228,232,138,172]",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "EIP-55 vector 1",
+      "value": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+      "expect": {
+        "kind": "address",
+        "chain": "evm"
+      }
+    },
+    {
+      "name": "EIP-55 vector 2",
+      "value": "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+      "expect": {
+        "kind": "address",
+        "chain": "evm"
+      }
+    },
+    {
+      "name": "EIP-55 vector 3",
+      "value": "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+      "expect": {
+        "kind": "address",
+        "chain": "evm"
+      }
+    },
+    {
+      "name": "EIP-55 vector 4",
+      "value": "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
+      "expect": {
+        "kind": "address",
+        "chain": "evm"
+      }
+    },
+    {
+      "name": "EIP-55 all caps vector",
+      "value": "0x52908400098527886E0F7030069857D2E4169EE7",
+      "expect": {
+        "kind": "address",
+        "chain": "evm"
+      }
+    },
+    {
+      "name": "all lower case EVM address",
+      "value": "0xde709f2102306220921060314715629080e2fb77",
+      "expect": {
+        "kind": "address",
+        "chain": "evm"
+      }
+    },
+    {
+      "name": "EVM address of key 1 with surrounding whitespace",
+      "value": "\n 0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf \t",
+      "expect": {
+        "kind": "address",
+        "chain": "evm"
+      }
+    },
+    {
+      "name": "EVM address with one wrong checksum letter case",
+      "value": "0x7e5F4552091A69125d5DfCb7b8C2659029395Bdf",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "39 hex digits after 0x",
+      "value": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "P2PKH of key 1, uncompressed",
+      "value": "1EHNa6Q4Jz2uvNExL497mE43ikXhwF6kZm",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin"
+      }
+    },
+    {
+      "name": "P2PKH of key 1, compressed",
+      "value": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin"
+      }
+    },
+    {
+      "name": "P2SH-P2WPKH of key 1",
+      "value": "3JvL6Ymt8MVWiCNHC7oWU6nLeHNJKLZGLN",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin"
+      }
+    },
+    {
+      "name": "testnet P2PKH of key 1",
+      "value": "mrCDrCybB6J1vRfbwM5hemdJz73FwDBC8r",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin-testnet"
+      }
+    },
+    {
+      "name": "P2PKH with a broken checksum",
+      "value": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMa",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 valid v0 P2WPKH, upper case",
+      "value": "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin"
+      }
+    },
+    {
+      "name": "BIP350 valid v0 P2WSH testnet",
+      "value": "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin-testnet"
+      }
+    },
+    {
+      "name": "BIP350 valid v1 40-byte program",
+      "value": "bc1pw508d6qejxtdg4y5r3zarvary0c5xw7kw508d6qejxtdg4y5r3zarvary0c5xw7kt5nd6y",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin"
+      }
+    },
+    {
+      "name": "BIP350 valid v16",
+      "value": "BC1SW50QGDZ25J",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin"
+      }
+    },
+    {
+      "name": "BIP350 valid v2",
+      "value": "bc1zw508d6qejxtdg4y5r3zarvaryvaxxpcs",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin"
+      }
+    },
+    {
+      "name": "BIP350 valid v0 testnet",
+      "value": "tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin-testnet"
+      }
+    },
+    {
+      "name": "BIP350 valid v1 testnet",
+      "value": "tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin-testnet"
+      }
+    },
+    {
+      "name": "BIP350 valid taproot",
+      "value": "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",
+      "expect": {
+        "kind": "address",
+        "chain": "bitcoin"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 1",
+      "value": "tc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vq5zuyut",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 2",
+      "value": "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqh2y7hd",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 3",
+      "value": "tb1z0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqglt7rf",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 4",
+      "value": "BC1S0XLXVLHEMJA6C4DQV22UAPCTQUPFHLXM9H8Z3K2E72Q4K9HCZ7VQ54WELL",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 5",
+      "value": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kemeawh",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 6",
+      "value": "tb1q0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vq24jc47",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 7",
+      "value": "bc1p38j9r5y49hruaue7wxjce0updqjuyyx0kh56v8s25huc6995vvpql3jow4",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 8",
+      "value": "BC130XLXVLHEMJA6C4DQV22UAPCTQUPFHLXM9H8Z3K2E72Q4K9HCZ7VQ7ZWS8R",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 9",
+      "value": "bc1pw5dgrnzv",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 10",
+      "value": "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7v8n0nx0muaewav253zgeav",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 11",
+      "value": "BC1QR508D6QEJXTDG4Y5R3ZARVARYV98GJ9P",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 12",
+      "value": "tb1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vq47Zagq",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 13",
+      "value": "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7v07qwwzcrf",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 14",
+      "value": "tb1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vpggkg4j",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "BIP350 invalid address 15",
+      "value": "bc1gmk9yu",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "Tron address of key 1",
+      "value": "TMVQGm1qAQYVdetCeGRRkTWYYrLXuHK2HC",
+      "expect": {
+        "kind": "address",
+        "chain": "tron"
+      }
+    },
+    {
+      "name": "Tron address of synthetic bytes",
+      "value": "TBXSw8fM4jpQkGc6zZjsVABFpVN7UvXPdV",
+      "expect": {
+        "kind": "address",
+        "chain": "tron"
+      }
+    },
+    {
+      "name": "Tron address with a broken checksum",
+      "value": "TMVQGm1qAQYVdetCeGRRkTWYYrLXuHK2Ha",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "Solana public key, synthetic",
+      "value": "J9eRTgRFgC9fRxgcQQ2D1YXXotQ1NgSDS3gjJDKLqX4J",
+      "expect": {
+        "kind": "address",
+        "chain": "solana"
+      }
+    },
+    {
+      "name": "Solana system program id",
+      "value": "11111111111111111111111111111111",
+      "expect": {
+        "kind": "address",
+        "chain": "solana"
+      }
+    },
+    {
+      "name": "IBAN example",
+      "value": "GB82 WEST 1234 5698 7654 32",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "IBAN example without spaces",
+      "value": "GB82WEST12345698765432",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "test card number",
+      "value": "4111 1111 1111 1111",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "test card number without spaces",
+      "value": "4111111111111111",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "git commit id",
+      "value": "1141e69a6f0c3d5f1a1d6f2b7e5c9a0b8d7e6f5a",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "UUID",
+      "value": "123e4567-e89b-12d3-a456-426614174000",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "two addresses in one copy",
+      "value": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf 0x9999ccCccCCCcCCCcCCcCCcCCCcCcccCcccC0000",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "address inside a sentence",
+      "value": "Send to 0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf please",
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "empty after trimming",
+      "value": " \n\t",
+      "expect": {
+        "kind": "none"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "recovery phrases and private keys are withheld with a notice",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+          "context": "app-1",
+          "expect": {
+            "save": false,
+            "notice": "recoveryPhrase",
+            "alert": null
+          }
+        },
+        {
+          "atMs": 10000,
+          "text": "1. legal\n2. winner\n3. thank\n4. year\n5. wave\n6. sausage\n7. worth\n8. useful\n9. legal\n10. winner\n11. thank\n12. yellow",
+          "context": "app-1",
+          "expect": {
+            "save": false,
+            "notice": "recoveryPhrase",
+            "alert": null
+          }
+        },
+        {
+          "atMs": 20000,
+          "text": "0x0000000000000000000000000000000000000000000000000000000000000001",
+          "context": "app-1",
+          "expect": {
+            "save": false,
+            "notice": "privateKey",
+            "alert": null
+          }
+        },
+        {
+          "atMs": 30000,
+          "text": "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+          "context": "app-1",
+          "expect": {
+            "save": false,
+            "notice": "privateKey",
+            "alert": null
+          }
+        },
+        {
+          "atMs": 40000,
+          "text": "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi",
+          "context": "app-1",
+          "expect": {
+            "save": false,
+            "notice": "privateKey",
+            "alert": null
+          }
+        },
+        {
+          "atMs": 50000,
+          "text": "[11,106,190,236,28,20,179,152,234,157,213,126,235,17,88,150,233,63,30,181,205,97,35,96,106,23,57,139,228,232,138,172,254,205,163,24,232,229,18,108,0,182,216,240,141,162,205,16,122,82,184,217,77,18,210,157,246,60,109,149,151,162,253,103]",
+          "context": "app-1",
+          "expect": {
+            "save": false,
+            "notice": "privateKey",
+            "alert": null
+          }
+        },
+        {
+          "atMs": 60000,
+          "text": "Please review the attached draft.",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a disabled guard saves everything and stays silent",
+      "enabled": false,
+      "history": [
+        "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678"
+      ],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 100,
+          "text": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 200,
+          "text": "0x9999ccCccCCCcCCCcCCcCCcCCCcCcccCcccC0000",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 10000,
+          "text": "0x1234bbBbbBBbBbBBbbBBBbBbBBBBBbBbBBBB5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "same-chain replacement inside the window raises a hijack alert",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 800,
+          "text": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": {
+              "type": "hijack",
+              "original": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+              "replacement": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "turning the guard off and on forgets compared addresses",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 200,
+          "text": "0x1234bbBbbBBbBbBBbbBBBbBbBBBBBbBbBBBB5678",
+          "context": "app-1",
+          "turnedOffBefore": true,
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "replacement exactly at the window edge is still a hijack",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "J9eRTgRFgC9fRxgcQQ2D1YXXotQ1NgSDS3gjJDKLqX4J",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 3000,
+          "text": "DRd6BekSh4Hb9p1ykxDu6YW8bJp63zKRVt4RHRAXiFEW",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": {
+              "type": "hijack",
+              "original": "J9eRTgRFgC9fRxgcQQ2D1YXXotQ1NgSDS3gjJDKLqX4J",
+              "replacement": "DRd6BekSh4Hb9p1ykxDu6YW8bJp63zKRVt4RHRAXiFEW"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "a copy after the window is an ordinary copy",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 3001,
+          "text": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a front application change is treated as a new user copy",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 500,
+          "text": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+          "context": "app-2",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "unknown application context still detects a replacement",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+          "context": null,
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 400,
+          "text": "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4",
+          "context": null,
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": {
+              "type": "hijack",
+              "original": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+              "replacement": "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "a context known for only one copy still detects a replacement",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 400,
+          "text": "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4",
+          "context": null,
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": {
+              "type": "hijack",
+              "original": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+              "replacement": "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "a different chain is not a replacement",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 300,
+          "text": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 600,
+          "text": "TMVQGm1qAQYVdetCeGRRkTWYYrLXuHK2HC",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "the same EVM address in another letter case is not a replacement",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 300,
+          "text": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a non-address copy in between ends the replacement window",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 300,
+          "text": "synthetic note",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 600,
+          "text": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a withheld secret in between ends the replacement window",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 300,
+          "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+          "context": "app-1",
+          "expect": {
+            "save": false,
+            "notice": "recoveryPhrase",
+            "alert": null
+          }
+        },
+        {
+          "atMs": 600,
+          "text": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a lookalike of a history address raises a poisoning hint",
+      "enabled": true,
+      "history": [
+        "synthetic note",
+        "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678"
+      ],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234bbBbbBBbBbBBbbBBBbBbBBBBBbBbBBBB5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": {
+              "type": "poisoning",
+              "address": "0x1234bbBbbBBbBbBBbbBBBbBbBBBBBbBbBBBB5678",
+              "similar": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "a lookalike of an address copied earlier in this session raises a poisoning hint",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "J9eRTgRFgC9fRxgcQQ2D1YXXotQ1NgSDS3gjJDKLqX4J",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 60000,
+          "text": "synthetic note",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 120000,
+          "text": "J9eRTgRFgC1fRxgcQQ2D1YXXotQ1NgSDS3gjJDKLqX4J",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": {
+              "type": "poisoning",
+              "address": "J9eRTgRFgC1fRxgcQQ2D1YXXotQ1NgSDS3gjJDKLqX4J",
+              "similar": "J9eRTgRFgC9fRxgcQQ2D1YXXotQ1NgSDS3gjJDKLqX4J"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "an identical history address is not a lookalike",
+      "enabled": true,
+      "history": [
+        "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+        "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"
+      ],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 10000,
+          "text": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a replacement that is also a lookalike reports the hijack",
+      "enabled": true,
+      "history": [],
+      "steps": [
+        {
+          "atMs": 0,
+          "text": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": null
+          }
+        },
+        {
+          "atMs": 200,
+          "text": "0x1234bbBbbBBbBbBBbbBBBbBbBBBBBbBbBBBB5678",
+          "context": "app-1",
+          "expect": {
+            "save": true,
+            "notice": null,
+            "alert": {
+              "type": "hijack",
+              "original": "0x1234aAAAAaAaAaaaaAaaAAAaaaAAAAaAAAaA5678",
+              "replacement": "0x1234bbBbbBBbBbBBbbBBBbBbBBBBBbBbBBBB5678"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

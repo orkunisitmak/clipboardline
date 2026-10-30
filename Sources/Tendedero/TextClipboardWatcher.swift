@@ -13,16 +13,22 @@ final class TextClipboardWatcher {
     private let onLink: ((URL) -> Void)?
     private let capturesText: () -> Bool
     private let capturesLinks: () -> Bool
+    /// Wallet Guard runs on decoded text before any history, link or index
+    /// path. Returning false withholds the copy from every destination.
+    private let admits: (String) -> Bool
     private var timer: Timer?
     private var lastCount: Int?
 
     convenience init(onText: @escaping (String) -> Void, onLink: ((URL) -> Void)? = nil,
-                     capturesText: @escaping () -> Bool = { true }, capturesLinks: @escaping () -> Bool = { false }) {
-        self.init(source: SystemClipboardSource(), onText: onText, onLink: onLink, capturesText: capturesText, capturesLinks: capturesLinks)
+                     capturesText: @escaping () -> Bool = { true }, capturesLinks: @escaping () -> Bool = { false },
+                     admits: @escaping (String) -> Bool = { _ in true }) {
+        self.init(source: SystemClipboardSource(), onText: onText, onLink: onLink, capturesText: capturesText, capturesLinks: capturesLinks, admits: admits)
     }
     init(source: any ClipboardSource, onText: @escaping (String) -> Void, onLink: ((URL) -> Void)? = nil,
-         capturesText: @escaping () -> Bool = { true }, capturesLinks: @escaping () -> Bool = { false }) {
+         capturesText: @escaping () -> Bool = { true }, capturesLinks: @escaping () -> Bool = { false },
+         admits: @escaping (String) -> Bool = { _ in true }) {
         self.source = source; self.onText = onText; self.onLink = onLink; self.capturesText = capturesText; self.capturesLinks = capturesLinks
+        self.admits = admits
     }
     /// Enabling a source starts with the next copy, never the existing board.
     func skipCurrent() { lastCount = source.changeCount }
@@ -57,7 +63,7 @@ final class TextClipboardWatcher {
             // consumes a leading BOM, which changes an otherwise valid copy.
             let text = String(decoding: data, as: UTF8.self)
             guard text.unicodeScalars.contains(where: { !$0.properties.isWhitespace }) else { continue }
-            guard source.changeCount == count else { return }
+            guard source.changeCount == count, admits(text) else { return }
             if capturesLinks(), let onLink, let url = LinkIdentity.standalone(text) { onLink(url) }
             else if capturesText() { onText(text) }
             return

@@ -10,7 +10,7 @@ const MANAGED_MEDIA=/^[a-f0-9]{64}\.(png|mp4|mov)$/;
 
 const KINDS = ['image', 'text', 'link'];
 const DEFAULTS = Object.freeze({
-  visibleKinds: KINDS, captureText: false, captureImages: false, captureLinks: true,fetchLinkMetadata:true,
+  visibleKinds: KINDS, captureText: false, captureImages: false, captureLinks: true,fetchLinkMetadata:true,walletGuard:true,
   retentionDays: {image: 30, text: 30, link: 30},
   shortcuts: {toggle: 'Control+Alt+T', search: 'Control+Alt+S', library:'', copyLatest:'', screenshot: 'Control+Alt+A'},
   localShortcuts: {},
@@ -34,7 +34,7 @@ function settings(patch, previous = DEFAULTS) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) fail('Invalid settings');
   const out = clone(previous);
   for (const [key, value] of Object.entries(patch)) {
-    if (['captureText', 'captureImages', 'captureLinks', 'fetchLinkMetadata','autoCheckUpdates', 'openAfterScreenshot','sounds','launchAtLogin','indexImages','libraryListMode','libraryInspectorVisible','librarySidebarVisible'].includes(key)) {
+    if (['captureText', 'captureImages', 'captureLinks', 'fetchLinkMetadata','walletGuard','autoCheckUpdates', 'openAfterScreenshot','sounds','launchAtLogin','indexImages','libraryListMode','libraryInspectorVisible','librarySidebarVisible'].includes(key)) {
       if (typeof value !== 'boolean') fail('Invalid preference');
       out[key] = value;
     } else if (key === 'visibleKinds') {

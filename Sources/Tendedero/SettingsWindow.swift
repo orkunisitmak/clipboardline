@@ -29,6 +29,7 @@ final class SettingsModel: ObservableObject {
     var setImages: (Bool) -> Void = { _ in }
     var setTexts: (Bool) -> Void = { _ in }
     var setLinks: (Bool) -> Void = { _ in }
+    var setWalletGuard: (Bool) -> Void = { _ in }
     var setMetadata: (Bool) -> Void = { _ in }
     var setLibraryShortcut: (KeyShortcut?) -> Void = { _ in }
     var recordLibraryShortcut: () -> Void = {}
@@ -258,6 +259,11 @@ private struct SettingsView: View {
                 Toggle(L("Capture copied links"), isOn: model.binding(get: { LinkHistory.isEnabled }, set: model.setLinks))
             } header: { Text(L("Clipboard")) } footer: {
                 Text(L("Copies are saved locally. Text and link capture is silent. A single web address goes to Links; paragraphs stay as text."))
+            }
+            Section {
+                Toggle(L("Protect recovery phrases, keys and addresses"), isOn: model.binding(get: { WalletGuard.isEnabled }, set: model.setWalletGuard))
+            } header: { Text(L("Wallet Guard")) } footer: {
+                Text(L("Recovery phrases and private keys are never saved. Warns when a copied crypto address is replaced or resembles one you copied before. Checks run only on this computer."))
             }
             Section {
                 Toggle(L("Fetch link titles and thumbnails"), isOn: model.binding(get: { LinkMetadataService.isEnabled }, set: model.setMetadata))

@@ -16,7 +16,7 @@ const crypto = require('node:crypto');
 const {pathToFileURL} = require('node:url');
 const {spawn} = require('node:child_process');
 const {Store,plainURL,ids} = require('./lib/model.cjs');
-const {privateClipboard,readClipboardContent}=require('./lib/clipboard-policy.cjs');
+const {privateClipboard,readClipboardContent,admitClipboardContent}=require('./lib/clipboard-policy.cjs');
 const {mediaOrigin}=require('./lib/media-policy.cjs');
 const {mediaResponse,mediaGenerationMatches}=require('./lib/media-response.cjs');
 const {MediaJobs,MAXIMUM_VIDEO_BYTES}=require('./lib/media.cjs');
@@ -29,7 +29,8 @@ const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
 const {Updates,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
 const {GlobalShortcuts}=require('./lib/global-shortcuts.cjs');
 const {ImageSearch,modelPaths}=require('./lib/image-search.cjs');
-const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
+const {StatusTray,trayIcon,translated,languageCode}=require('./lib/status-summary.cjs');
+const {WalletGuard,walletGuardMessage,messageSummary,LIMITS:WALLET_GUARD_LIMITS}=require('./lib/wallet-guard.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
 const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
@@ -48,6 +49,7 @@ let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
 const shelfMotion=new MotionBridge(value=>{if(window&&!window.isDestroyed())window.webContents.send('clipboardline:shelf-motion',value);});
 const windowBounds=new WindowBounds();
+const walletGuard=new WalletGuard();
 const pasteTargets=new PasteTargetTracker(process.pid);
 const entry = pathToFileURL(path.join(__dirname,'index.html')).href;
 const copyMarker = crypto.randomBytes(16);
@@ -171,12 +173,25 @@ async function readClipboard() {
     if(content.fingerprint===lastFingerprint)return;lastFingerprint=content.fingerprint;
     if(content.fingerprint===ownFingerprint){ownFingerprint='';return;}
     if(content.owned)return;
-    const key={image:'captureImages',text:'captureText',link:'captureLinks'}[content.kind];if(!store.data.settings[key])return;
+    // Wallet Guard sees decoded text before any history, link, preview or
+    // index path. A withheld secret never reaches the Store.
+    if(!admitClipboardContent(content,store.data.settings,admitCopiedText))return;
     const item=store.insert(content.kind,content.value);broadcast();
     if(item.kind==='link')void enrich(item.id);
     if(item.kind==='image'){queueOCR(item.id);refreshImageSearch();}
     if(item.kind==='image'&&store.data.settings.openAfterScreenshot&&!desiredVisible)await show('shelves',{selectId:item.id,kind:'image'});
   }catch(error){notify('Clipboard capture: '+error.message);}finally{capturing=false;if(pendingClipboard){pendingClipboard=false;queueMicrotask(()=>void readClipboard());}}
+}
+function admitCopiedText(value){
+  const history=[];for(const item of store.data.items){if(history.length>=WALLET_GUARD_LIMITS.historyAddresses)break;if(item.kind==='text'&&!item.trashedAt)history.push(item.text);}
+  const verdict=walletGuard.inspect(value,{enabled:store.data.settings.walletGuard!==false,context:pasteTargets.external?String(pasteTargets.external.processId):null,history});
+  const language=languageCode(store.data.settings.language,app.getLocale());
+  const content=walletGuardMessage(verdict,key=>translated(language,key));
+  if(content){
+    notify(messageSummary(content));
+    if(!testMode&&Notification.isSupported()){const notice=new Notification({title:content.title,body:[content.body,...content.rows.map(row=>row.label+': '+row.value)].join('\n'),silent:!content.persistent,urgency:content.persistent?'critical':'normal',timeoutType:content.persistent?'never':'default'});notice.show();}
+  }
+  return verdict.save;
 }
 async function enrich(id,{refresh=false}={}) {
   if(!store.data.settings.fetchLinkMetadata||(!refresh&&pending.has(id)))return;
@@ -376,7 +391,7 @@ async function command(action,payload={}) {
     const patch={...payload.patch};
     if(Object.hasOwn(patch,'watchFolders'))throw new Error('Choose watched folders with the folder picker.');
     const previousShortcuts={...store.data.settings.shortcuts};
-    store.modify('setSettings',{patch});if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
+    store.modify('setSettings',{patch});if(Object.hasOwn(patch,'walletGuard'))walletGuard.settingChanged(store.data.settings.walletGuard);if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
     if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastFingerprint='';
     if(Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
