@@ -268,7 +268,8 @@ class Store {
     else if (kind === 'link') { url = plainURL(value) || fail('Invalid URL'); }
     else textValue = text(value);
     const identity=kind==='text'?textIdentity(textValue):null;
-    const matching = this.data.items.filter(i => i.kind === kind && !i.trashedAt &&
+    // A new note is always its own record, like macOS createNote; only captures deduplicate.
+    const matching = extra.fresh ? [] : this.data.items.filter(i => i.kind === kind && !i.trashedAt &&
       (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? i.url === url : !i.recording&&i.imageFile === imageFile));
     const prior = matching.sort((a, b) => b.updatedAt - a.updatedAt)[0];
     if(!prior&&this.data.items.length>=20000)fail('Library item limit reached');
