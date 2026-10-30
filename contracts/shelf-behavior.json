@@ -238,6 +238,12 @@
         "behavior": "A note made with New note is never taken over by a copy: copying text equal to a note's text makes a separate item, and every note with that text keeps its name, date added and place in the Library instead of moving to the shelf or to Trash. Text that was copied, not typed as a note, still deduplicates on the next copy.",
         "macos": "LibraryStore.createNote marks the record (createdAsNote) and LibraryStore.captureText skips marked records when it looks for a match; records stored before the marker open unchanged and keep deduplicating. TextDedupStoreTests.testCopyingANotesTextNeverMergesOrTrashesNotes and testRecordsStoredBeforeTheNoteMarkerOpenAndStillTakeTheCopy cover it.",
         "windows": "Store.createNote marks the item (createdAsNote) in its first write and Store.insert never matches a marked item; model.test.cjs 'a capture or import of a note's text never merges or removes notes, also after reopening' covers it."
+      },
+      {
+        "id": "watched-folder-failures",
+        "behavior": "An image added to a watched folder is imported once its writes settle. If it cannot be imported, a notice uses the shared \"File could not be read or safely saved\" catalog key in the selected language; only a source file removed before it is imported produces no notice and no item. A folder that cannot be watched is skipped without a notice.",
+        "macos": "ImageHistory.add sets the library notice to HistoryFiles.Failure.unsafeFile (\"File could not be read or safely saved\") when a watched image cannot be hung. ScreenshotWatcher logs and skips a folder it cannot open.",
+        "windows": "lib/folder-watchers.cjs reports the same catalog key through the main-process notice path, suppresses ENOENT only when the watched source no longer exists, and skips a folder it cannot watch; folder-watchers.test.cjs drives real file-system events with the actual Store."
       }
     ]
   },

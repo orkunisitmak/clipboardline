@@ -23,6 +23,7 @@ const {MediaJobs,MAXIMUM_VIDEO_BYTES}=require('./lib/media.cjs');
 const {copyFiles,cancelFileCopies}=require('./lib/native-files.cjs');
 const {exportCopies}=require('./lib/export-copies.cjs');
 const {decodeTextFile}=require('./lib/text-file.cjs');
+const {FolderWatchers}=require('./lib/folder-watchers.cjs');
 const native = require('./lib/native.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
@@ -46,7 +47,7 @@ if(development){const directory=path.join(app.getPath('appData'),'ClipBoardLine 
 app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
-let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
+let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,folderWatchers=null,normalBounds=null,normalMaximized=false,applyingBounds=false;
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
@@ -300,8 +301,8 @@ async function recognize(id,quiet=false) {
   finally{await worker.terminate();}
 }
 function configureWatchers() {
-  for(const watcher of watchers)watcher.close();watchers=[];
-  for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(err=>{console.warn('Watch folder import error:',err?.message||err);});}catch(err){console.warn('Watch folder item error:',err?.message||err);}},700));});watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});watchers.push(watcher);}catch(err){console.warn('Watch folder configure error:',err?.message||err);}}
+  folderWatchers??=new FolderWatchers({importFile,notify,closing:()=>closing,imported:record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}});
+  folderWatchers.configure(store.data.settings.watchFolders);
 }
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){
@@ -525,4 +526,4 @@ else app.whenReady().then(async()=>{
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
 app.on('second-instance',(_event,commandLine)=>{if(!shouldShowOnSecondInstance({commandLine}))return;startHidden=false;if(window&&windowReady)void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});
-app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
+app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();folderWatchers?.close();shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
