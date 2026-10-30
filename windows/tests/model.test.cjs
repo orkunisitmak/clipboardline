@@ -35,6 +35,18 @@ test('New note always creates a new retained record, even with the default or an
  for(const note of [a,b,c])assert.equal(s.data.items.find(i=>i.id===note.id),note);
  assert.equal(c.name,'Agenda');assert.ok([a,b,c].every(note=>Number.isFinite(note.retainedAt)));assert.equal(copied.retainedAt,null);
 }));
+test('a capture or import of a note\'s text never merges or removes notes, also after reopening',()=>fixture((s,time,dir)=>{
+ const copied=s.insert('text','Meeting agenda');
+ time(2000);const a=s.createNote(),b=s.createNote({title:'Second'}),c=s.createNote({text:'Meeting agenda',title:'Agenda'});
+ s.modify('details',{id:a.id,note:'Keep this note'});
+ const before=JSON.stringify([a,b,c].map(note=>s.data.items.find(i=>i.id===note.id)));
+ time(3000);const captured=s.insert('text','New note');const recopied=s.insert('text','Meeting agenda');
+ assert.ok(![a.id,b.id,c.id].includes(captured.id));assert.equal(recopied.id,copied.id);
+ assert.equal(JSON.stringify([a,b,c].map(note=>s.data.items.find(i=>i.id===note.id))),before);
+ assert.ok([a,b,c].every(note=>!s.data.items.find(i=>i.id===note.id).trashedAt));
+ const reopened=new Store(dir,{clock:()=>4000});assert.ok([a,b,c].every(note=>reopened.data.items.find(i=>i.id===note.id)?.createdAsNote===true));
+ reopened.insert('text','New note');assert.equal(reopened.data.items.filter(i=>i.createdAsNote&&!i.trashedAt).length,3);
+}));
 test('explicit Trash invalidates removal undo and deletion requires Trash',()=>fixture(s=>{const item=s.insert('text','text');assert.throws(()=>s.modify('delete',{ids:[item.id]}));s.modify('remove',{ids:[item.id]});s.modify('restore',{ids:[item.id]});assert.equal(s.undoStack.length,0);s.modify('trash',{ids:[item.id]});s.modify('delete',{ids:[item.id]});assert.equal(s.data.items.length,0);}));
 test('batch operations are atomic when one content kind is invalid',()=>fixture(s=>{const text=s.insert('text','before'),image=s.insert('image',png);assert.throws(()=>s.modify('editText',{ids:[text.id,image.id],text:'after'}));assert.equal(s.item(text.id).text,'before');}));
 test('safe JSON persistence reloads content and stores rollback copy',()=>fixture((s,_time,dir)=>{const item=s.insert('text','private locally saved');s.modify('pin',{ids:[item.id]});assert.equal(new Store(dir).item(item.id).pinned,true);assert.ok(fs.existsSync(path.join(dir,'library.json.backup')));if(process.platform!=='win32')assert.equal(fs.statSync(path.join(dir,'library.json')).mode&0o777,0o600);else{const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');const raw=require('node:child_process').execFileSync(powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'..','native','protect-directory.ps1'),'-Directory',dir,'-Check'],{windowsHide:true,encoding:'utf8',env:require('../lib/windows-environment.cjs').windowsEnvironment()});const acl=JSON.parse(raw);assert.equal(acl.protected,true);assert.ok(acl.principals.includes(acl.currentUser));assert.deepEqual([...new Set(acl.principals)].sort(),[acl.currentUser,'S-1-5-18','S-1-5-32-544'].sort());}}));
