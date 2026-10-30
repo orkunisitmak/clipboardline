@@ -285,7 +285,9 @@ class Store {
       item.note ||= matching.find(i => i.note)?.note || '';
       const dates=matching.map(i=>i.retainedAt).filter(Number.isFinite);if(dates.length)item.retainedAt=Math.min(...dates);
     }
-    this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
+    // Like macOS, merged duplicates stay recoverable in Trash instead of disappearing.
+    for (const other of matching) if (other !== item) { other.trashedAt = now; other.trashRevision = crypto.randomUUID(); other.hiddenFromShelf = true; other.updatedAt = now; }
+    this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id)];
     this.expire(false); this.persist(); return item;
   }
   textIdentity(item) {
