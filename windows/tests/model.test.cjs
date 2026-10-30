@@ -83,6 +83,14 @@ test('recopying a text that has live duplicates merges them and keeps the extras
  assert.ok(merged.tags.includes('kept'));assert.equal(trashed[0].hiddenFromShelf,true);assert.ok(trashed[0].trashRevision);
  s.modify('restore',{ids:[trashed[0].id]});assert.equal(s.data.items.filter(i=>!i.trashedAt).length,2);
 }));
+test('undo of an earlier removal cannot revive a duplicate that a recopy merged into Trash',()=>fixture((s,time)=>{
+ const saved=s.insert('text','first body');s.modify('pin',{ids:[saved.id]});s.modify('remove',{ids:[saved.id]});assert.equal(saved.hiddenFromShelf,true);
+ time(2000);const other=s.insert('text','second body');s.modify('editText',{id:other.id,text:'first body'});
+ time(3000);const merged=s.insert('text','first body');
+ assert.equal(s.data.items.filter(i=>!i.trashedAt).length,1);
+ s.modify('undo');
+ assert.deepEqual(s.data.items.filter(i=>!i.trashedAt).map(i=>i.id),[merged.id]);
+}));
 test('explicit Trash invalidates removal undo and deletion requires Trash',()=>fixture(s=>{const item=s.insert('text','text');assert.throws(()=>s.modify('delete',{ids:[item.id]}));s.modify('remove',{ids:[item.id]});s.modify('restore',{ids:[item.id]});assert.equal(s.undoStack.length,0);s.modify('trash',{ids:[item.id]});s.modify('delete',{ids:[item.id]});assert.equal(s.data.items.length,0);}));
 test('batch operations are atomic when one content kind is invalid',()=>fixture(s=>{const text=s.insert('text','before'),image=s.insert('image',png);assert.throws(()=>s.modify('editText',{ids:[text.id,image.id],text:'after'}));assert.equal(s.item(text.id).text,'before');}));
 test('a failed command rolls back in place so background jobs keep the item objects they hold',()=>fixture(s=>{
