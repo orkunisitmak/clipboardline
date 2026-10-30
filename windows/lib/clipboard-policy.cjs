@@ -34,14 +34,26 @@ async function readClipboardContent({clipboard,sequence,marker,plainURL,captureL
     const blob=await image.getType('image/png');if(blob.size>64*1024*1024)return null;
     bytes=Buffer.from(await blob.arrayBuffer());kind='image';value=bytes;
   }else{
-    // Use this item's payload, never a second live readText() of a replacement
-    // clipboard whose private formats have not been inspected.
-    const text=entries.find(item=>item.types.includes('text/plain'));if(!text)return null;
-    const blob=await text.getType('text/plain');if(blob.size>1024*1024)return null;
-    bytes=Buffer.from(await blob.arrayBuffer());if(bytes.length>1024*1024)return null;
-    try{value=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);}catch{return null;}
-    if(!value||! /\P{White_Space}/u.test(value))return null;
-    const url=captureLinks?plainURL(value):null;kind=url?'link':'text';if(url)value=url;
+    // Electron exposes a linked copy's destination separately from its display
+    // label. Prefer that native bookmark only when the user enabled link capture.
+    if(captureLinks){
+      const bookmark=entries.find(item=>item.types.includes('electron application/bookmark'));
+      if(bookmark)try{
+        const payload=await bookmark.getType('electron application/bookmark');
+        const url=plainURL(payload?.url);
+        if(url){bytes=Buffer.from(url,'utf8');kind='link';value=url;}
+      }catch{}
+    }
+    if(kind!=='link'){
+      // Use this item's payload, never a second live readText() of a replacement
+      // clipboard whose private formats have not been inspected.
+      const text=entries.find(item=>item.types.includes('text/plain'));if(!text)return null;
+      const blob=await text.getType('text/plain');if(blob.size>1024*1024)return null;
+      bytes=Buffer.from(await blob.arrayBuffer());if(bytes.length>1024*1024)return null;
+      try{value=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);}catch{return null;}
+      if(!value||! /\P{White_Space}/u.test(value))return null;
+      const url=captureLinks?plainURL(value):null;kind=url?'link':'text';if(url)value=url;
+    }
   }
   if(!await current())return changed;
   return{kind,value,sequence:before,owned:false,fingerprint:kind+':'+crypto.createHash('sha256').update(bytes).digest('hex')};
