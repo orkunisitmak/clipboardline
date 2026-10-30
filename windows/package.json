@@ -93,7 +93,7 @@
       "enableNodeCliInspectArguments": true,
       "enableEmbeddedAsarIntegrityValidation": true,
       "onlyLoadAppFromAsar": true,
-      "grantFileProtocolExtraPrivileges": false
+      "grantFileProtocolExtraPrivileges": true
     },
     "win": {
       "icon": "assets/clipboardline.ico",
