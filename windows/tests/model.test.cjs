@@ -73,6 +73,16 @@ test('a note keeps its marker on disk even when creation stops after the first w
  s.modify=()=>{throw new Error('stopped');};assert.throws(()=>s.createNote({title:'Agenda'}),/stopped/);
  const note=new Store(dir).data.items.find(i=>i.text==='New note');assert.equal(note?.createdAsNote,true);
 }));
+test('recopying a text that has live duplicates merges them and keeps the extras in Trash like macOS',()=>fixture((s,time)=>{
+ const first=s.insert('text','duplicate body');s.modify('remove',{ids:[first.id]});
+ time(2000);const second=s.insert('text','duplicate body');assert.notEqual(second.id,first.id);s.modify('undo');
+ assert.equal(s.data.items.filter(i=>!i.trashedAt&&i.text==='duplicate body').length,2);s.modify('tag',{id:first.id,tags:['kept']});
+ time(3000);const merged=s.insert('text','duplicate body');
+ const live=s.data.items.filter(i=>!i.trashedAt),trashed=s.data.items.filter(i=>i.trashedAt);
+ assert.deepEqual(live.map(i=>i.id),[merged.id]);assert.equal(trashed.length,1);assert.equal(s.data.items.length,2);
+ assert.ok(merged.tags.includes('kept'));assert.equal(trashed[0].hiddenFromShelf,true);assert.ok(trashed[0].trashRevision);
+ s.modify('restore',{ids:[trashed[0].id]});assert.equal(s.data.items.filter(i=>!i.trashedAt).length,2);
+}));
 test('explicit Trash invalidates removal undo and deletion requires Trash',()=>fixture(s=>{const item=s.insert('text','text');assert.throws(()=>s.modify('delete',{ids:[item.id]}));s.modify('remove',{ids:[item.id]});s.modify('restore',{ids:[item.id]});assert.equal(s.undoStack.length,0);s.modify('trash',{ids:[item.id]});s.modify('delete',{ids:[item.id]});assert.equal(s.data.items.length,0);}));
 test('batch operations are atomic when one content kind is invalid',()=>fixture(s=>{const text=s.insert('text','before'),image=s.insert('image',png);assert.throws(()=>s.modify('editText',{ids:[text.id,image.id],text:'after'}));assert.equal(s.item(text.id).text,'before');}));
 test('a failed command rolls back in place so background jobs keep the item objects they hold',()=>fixture(s=>{
