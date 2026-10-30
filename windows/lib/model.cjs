@@ -289,6 +289,13 @@ class Store {
     this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
     this.expire(false); this.persist(); return item;
   }
+  /** A new, retained note record, like macOS createNote. It never reuses a matching capture. */
+  createNote({text: value = '', title = ''} = {}) {
+    const item = this.insert('text', value || 'New note', {fresh: true});
+    if (title) this.modify('details', {id: item.id, name: title});
+    this.modify('retain', {ids: [item.id]});
+    return item;
+  }
   textIdentity(item) {
     if(typeof item.text!=='string')return null;
     let cached=this.textIdentities.get(item);
