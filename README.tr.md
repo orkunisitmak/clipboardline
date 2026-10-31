@@ -4,7 +4,7 @@
 
 Görseller, metinler ve linkler elinin altında. Son kopyalarını üç askıda tut, önemli olanları yerel kütüphaneye kaydet ve tümünde klavyeyle hızla gezin.
 
-[English README](README.md) · [Mac için indir](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Windows x64 için indir](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Kaynak kodu incele](https://github.com/orkunisitmak/clipboardline) · [Ekran görüntüleri ve demolar](https://orkunisitmak.github.io/clipboardline/tr/#demo)
+[English README](README.md) · [Mac için indir](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Windows x64 için indir](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Linux](docs/linux.md) · [Kaynak kodu incele](https://github.com/orkunisitmak/clipboardline) · [Ekran görüntüleri ve demolar](https://orkunisitmak.github.io/clipboardline/tr/#demo)
 
 > macOS sürümü Swift, AppKit, SwiftUI, Vision ve Core ML kullanır; Apple silicon ve Intel’de macOS 14 veya üstünü destekler. Ayrı Electron sürümü Windows x64 için kullanılabilir; farklar ve gerçek Windows doğrulama kanıtı aşağıdaki platform tablosundadır.
 
@@ -342,3 +342,19 @@ npm run test:electron
 ```
 
 [Windows bileşen lisansları](windows/THIRD_PARTY_NOTICES.md)
+
+### Linux
+
+Windows Electron uygulaması Linux'ta da çalışır (KDE Plasma Wayland üzerinde
+CachyOS ile test edildi; X11, Hyprland, Sway ve GNOME belgelenen sınırlarla
+desteklenir). Pano, pencere hedefleme, yapıştırma ve kayıt köprüsü
+`wl-clipboard`/`xclip`, KWin betikleri, `hyprctl`/`swaymsg`/`xdotool`,
+`ydotool`/`wtype` ve FFmpeg kullanır.
+
+```sh
+(cd packaging/arch && makepkg -si)        # Arch, CachyOS, EndeavourOS, Manjaro
+(cd windows && npm ci && npm run dist:linux)   # AppImage, deb, rpm, pacman
+```
+
+Yardımcı paketler, portal olmadan kısayollar (`clipboardline --toggle`) ve
+Linux istisnaları için [ClipBoardLine on Linux](docs/linux.md) belgesine bakın.

@@ -1,0 +1,41 @@
+# Builds ClipBoardLine for Arch Linux, CachyOS, EndeavourOS and Manjaro from
+# this source tree. Run `makepkg -si` in this directory.
+pkgname=clipboardline
+pkgver=1.7.8
+pkgrel=1
+pkgdesc='Keyboard-first local clipboard shelves and saved library'
+arch=('x86_64')
+url='https://github.com/orkunisitmak/clipboardline'
+license=('MIT')
+depends=('gtk3' 'nss' 'libxss' 'libxtst' 'xdg-utils' 'at-spi2-core' 'util-linux-libs' 'libsecret' 'wl-clipboard')
+makedepends=('nodejs' 'npm' 'git')
+optdepends=('xclip: clipboard access in X11 sessions'
+            'xdotool: window targeting and automatic paste in X11 sessions'
+            'ydotool: automatic paste in KDE Plasma and GNOME Wayland sessions'
+            'wtype: automatic paste in Hyprland, Sway and other wlroots sessions'
+            'ffmpeg: screen recording trim, posters and audio checks')
+provides=('clipboardline')
+conflicts=('clipboardline-desktop')
+options=('!strip' '!debug')
+_root="$(realpath "$startdir/../..")"
+
+build() {
+  cd "$_root/windows"
+  npm ci --no-audit --no-fund
+  npx electron-builder --linux dir --x64 --publish never
+}
+
+check() {
+  cd "$_root/windows"
+  LC_ALL=C.UTF-8 node --test --test-concurrency=1 tests/linux-desktop.test.cjs
+}
+
+package() {
+  cd "$_root/windows"
+  install -d "$pkgdir/opt/ClipBoardLine" "$pkgdir/usr/bin"
+  cp -a dist/linux-unpacked/. "$pkgdir/opt/ClipBoardLine/"
+  ln -s /opt/ClipBoardLine/clipboardline "$pkgdir/usr/bin/clipboardline"
+  install -Dm644 ../packaging/linux/clipboardline.desktop "$pkgdir/usr/share/applications/clipboardline.desktop"
+  install -Dm644 assets/clipboardline.png "$pkgdir/usr/share/icons/hicolor/1024x1024/apps/clipboardline.png"
+  install -Dm644 ../LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

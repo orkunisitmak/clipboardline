@@ -24,6 +24,7 @@ const {copyFiles,cancelFileCopies}=require('./lib/native-files.cjs');
 const {exportCopies}=require('./lib/export-copies.cjs');
 const {decodeTextFile}=require('./lib/text-file.cjs');
 const native = require('./lib/native.cjs');
+const {setLaunchAtLogin}=require('./lib/linux-autostart.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
 const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
@@ -42,6 +43,9 @@ if(testMode && testFolder) app.setPath('userData',path.resolve(testFolder));
 const development=!app.isPackaged&&!testMode;
 if(development){const directory=path.join(app.getPath('appData'),'ClipBoardLine Dev');fs.mkdirSync(directory,{recursive:true,mode:0o700});app.setPath('userData',directory);}
 app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
+const linux=process.platform==='linux'?native.linux:null;
+// Wayland compositors deliver global shortcuts only through the desktop portal.
+if(linux)app.commandLine.appendSwitch('enable-features','GlobalShortcutsPortal');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
 let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
@@ -144,7 +148,9 @@ async function show(next='shelves',event=null) {
     const animate=next==='shelves'&&(!window.isVisible()||wasClosing);
     if(animate)await shelfMotion.request('prepare',{hidden:!window.isVisible()});else await shelfMotion.request('reset');
     if(generation!==visibilityGeneration)return;
-    window.show();window.focus();windowBounds.shown(window);broadcast({surfaceOnly:true});
+    window.show();window.focus();
+    if(linux){await linux.desktop.present(next==='shelves').catch(()=>{});if(generation!==visibilityGeneration)return;}
+    windowBounds.shown(window);broadcast({surfaceOnly:true});
     // Commands can await the settled pixels, but the window and keyboard are
     // available immediately. A concurrent toggle can cancel this animation.
     if(animate)await shelfMotion.request('open');
@@ -172,7 +178,7 @@ async function hide(restore=true) {
   try{await operation;}finally{if(hidePromise===operation)hidePromise=null;}
 }
 async function clipboardContent() {
-  return readClipboardContent({clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL,captureLinks:store?.data.settings.captureLinks!==false});
+  return readClipboardContent({clipboard:linux?.clipboard||clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL,captureLinks:store?.data.settings.captureLinks!==false});
 }
 async function readClipboard() {
   if(capturing){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;capturing=true;
@@ -209,6 +215,13 @@ async function writeClipboard(selected) {
   if(!selected.length)throw new Error('Select an item first');
   const images=selected.filter(item=>item.kind==='image');
   const values=selected.filter(item=>item.kind!=='image').map(item=>item.kind==='link'?item.url:item.text);
+  if(linux){
+    // Linux selection tools offer one format per owner: files, an image or text.
+    if(images.length>1||images.some(item=>item.recording))await linux.clipboard.writeFiles(images.map(item=>store.mediaPath(item.id)));
+    else if(images.length){const image=nativeImage.createFromPath(store.mediaPath(images[0].id));if(image.isEmpty())throw new Error('Image unavailable');await linux.clipboard.writePNG(image.toPNG());}
+    else await linux.clipboard.writeText(values.join('\n\n'));
+    ownFingerprint=(await clipboardContent())?.fingerprint||'';store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
+  }
   if(images.some(item=>item.recording)){
     await copyFiles({files:images.map(item=>store.mediaPath(item.id)),marker:copyMarker.toString('base64'),text:values.join('\n\n')});
     ownFingerprint=(await clipboardContent())?.fingerprint||'';store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
@@ -390,11 +403,11 @@ async function command(action,payload={}) {
     const previousShortcuts={...store.data.settings.shortcuts};
     store.modify('setSettings',{patch});if(wasIndexingImages&&!store.data.settings.indexImages)ocrQueue.discardPending();if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
     if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastGeneration.sequence=0;
-    if(Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
+    if(Object.hasOwn(patch,'launchAtLogin')&&!testMode){if(linux)setLaunchAtLogin(patch.launchAtLogin,{packaged:app.isPackaged});else app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});}
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
   }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
   else if(action==='unwatchFolder'){const index=payload.index;if(!Number.isInteger(index)||index<0||index>=store.data.settings.watchFolders.length)throw new Error('Invalid watched folder');store.modify('setSettings',{patch:{watchFolders:store.data.settings.watchFolders.filter((_v,i)=>i!==index)}});configureWatchers();}
-  else if(action==='checkUpdates'||action==='refreshUpdates'){if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
+  else if(action==='checkUpdates'||action==='refreshUpdates'){if(linux)updates.set({status:'development',message:'Linux builds update through your package manager or a new AppImage release.'});else if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
   else if(action==='installUpdate'){
     if(development)throw new Error('Development builds cannot install official updates.');
     if(process.platform!=='win32')throw new Error('Windows installer can run only on Windows.');
@@ -415,7 +428,9 @@ function appIcon(){
 if(!app.requestSingleInstanceLock())app.quit();
 else app.whenReady().then(async()=>{
   store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
-  updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!development&&!testMode&&store.data.settings.autoCheckUpdates});
+  // The signed Windows channel never installs on Linux; packages update the app.
+  if(linux)Object.assign(updates.state,{status:'development',message:'Linux builds update through your package manager or a new AppImage release.'});
+  updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!linux&&!development&&!testMode&&store.data.settings.autoCheckUpdates});
   const searchPaths=modelPaths({packaged:app.isPackaged,resourcesPath:process.resourcesPath,sourceDirectory:__dirname});
   let ortModule=null,runtimeDirectory=null;try{ortModule=require.resolve('onnxruntime-web/wasm').replace(/app[.]asar([\\/])/,'app.asar.unpacked$1');runtimeDirectory=path.dirname(ortModule);}catch{}
   imageSearch=new ImageSearch({...searchPaths,ortModule,runtimeDirectory,cacheDirectory:path.join(store.directory,'image-search'),items:()=>store.data.items,readImage:readSemanticImage,changed:()=>broadcast()});refreshImageSearch();
@@ -456,6 +471,7 @@ else app.whenReady().then(async()=>{
   window.webContents.on('render-process-gone',()=>finishShortcutRecording());
   window.webContents.on('did-start-navigation',()=>finishShortcutRecording());
   await window.loadURL(entry);
+  if(linux&&!linux.clipboard.available)notify('Clipboard capture needs wl-clipboard (Wayland) or xclip (X11). Install one and restart ClipBoardLine.');
   monitor=native.monitor(()=>{if(!testMode)void readClipboard();},error=>{monitor?.kill();monitor=null;pasteTargets.clear();if(!closing)notify(error.message+' Falling back to bounded clipboard polling.');},focus=>pasteTargets.observe(focus));
   if(!testMode||testTray){
     if(process.platform==='win32')app.setAppUserModelId('com.clipboardline.desktop.windows');
@@ -471,10 +487,19 @@ else app.whenReady().then(async()=>{
     updateLaunchTimer=setTimeout(()=>void updateScheduler.tick(),10000);updateLaunchTimer.unref();
     powerMonitor.on('resume',()=>void updateScheduler.tick());
   }
-  await show('shelves');
+  await launch(process.argv,{running:false});
   // Test hooks are main-process only and require an explicit isolated data path.
   if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
-app.on('second-instance',()=>{if(window)void show('shelves');});
+// Wayland desktops without the shortcut portal can bind a custom shortcut to
+// `clipboardline --toggle`, `--search` or `--library`. A first launch honors the
+// same action; only `--hidden` without an action starts in the background.
+function launch(argv=[],{running=true}={}){
+  if(argv.includes('--search'))return show('shelves',{search:true});
+  if(argv.includes('--library'))return show('library');
+  if(argv.includes('--toggle')&&running&&desiredVisible)return hide();
+  if(running||argv.includes('--toggle')||!argv.includes('--hidden'))return show('shelves');
+}
+app.on('second-instance',(_event,argv=[])=>{if(window)void launch(argv);});
 app.on('activate',()=>{if(window)void show('shelves');});
 app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});

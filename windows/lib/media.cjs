@@ -61,13 +61,13 @@ class MediaJobs {
  }
  run(mode,source,options={}){return this.scheduler.schedule(mode,signal=>this.execute(mode,source,{...options,signal}),{signal:options.signal,onDiscard:result=>this.release(result)});}
  async execute(mode,source,{startMs,endMs,signal,verifyAudio=false}={}){
-  if(process.platform!=='win32')throw new Error('Native recording processing requires Windows.');
+  if(!['win32','linux'].includes(process.platform))throw new Error('Native recording processing requires Windows or Linux.');
   if(signal?.aborted)throw aborted();const before=validVideo(source);safeDirectory(this.directory);
   if(mode==='Trim'&&(!Number.isFinite(startMs)||!Number.isFinite(endMs)||startMs<0||endMs-startMs<50))throw new Error('Choose a nonempty trim interval.');
   const directory=fs.mkdtempSync(path.join(this.directory,'job-'));fs.writeFileSync(path.join(directory,MARKER),JSON.stringify({owner:OWNER}),{flag:'wx',mode:0o600});
   let keep=false;
   try{
-   const result=await new Promise((resolve,reject)=>{
+   const result=process.platform==='linux'?await this.linux(mode,source,directory,{startMs,endMs,signal,verifyAudio}):await new Promise((resolve,reject)=>{
     const executable=path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
     const child=spawn(executable,['-NoLogo','-NoProfile','-MTA','-NonInteractive','-ExecutionPolicy','Bypass','-File',this.script,'-Mode',mode],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:windowsEnvironment()});
     let stdout='',stderr='',failure=null,finished=false;this.jobs.set(directory,child);
@@ -86,6 +86,11 @@ class MediaJobs {
    if(mode==='Trim'){const file=path.join(directory,'trimmed.mp4');if(result.trimmedFile!=='trimmed.mp4')throw new Error('Invalid recording output.');validVideo(file);keep=true;return{...details,file,posterFile:poster,jobDirectory:directory,...(audioFile?{audioFile}:{})};}
    keep=true;return{...details,file:source,posterFile:poster,jobDirectory:directory,...(audioFile?{audioFile}:{})};
   }finally{if(!keep)this.remove(directory);}
+ }
+ linux(mode,source,directory,{startMs,endMs,signal,verifyAudio}){
+  const {processRecording}=require('./linux-media.cjs'),controller=new AbortController(),cancel=()=>controller.abort();
+  signal?.addEventListener('abort',cancel,{once:true});this.jobs.set(directory,{kill:cancel});
+  return processRecording(mode,{source,outputDirectory:directory,startMs,endMs,verifyAudio:verifyAudio===true},{signal:controller.signal,timeout:this.timeout}).finally(()=>{signal?.removeEventListener('abort',cancel);this.jobs.delete(directory);});
  }
  probe(file,options){return this.run('Inspect',file,options);}
  inspect(file,options){return this.probe(file,options);}

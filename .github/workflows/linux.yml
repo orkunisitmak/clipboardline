@@ -1,0 +1,56 @@
+name: Linux application
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['windows/**', 'packaging/**', 'contracts/**', '.github/workflows/linux.yml']
+  pull_request:
+    paths: ['windows/**', 'packaging/**', 'contracts/**', '.github/workflows/linux.yml']
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: windows
+    env:
+      LC_ALL: C.UTF-8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+      - name: Install display, clipboard and media tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xclip xdotool ffmpeg libarchive-tools rpm
+      - name: Install pinned dependencies
+        run: npm ci --no-fund
+      - name: Shared version check
+        run: python3 ../scripts/check-release-version.py --require-windows
+      - name: Model, renderer and Linux bridge tests
+        run: |
+          # Shipped dependencies stay at moderate. Packaging tools stay at high:
+          # electron-builder pins minimatch below the GHSA-g3hv-75wg-m249 fix.
+          npm audit --omit=dev --audit-level=moderate
+          npm audit --audit-level=high
+          npm test
+      - name: Real Linux Electron clipboard acceptance (X11)
+        run: xvfb-run -a npm run test:linux
+      - name: Build AppImage, deb, rpm and pacman packages
+        run: npm run dist:linux
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: clipboardline-linux-${{ github.sha }}
+          path: |
+            windows/dist/*.AppImage
+            windows/dist/*.deb
+            windows/dist/*.rpm
+            windows/dist/*.pacman
+          if-no-files-found: error
+          retention-days: 14

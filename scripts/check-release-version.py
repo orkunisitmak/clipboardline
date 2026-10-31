@@ -4,6 +4,7 @@
 release-version.json is the shared product version. Platform build counters
 remain independent; they are monotonic updater identifiers, not product names.
 The private Mac checkout can omit windows/, but the public CI requires it.
+The Arch PKGBUILD, when present, carries the same version.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 STABLE_VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
+PKGVER = re.compile(r"^pkgver=(\S*)$", re.MULTILINE)
 
 
 class ReleaseVersionError(ValueError):
@@ -64,6 +66,13 @@ def check_release_version(root: Path = ROOT, *, require_windows: bool = False,
         top_package = packages.get("") if isinstance(packages, dict) else None
         require(top_package.get("version") if isinstance(top_package, dict) else None,
                 'windows/package-lock.json packages[""] version')
+    pkgbuild = root / "packaging/arch/PKGBUILD"
+    if pkgbuild.exists():
+        try:
+            versions = PKGVER.findall(pkgbuild.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError) as error:
+            raise ReleaseVersionError(f"Cannot read packaging/arch/PKGBUILD: {error}") from error
+        require(versions[0] if len(versions) == 1 else None, "packaging/arch/PKGBUILD pkgver")
     return expected
 
 

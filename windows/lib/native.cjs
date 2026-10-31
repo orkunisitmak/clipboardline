@@ -47,4 +47,13 @@ function monitor(changed, failed, focused = () => {}, ready = () => {}) {
   });
   child.on('error',error=>{stopped();failed(error);}); child.on('exit',code => { stopped();if(code) failed(new Error('Native clipboard monitor stopped.')); }); return child;
 }
-module.exports = {clipboardSequence:async({standalone=false}={})=>{if(!standalone&&sequenceQueries)return sequenceQueries.read();if(process.platform!=='win32')return null;const value=await run('ClipboardSequence');return value.sequence;},cancelPaste:()=>{for(const child of pasteChildren)child.kill();pasteChildren.clear();},capture:()=>run('Capture'),captureDiagnostics:async()=>{const trace=lastCaptureTrace,details=await run('CaptureDiagnostics');return trace?{...details,captureTrace:trace}:details;},selfTestFocusPolicy:()=>run('FocusPolicySelfTest'), restore:target=>run('Restore',target),preparePaste:target=>run('PreparePaste',target),validatePaste:target=>run('ValidatePaste',{...target,prepared:true}),paste:target=>run('Paste',target),copyImages:payload=>run('CopyImages',payload),monitor};
+function linuxBridge(){
+  const {LinuxDesktop}=require('./linux-desktop.cjs'),{LinuxClipboard,ClipboardWatcher}=require('./linux-clipboard.cjs');
+  const desktop=new LinuxDesktop(),clipboard=new LinuxClipboard();let watcher=null;
+  return {linux:{desktop,clipboard},clipboardSequence:async()=>watcher?watcher.read():null,cancelPaste:()=>desktop.cancel(),capture:()=>desktop.capture(),captureDiagnostics:async()=>desktop.diagnostics(),selfTestFocusPolicy:async()=>desktop.diagnostics(),
+    restore:target=>desktop.restore(target),preparePaste:target=>desktop.preparePaste(target),validatePaste:target=>desktop.validatePaste(target),paste:target=>desktop.paste(target),
+    copyImages:payload=>clipboard.writeFiles(payload?.files),
+    monitor(changed){if(!clipboard.available)return null;watcher=new ClipboardWatcher(clipboard,{changed}).start();const active=watcher;return{kill:()=>{active.kill();if(watcher===active)watcher=null;}};}};
+}
+if(process.platform==='linux')module.exports=linuxBridge();
+else module.exports = {clipboardSequence:async({standalone=false}={})=>{if(!standalone&&sequenceQueries)return sequenceQueries.read();if(process.platform!=='win32')return null;const value=await run('ClipboardSequence');return value.sequence;},cancelPaste:()=>{for(const child of pasteChildren)child.kill();pasteChildren.clear();},capture:()=>run('Capture'),captureDiagnostics:async()=>{const trace=lastCaptureTrace,details=await run('CaptureDiagnostics');return trace?{...details,captureTrace:trace}:details;},selfTestFocusPolicy:()=>run('FocusPolicySelfTest'), restore:target=>run('Restore',target),preparePaste:target=>run('PreparePaste',target),validatePaste:target=>run('ValidatePaste',{...target,prepared:true}),paste:target=>run('Paste',target),copyImages:payload=>run('CopyImages',payload),monitor};

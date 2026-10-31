@@ -4,7 +4,7 @@
 
 Images, text and links, close at hand. Keep recent copies on three shelves, save what matters in a local Library, and move through it all with your keyboard.
 
-[Türkçe README](README.tr.md) · [Download for Mac](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Download for Windows x64](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Explore source](https://github.com/orkunisitmak/clipboardline) · [Screenshots and demos](https://orkunisitmak.github.io/clipboardline/#demo)
+[Türkçe README](README.tr.md) · [Download for Mac](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Download for Windows x64](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Linux](docs/linux.md) · [Explore source](https://github.com/orkunisitmak/clipboardline) · [Screenshots and demos](https://orkunisitmak.github.io/clipboardline/#demo)
 
 > The macOS edition uses Swift, AppKit, SwiftUI, Vision and Core ML on macOS 14 or later, for Apple silicon and Intel. The separate Electron edition is available for Windows x64; see the platform matrix for differences and native validation evidence.
 
@@ -342,3 +342,19 @@ npm run test:electron
 ```
 
 [Windows component notices](windows/THIRD_PARTY_NOTICES.md)
+
+### Linux
+
+The Windows Electron application also runs on Linux (tested on CachyOS with KDE
+Plasma Wayland; X11, Hyprland, Sway and GNOME are supported with documented
+limits). The clipboard, window targeting, paste and recording bridge uses
+`wl-clipboard`/`xclip`, KWin scripts, `hyprctl`/`swaymsg`/`xdotool`,
+`ydotool`/`wtype` and FFmpeg.
+
+```sh
+(cd packaging/arch && makepkg -si)        # Arch, CachyOS, EndeavourOS, Manjaro
+(cd windows && npm ci && npm run dist:linux)   # AppImage, deb, rpm, pacman
+```
+
+See [ClipBoardLine on Linux](docs/linux.md) for helpers, shortcuts without the
+portal (`clipboardline --toggle`) and the Linux exceptions.
