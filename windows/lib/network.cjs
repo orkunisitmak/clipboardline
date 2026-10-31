@@ -86,7 +86,8 @@ function decodeHTML(bytes, type = '') {
   if (label) return new TextDecoder(label).decode(bytes);
   try { return new TextDecoder('utf-8', {fatal: true}).decode(bytes); } catch { return new TextDecoder('windows-1252').decode(bytes); }
 }
-const collapse = value => value.replace(/\s+/g, ' ').trim();
+// Bidirectional marks, embeddings, overrides and isolates can reorder a title to spoof another one; joiners stay.
+const collapse = value => value.replace(/[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '').replace(/\s+/g, ' ').trim();
 function meta(html, name) {
   for (const match of html.matchAll(/<meta\b([^>]{0,4096})>/gi)) {
     const attributes = {};

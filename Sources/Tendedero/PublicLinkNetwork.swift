@@ -415,7 +415,12 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     }
     private static func clean(_ value: String?, limit: Int) -> String? {
         guard let value else { return nil }
-        let clean = value.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) || CharacterSet.whitespacesAndNewlines.contains($0) }
+        // Drop Cc and the bidirectional marks, overrides, embeddings and isolates that can reorder a title to spoof another one.
+        // CharacterSet.controlCharacters also holds Cf, which includes the joiners emoji and Persian text need.
+        let clean = value.unicodeScalars.filter {
+            let bidi = [0x061C, 0x200E, 0x200F].contains($0.value) || (0x202A...0x202E).contains($0.value) || (0x2066...0x2069).contains($0.value)
+            return ($0.properties.generalCategory != .control && !bidi) || CharacterSet.whitespacesAndNewlines.contains($0)
+        }
         let result = String(String.UnicodeScalarView(clean)).split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return result.isEmpty ? nil : String(result.prefix(limit))
     }
@@ -423,13 +428,13 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
 
     private static func entities(_ value: String) -> String {
         let named = namedEntities, names = named.keys.joined(separator: "|")
-        guard let regex = try? NSRegularExpression(pattern: #"&(#x[0-9A-Fa-f]{1,6}|#[0-9]{1,7}|\#(names));"#) else { return value }
+        guard let regex = try? NSRegularExpression(pattern: #"&(#[xX][0-9A-Fa-f]{1,6}|#[0-9]{1,7}|\#(names));"#) else { return value }
         var result = value
         for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
             guard let whole = Range(match.range, in: result), let nameRange = Range(match.range(at: 1), in: value) else { continue }
             let name = String(value[nameRange]); var replacement = named[name]
-            if name.hasPrefix("#x"), let number = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
-            else if name.hasPrefix("#"), let number = UInt32(name.dropFirst()), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
+            if name.hasPrefix("#x") || name.hasPrefix("#X"), let number = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(number), scalar.properties.generalCategory != .control { replacement = String(scalar) }
+            else if name.hasPrefix("#"), let number = UInt32(name.dropFirst()), let scalar = UnicodeScalar(number), scalar.properties.generalCategory != .control { replacement = String(scalar) }
             if let replacement { result.replaceSubrange(whole, with: replacement) }
         }
         return result

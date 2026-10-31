@@ -109,6 +109,27 @@ import XCTest
         XCTAssertEqual(try page("<title>\(title)</title>", .utf8).title, title)
     }
 
+    func testHTMLTitleKeepsJoinersButDropsControlsAndBidirectionalOverrides() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let family = "👨\u{200D}👩\u{200D}👧", persian = "می\u{200C}خواهم"
+        func parsed(_ html: String) throws -> PublicLinkHTMLMetadata { try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url) }
+        func title(_ html: String) throws -> String? { try parsed(html).title }
+        // Joiners build emoji sequences and Persian words; numeric references to them decode, as on Windows.
+        XCTAssertEqual(try title("<title>\(family) \(persian)</title>"), "\(family) \(persian)")
+        XCTAssertEqual(try title("<meta property='og:title' content='\(family)'>"), family)
+        XCTAssertEqual(try title("<title>&#x1F468;&#x200D;&#x1F4BB; dev&#8204;x</title>"), "👨\u{200D}💻 dev\u{200C}x")
+        // Control characters are still removed (or left literal as a reference).
+        XCTAssertEqual(try title("<title>a\u{7}b\u{85}c\n d &#0;&#x85;</title>"), "ab c d &#0;&#x85;")
+        // Bidirectional embeddings, overrides and isolates can reorder a title to spoof another one: dropped raw or as references.
+        XCTAssertEqual(try title("<title>invoice\u{202E}fdp.exe \u{2066}x\u{2069}</title>"), "invoicefdp.exe x")
+        XCTAssertEqual(try title("<title>a&#x202E;b&#8294;c&#x2069;</title>"), "abc")
+        // The implicit LRM, RLM and ALM marks reorder neighbouring text the same way; uppercase hex references decode like lowercase.
+        XCTAssertEqual(try title("<title>a\u{200E}b\u{200F}c\u{061C}d&#x200E;e&#8207;f&#x61C;g</title>"), "abcdefg")
+        XCTAssertEqual(try title("<title>x&#X200D;y&#X200C;z</title>"), "x\u{200D}y\u{200C}z")
+        XCTAssertEqual(try title("<meta property='og:title' content='\u{202A}\u{202B}\u{202C}\u{202D}x\u{2067}\u{2068}'>"), "x")
+        XCTAssertEqual(try parsed("<meta name=author content='Wri\u{202E}ter'>").author, "Writer")
+    }
+
     func testHTMLExtractsBoundedTextAndOneSafeThumbnailWithoutExecutingOrFollowingOtherResources() throws {
         let url = URL(string: "https://public.example.org/page")!
         let html = #"<html><!--<meta property='og:title' content='comment'>--><script><meta property='og:title' content='script'>fetch('http://localhost')</script><title>fallback</title><meta content='A &amp; B &#x1F30D;' property='og:title'><meta name=author content='Writer'><meta property='og:image' content='/cover.png'><img src='http://localhost/tracking'><iframe src='http://localhost'></iframe></html>"#

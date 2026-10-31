@@ -66,6 +66,12 @@
         "windows": "libraryTitle() in renderer.js shows folderPath() for the folder scope; library-ui.test.cjs checks the toolbar title of a subfolder."
       },
       {
+        "id": "link-title-format-characters",
+        "behavior": "A fetched page title and Open Graph text keep the zero-width joiner and non-joiner, so emoji sequences and Persian words are not split, and numeric references to them are decoded. Numeric references to control code points (C0, DEL, C1) stay literal. Bidirectional marks, embeddings, overrides and isolates (U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069) are removed, raw or as numeric references, so a title cannot be reordered to spoof another one.",
+        "macos": "PublicLinkHTMLMetadata.clean drops general category Cc and those bidirectional controls and marks, and entities only refuses Cc; PublicLinkNetworkTests.testHTMLTitleKeepsJoinersButDropsControlsAndBidirectionalOverrides covers it.",
+        "windows": "entities() in lib/network.cjs refuses the C0 and C1 controls and collapse() removes the bidirectional controls and marks; security.test.cjs covers joiners and bidirectional controls."
+      },
+      {
         "id": "trash-restore-selection",
         "behavior": "Restoring items from Library Trash moves focus and selection to the first item that remains in Trash, and clears the details panel when none remain, so the panel never shows Restore for an item that already left Trash.",
         "macos": "LibraryModel.restore() queues a keyboard selection that finishKeyboardSelection resolves to the first remaining item after the reload; LibraryInteractionTests.testRestoringFromTrashSelectsTheFirstRemainingItemLikeWindows covers it.",

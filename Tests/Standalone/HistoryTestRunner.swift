@@ -556,6 +556,7 @@ enum HistoryTestRunner {
             ("testHTTPParserStreamsFixedChunkedAndConnectionCloseBodies", publicLinks.testHTTPParserStreamsFixedChunkedAndConnectionCloseBodies),
             ("testHTTPParserRejectsAmbiguousTruncatedCompressedAndOversizedResponses", publicLinks.testHTTPParserRejectsAmbiguousTruncatedCompressedAndOversizedResponses),
             ("testHTMLHonorsDeclaredMetaCharsetAndFallsBackToWindows1252", publicLinks.testHTMLHonorsDeclaredMetaCharsetAndFallsBackToWindows1252),
+            ("testHTMLTitleKeepsJoinersButDropsControlsAndBidirectionalOverrides", publicLinks.testHTMLTitleKeepsJoinersButDropsControlsAndBidirectionalOverrides),
             ("testHTMLExtractsBoundedTextAndOneSafeThumbnailWithoutExecutingOrFollowingOtherResources", publicLinks.testHTMLExtractsBoundedTextAndOneSafeThumbnailWithoutExecutingOrFollowingOtherResources),
             ("testMetadataConcurrencyBackoffPrivateLinksAndUserTitle", libraryInteraction.testMetadataConcurrencyBackoffPrivateLinksAndUserTitle),
             ("testMetadataCancellationDoesNotWriteLateResultOrRevealShelf", libraryInteraction.testMetadataCancellationDoesNotWriteLateResultOrRevealShelf),
