@@ -29,11 +29,17 @@ class PublicationGuardTests(unittest.TestCase):
         self.assertNotIn(value, json.dumps(report))
         self.assertNotIn(personal, json.dumps(report))
 
-    def test_private_artifact_and_symlink_are_rejected(self):
+    def test_private_artifact_is_rejected(self):
         (self.root / 'credential.p12').write_bytes(b'not a real key')
+        self.assertEqual({f['rule'] for f in scanner.audit(self.root)['findings']}, {'private-artifact'})
+
+    def test_source_symlink_is_rejected(self):
         (self.root / 'source.txt').write_text('ordinary source')
-        (self.root / 'alias.txt').symlink_to(self.root / 'source.txt')
-        self.assertEqual({f['rule'] for f in scanner.audit(self.root)['findings']}, {'private-artifact', 'source-symlink'})
+        try: (self.root / 'alias.txt').symlink_to(self.root / 'source.txt')
+        except OSError as error:
+            if getattr(error, 'winerror', None) != 1314: raise
+            self.skipTest('Creating symlinks on Windows requires Developer Mode or administrator rights')
+        self.assertEqual({f['rule'] for f in scanner.audit(self.root)['findings']}, {'source-symlink'})
 
     def test_untracked_source_is_scanned_in_fresh_repository(self):
         subprocess.run(['git', 'init', '--quiet', str(self.root)], check=True)

@@ -54,10 +54,17 @@ class ModelPreparationTests(unittest.TestCase):
                 self.config=copy.deepcopy(original);self.config['files'][name]=replacement
                 destination=self.root/('size' if replacement['bytes']!=original['files'][name]['bytes'] else 'digest');destination.mkdir()
                 with self.assertRaisesRegex(RuntimeError,'entry size/type|entry digest'):prepare.extract(self.archive,destination,self.config)
-    def test_extra_files_and_local_symlinks_cannot_be_accepted_as_prepared_models(self):
+    def test_extra_files_cannot_be_accepted_as_prepared_models(self):
         prepare.extract(self.archive,self.output,self.config);extra=self.output/'unexpected';extra.write_bytes(b'not a model')
         with self.assertRaisesRegex(RuntimeError,'unexpected files'):prepare.verified(self.output,self.config)
-        extra.unlink();file=self.output/'clip-vocab.json';file.unlink();file.symlink_to(self.archive)
+
+    def test_local_symlinks_cannot_be_accepted_as_prepared_models(self):
+        prepare.extract(self.archive,self.output,self.config)
+        file=self.output/'clip-vocab.json';file.unlink()
+        try: file.symlink_to(self.archive)
+        except OSError as error:
+            if getattr(error, 'winerror', None) != 1314: raise
+            self.skipTest('Creating symlinks on Windows requires Developer Mode or administrator rights')
         with self.assertRaisesRegex(RuntimeError,'Unsafe model asset'):prepare.verified(self.output,self.config)
     def test_configuration_must_pin_canonical_repo_asset_and_safe_sizes(self):
         for mutate in [lambda c:c['archive'].update(url='https://example.com/models.zip'),lambda c:c['files']['clip-vocab.json'].update(bytes=prepare.MAXIMUM+1),lambda c:c.update(checkpointSHA256='0'*64)]:

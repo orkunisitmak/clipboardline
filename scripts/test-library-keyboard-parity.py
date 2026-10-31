@@ -207,10 +207,16 @@ class LibraryKeyboardParityTests(unittest.TestCase):
     def test_missing_empty_and_symlinked_reports_are_rejected(self):
         self.save(); path = self.directory / 'windows.json'; path.unlink()
         for action in ['missing', 'empty', 'symlink']:
-            if action == 'empty': path.touch()
-            if action == 'symlink': path.unlink(); path.symlink_to(self.directory / 'macos.json')
-            with self.assertRaises(CHECKER.ParityError):
-                CHECKER.verify(self.contract_path, self.directory / 'macos.json', path, REVISION)
+            with self.subTest(action=action):
+                if action == 'empty': path.touch()
+                if action == 'symlink':
+                    path.unlink()
+                    try: path.symlink_to(self.directory / 'macos.json')
+                    except OSError as error:
+                        if getattr(error, 'winerror', None) != 1314: raise
+                        self.skipTest('Creating symlinks on Windows requires Developer Mode or administrator rights')
+                with self.assertRaises(CHECKER.ParityError):
+                    CHECKER.verify(self.contract_path, self.directory / 'macos.json', path, REVISION)
 
 
 if __name__ == '__main__':
