@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['windows/**', 'Sources/**', 'Tests/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', '.github/workflows/macos.yml', '.github/workflows/windows.yml']
+    paths: ['release-version.json', 'upstream-state.json', 'windows/**', 'Sources/**', 'Tests/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-release-version.py', 'scripts/test-release-version.py', '.github/workflows/macos.yml', '.github/workflows/windows.yml']
   pull_request:
-    paths: ['windows/**', 'Sources/**', 'Tests/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', '.github/workflows/macos.yml', '.github/workflows/windows.yml']
+    paths: ['release-version.json', 'upstream-state.json', 'windows/**', 'Sources/**', 'Tests/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-release-version.py', 'scripts/test-release-version.py', '.github/workflows/macos.yml', '.github/workflows/windows.yml']
 permissions:
   contents: read
 jobs:
@@ -34,7 +34,9 @@ jobs:
           python ../scripts/prepare-windows-search-models.py --check
       - name: Shared version and parity guard tests
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           python ../scripts/check-release-version.py --require-windows
+          python ../scripts/test-release-version.py
           python ../scripts/sync-windows-locales.py --check
           python ../scripts/test-cross-platform-parity.py
       - name: Audit dependencies and run model/security tests
