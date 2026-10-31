@@ -23,6 +23,7 @@
 /* Translated pixels must not accept pointer hits at their old layout position.
    Keyboard handlers remain active; this switches only at transition boundaries. */
 body[data-shelf-motion],body[data-shelf-motion] * { pointer-events: none !important; }
+body.dragging-out .shelves { opacity: 0 !important; pointer-events: none !important; transition: opacity 0.12s ease; }
 * { box-sizing: border-box; }
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
 html { background: transparent; }
@@ -90,13 +91,14 @@ body.view-shelves, body.view-shelves #app, body.view-shelves .shell, .shelf-shel
 svg.rope path, svg.line path { fill: none; stroke: #a3a3a9; stroke-width: 1.1; vector-effect: non-scaling-stroke; filter: drop-shadow(0 1px 1px #0007); }
 .cards { position: absolute; inset: 0; display: flex; align-items: flex-start; gap: 24px; overflow-x: auto; overflow-y: hidden; padding: 46px 24px 28px; min-height: 0; scrollbar-width: none; scroll-behavior: smooth; }
 .cards::-webkit-scrollbar { display: none; }
+
 .card { position: relative; flex: 0 0 var(--card-width); width: var(--card-width); min-width: var(--card-width); max-width: var(--card-width); height: var(--text-height); margin-top: var(--sag, 0px); padding: 21px 10px 10px; display: flex; flex-direction: column; gap: 5px; border: 1px solid #ffffff23; border-radius: 16px; background: #333336ed; box-shadow: 0 6px 13px #0003; text-align: left; cursor: pointer; user-select: none; outline: 0; transition: box-shadow .15s ease, background .15s ease; }
 .card:before { content: ""; position: absolute; z-index: 3; top: -21px; left: calc(50% - 4.5px); width: 9px; height: 26px; border: 1px solid #d4d4d871; border-radius: 4px; background: linear-gradient(90deg, #a7a7aa, #efeff1 38%, #d3d3d6 64%, #9d9da0); box-shadow: 0 2px 3px #0004; pointer-events: none; }
 .card:after { content: ""; position: absolute; z-index: 4; top: -12px; left: calc(50% - 2.5px); width: 5px; height: 1px; border-radius: 2px; background: #5252569c; pointer-events: none; }
 .card.kind-text { background: #36312fed; border-color: #ffffff12; }
 .card.kind-link { background: #2b3530ed; border-color: #ffffff12; }
 .card.kind-image { height: auto; min-height: 0; padding: 0; align-items: center; background: transparent; border: 0; box-shadow: none; }
-.card img { display: block; max-width: 100%; min-height: 0; object-fit: contain; border-radius: 12px; }
+.card img { display: block; max-width: 100%; min-height: 0; object-fit: contain; border-radius: 12px; pointer-events: none; }
 .card.kind-image > img, .image-frame, .photo-frame { width: auto; max-width: calc(var(--card-width) - 6px); height: auto; max-height: var(--photo-height); padding: 4px; border: 1px solid #ffffff62; border-radius: 16px; background: #47474b66; box-shadow: 0 6px 13px #0004, inset 0 0 0 1px #0002; object-fit: contain; }
 .image-frame img, .photo-frame img { max-height: calc(var(--photo-height) - 8px); max-width: 100%; padding: 0; border: 0; box-shadow: none; border-radius: 11px; }
 .card:hover { box-shadow: 0 9px 18px #0005; }
@@ -105,6 +107,7 @@ svg.rope path, svg.line path { fill: none; stroke: #a3a3a9; stroke-width: 1.1; v
 .card.focused, .card.selected { outline: 3px solid #168dff; outline-offset: 0; }
 .card.kind-image.focused, .card.kind-image.selected { outline: 0; }
 .card.kind-image.focused > img, .card.kind-image.selected > img, .card.kind-image.focused .image-frame, .card.kind-image.selected .image-frame, .card.kind-image.focused .photo-frame, .card.kind-image.selected .photo-frame { outline: 3px solid #168dff; outline-offset: 0; }
+.card .card-body, .card .card-title, .card .card-caption, .card .link-placeholder, .card .card-number { pointer-events: none; }
 .card .card-body { flex: 1; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.35; }
 .card .card-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; font-size: 12px; font-weight: 600; line-height: 1.3; }
 .card .card-title + .card-body { color: #c3c1c5; }
