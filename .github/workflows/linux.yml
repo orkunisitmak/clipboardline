@@ -34,7 +34,10 @@ jobs:
         run: python3 ../scripts/check-release-version.py --require-windows
       - name: Model, renderer and Linux bridge tests
         run: |
-          npm audit --audit-level=moderate
+          # Shipped dependencies stay at moderate. Packaging tools stay at high:
+          # electron-builder pins minimatch below the GHSA-g3hv-75wg-m249 fix.
+          npm audit --omit=dev --audit-level=moderate
+          npm audit --audit-level=high
           npm test
       - name: Real Linux Electron clipboard acceptance (X11)
         run: xvfb-run -a npm run test:linux
