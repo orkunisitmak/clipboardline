@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 KINDS = ['image', 'text', 'link']
 FIELDS = {'activeKind', 'focused', 'selected', 'visibleKinds', 'searchEditing'}
 ACTIONS = {'open', 'close', 'up', 'down', 'left', 'right', 'toggle', 'openSearch', 'finishSearch', 'remap', 'key',
-           'switchShelf', 'command'}
+           'switchShelf', 'command', 'copyLink'}
 COMMAND_CODES = {'Enter', 'KeyS', 'KeyP', 'Space', 'KeyC'}
 PLATFORMS = {'macos': ('darwin', 'model'), 'windows': ('win32', 'renderer')}
 
@@ -79,6 +79,13 @@ def valid_snapshot(value, aliases):
              aliases[focused] == value['activeKind']))
 
 
+def valid_link_observation(value):
+    # A copyLink step reports which stored link (numbered by first appearance) the copy resolved to and its stored address.
+    link = value.get('link') if isinstance(value, dict) and set(value) == {'link'} else None
+    return (isinstance(link, dict) and set(link) == {'item', 'address'} and isinstance(link['item'], str) and
+            re.fullmatch(r'link-[1-9][0-9]*', link['item']) is not None and isinstance(link['address'], str) and bool(link['address']))
+
+
 def load_contract(path):
     contract, data = read_json(path)
     require(isinstance(contract, dict) and type(contract.get('schemaVersion')) is int and
@@ -127,6 +134,7 @@ def load_contract(path):
         aliases_by_scenario[identifier] = aliases
         steps = scenario.get('steps')
         require(isinstance(steps, list) and bool(steps), 'Scenario has no executed steps')
+        links = set()
         for index, step in enumerate(steps):
             require(isinstance(step, dict) and isinstance(step.get('action'), str) and step['action'] in ACTIONS and
                     (step['action'] != 'toggle' or step.get('kind') in KINDS), 'Unknown shared fixture action')
@@ -139,6 +147,14 @@ def load_contract(path):
             if step['action'] == 'command':
                 require(step.get('code') in COMMAND_CODES and step.get('ctrl', False) == (step['code'] == 'KeyC'),
                         'Unsupported shared item command')
+            if step['action'] == 'copyLink':
+                require(isinstance(step.get('url'), str) and step['url'].strip(), 'A shared link copy needs a URL')
+                require(valid_link_observation(step.get('expect')), 'Malformed expected shared link')
+                label = step['expect']['link']['item']
+                require(int(label[5:]) <= len(links) + 1, 'Shared link labels must be numbered by first appearance')
+                links.add(label)
+                expected[(identifier, index)] = step['expect']
+                continue
             require(valid_snapshot(step.get('expect'), aliases), 'Malformed expected shared state')
             require(('effects' in step['expect']) == (step['action'] == 'command'), 'Only command steps expect effects')
             expected[(identifier, index)] = step['expect']
@@ -167,7 +183,8 @@ def validate_platform_report(path, platform, source_revision, contract, contract
         require(key in expected and key not in observed, 'Unknown or duplicate parity observation')
         observed.add(key)
         actual = observation.get('actual')
-        require(valid_snapshot(actual, aliases[key[0]]) and actual == expected[key],
+        require((valid_link_observation(actual) if 'link' in expected[key] else valid_snapshot(actual, aliases[key[0]])) and
+                actual == expected[key],
                 'Executed behavior differs from the shared contract at ' + key[0] + ':' + str(key[1]))
     require(observed == set(expected), 'Parity report is incomplete')
     return report

@@ -171,6 +171,29 @@ test('selection lookups keep request order and reject missing items',()=>fixture
  assert.throws(()=>s.selected([first.id,'00000000-0000-4000-8000-000000000000']),/no longer exists/);
  s.modify('trash',{ids:[first.id]});s.modify('delete',{ids:[first.id]});assert.deepEqual(s.data.items.map(item=>item.id),[second.id]);
 }));
+test('links differing only by tracking parameters share one item like macOS LinkIdentity.normalized',()=>fixture((s,time)=>{
+ const first=s.insert('link','https://example.com/a?id=7&utm_source=news&UTM_Medium=mail');s.modify('pin',{ids:[first.id]});time(2000);
+ for(const copy of ['https://example.com/a?id=7','https://example.com/a?fbclid=x&id=7&gclid=y','https://EXAMPLE.com:443/a?utm_campaign=z&id=7']){const again=s.insert('link',copy);assert.equal(again.id,first.id);}
+ assert.equal(s.data.items.length,1);assert.equal(s.data.items[0].url,'https://example.com/a?id=7&utm_source=news&UTM_Medium=mail');assert.equal(s.data.items[0].pinned,true);
+ assert.notEqual(s.insert('link','https://example.com/a?id=8').id,first.id);assert.notEqual(s.insert('link','https://example.com/a?id=7&ref=x').id,first.id);assert.notEqual(s.insert('link','https://example.com/a?id=7#top').id,first.id);
+ assert.equal(s.insert('link','https://example.com/?utm_source=x').id,s.insert('link','https://example.com/').id);assert.equal(s.data.items.length,5);
+}));
+test('old duplicate links that differ only by tracking parameters merge on the next copy and keep the first stored address, names and notes',()=>fixture((s,time)=>{
+ const old=(url,createdAt,fields)=>Object.assign(s.insert('link','https://example.com/seed-'+s.data.items.length),{url,createdAt,updatedAt:createdAt,...fields});
+ const first=old('https://example.com/a?utm_source=x',1000,{name:'Reading list',pinned:true,title:'Example',author:'Ann',thumbnailFile:'a'.repeat(64)+'.png'}),second=old('https://example.com/a',2000,{note:'from a friend',tags:['later'],lastCopiedAt:4000}),newest=old('https://example.com/a?fbclid=z',3000,{});
+ time(5000);const copy=s.insert('link','https://example.com/a?gclid=q');
+ assert.equal(copy.id,newest.id);assert.deepEqual(s.data.items.filter(i=>i.kind==='link').map(i=>i.id),[newest.id]);
+ assert.equal(copy.url,first.url);assert.equal(copy.name,'Reading list');assert.equal(copy.note,'from a friend');assert.deepEqual(copy.tags,['later']);assert.equal(copy.pinned,true);assert.equal(copy.lastCopiedAt,4000);
+ assert.equal(copy.title,'Example');assert.equal(copy.author,'Ann');assert.equal(copy.thumbnailFile,'a'.repeat(64)+'.png');
+}));
+test('old duplicate links whose names or notes differ are not merged, so none of them is lost',()=>fixture((s,time)=>{
+ const old=(url,createdAt,fields)=>Object.assign(s.insert('link','https://example.com/seed-'+s.data.items.length),{url,createdAt,updatedAt:createdAt,...fields});
+ const work=old('https://example.com/a?id=7&utm_source=x',1000,{name:'Work',note:'shared note'}),home=old('https://example.com/a?id=7',2000,{name:'Home',note:'other note'}),newest=old('https://example.com/a?id=7&utm_campaign=y',3000,{note:'shared note'});
+ for(const at of [5000,6000]){time(at);const copy=s.insert('link','https://example.com/a?id=7&gclid=q');
+  assert.equal(copy.id,newest.id);assert.deepEqual([copy.name,copy.note,copy.url],['Work','shared note',work.url]);
+  assert.deepEqual(s.data.items.filter(i=>i.kind==='link').map(i=>i.id).sort(),[newest.id,home.id].sort());
+  assert.deepEqual([home.name,home.note,home.url],['Home','other note','https://example.com/a?id=7']);}
+}));
 test('link preview metadata stores its thumbnail only while the link still exists',()=>fixture((s,time,dir)=>{
  const files=()=>fs.readdirSync(path.join(dir,'media')),url='https://example.com/a';
  const gone=s.insert('link',url);s.modify('trash',{ids:[gone.id]});assert.equal(s.setLinkMetadata(gone,url,{title:'T',thumbnail:png}),false);assert.deepEqual(files(),[]);assert.equal(gone.title,'');

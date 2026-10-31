@@ -133,6 +133,29 @@ class CrossPlatformParityTests(unittest.TestCase):
         del self.observation('macos', 'command')['actual']['effects']
         self.rejected()
 
+    def test_link_copy_that_resolved_to_another_item_or_address_is_rejected(self):
+        self.assertEqual(self.observation('windows', 'copyLink')['actual'], {'link': {'item': 'link-1', 'address': 'https://example.com/a?id=7&utm_source=news'}})
+        steps = next(item for item in self.contract['scenarios'] if item['id'] == 'tracking-parameter-links')['steps']
+        for platform, change in [('windows', {'item': 'link-2'}), ('macos', {'address': 'https://example.com/a?id=7'}), ('macos', {'item': 'link-9'})]:
+            self.setUp()
+            index = next(i for i, step in enumerate(steps) if step['expect']['link']['item'] == 'link-1' and i > 0)
+            observation = next(item for item in self.reports[platform]['observations'] if item['scenarioId'] == 'tracking-parameter-links' and item['step'] == index)
+            observation['actual']['link'].update(change)
+            self.rejected()
+
+    def test_link_observation_shape_is_closed(self):
+        for mutate in [lambda actual: actual.update(selected=[]), lambda actual: actual['link'].update(extra=1), lambda actual: actual['link'].pop('address'),
+                       lambda actual: actual['link'].update(item='first')]:
+            self.setUp(); mutate(self.observation('macos', 'copyLink')['actual']); self.rejected()
+
+    def test_malformed_link_copy_steps_cannot_skip_or_renumber_identity(self):
+        original = copy.deepcopy(self.contract)
+        scenario = lambda: next(item for item in self.contract['scenarios'] if item['id'] == 'tracking-parameter-links')
+        for mutate in [lambda steps: steps[0].pop('url'), lambda steps: steps[0].update(url=' '),
+                       lambda steps: steps[0]['expect']['link'].update(item='link-2'), lambda steps: steps[0]['expect'].update(activeKind='link')]:
+            self.contract = copy.deepcopy(original); mutate(scenario()['steps'])
+            self.contract_path.write_text(json.dumps(self.contract)); self.rejected()
+
     def test_missing_snapshot_field_is_rejected(self):
         del self.reports['macos']['observations'][0]['actual']['searchEditing']
         self.rejected()

@@ -100,6 +100,14 @@ function plainURL(value) {
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
 
+// Match macOS LinkIdentity.normalized: utm_*, fbclid and gclid (any case) do not make a different link.
+function linkIdentity(href) {
+  try {
+    const u = new URL(href), drop = part => { const name = part.split('=')[0]; let decoded = name; try { decoded = decodeURIComponent(name); } catch {} return /^utm_/i.test(decoded) || /^(fbclid|gclid)$/i.test(decoded); };
+    u.search = u.search.slice(1).split('&').filter(part => !drop(part)).join('&'); return u.href;
+  } catch { return href; }
+}
+
 // A cold PowerShell start can exceed 15 seconds on a busy machine, for example
 // while antivirus scans it. The script is idempotent, so retry only a timed-out
 // attempt once with a longer limit before refusing to open the library.
@@ -312,8 +320,20 @@ class Store {
     else textValue = text(value);
     const identity=kind==='text'?textIdentity(textValue):null;
     const matching = this.data.items.filter(i => i.kind === kind && !i.trashedAt &&
-      (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? i.url === url : !i.recording&&i.imageFile === imageFile));
+      (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? linkIdentity(i.url) === linkIdentity(url) : !i.recording&&i.imageFile === imageFile));
     const prior = matching.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (kind === 'link' && matching.length > 1) {
+      // Libraries made before tracking parameters were ignored can hold several of these. Merge only the ones whose name and note do not clash with the kept
+      // item's (macOS never deletes them); the others stay as they are. The merged item keeps the address of the oldest copy.
+      let name = prior.name, note = prior.note;
+      const merged = [prior];
+      for (const other of matching.slice(1)) {
+        if ((other.name && name && other.name !== name) || (other.note && note && other.note !== note)) continue;
+        name ||= other.name; note ||= other.note; merged.push(other);
+      }
+      matching.splice(0, matching.length, ...merged);
+      prior.url = merged.reduce((a, b) => b.createdAt < a.createdAt ? b : a).url;
+    }
     if(!prior&&this.data.items.length>=20000){
       if(kind==='image'){
         const referenced=this.mediaReferencesForCapacityCleanup();
@@ -332,7 +352,9 @@ class Store {
       item.folderIds = [...new Set(matching.flatMap(i => i.folderIds))]; item.tags = [...new Set(matching.flatMap(i => i.tags))];
       item.name ||= matching.find(i => i.name)?.name || '';
       item.note ||= matching.find(i => i.note)?.note || '';
+      for(const key of ['title','author','thumbnailFile'])if(!item[key]){const from=matching.find(i=>i[key]);if(from)item[key]=from[key];}
       const dates=matching.map(i=>i.retainedAt).filter(Number.isFinite);if(dates.length)item.retainedAt=Math.min(...dates);
+      const copied=matching.map(i=>i.lastCopiedAt).filter(Number.isFinite);if(copied.length)item.lastCopiedAt=Math.max(...copied);
     }
     this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
     this.expire(false); this.persist(); return item;
