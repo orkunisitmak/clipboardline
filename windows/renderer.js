@@ -154,7 +154,7 @@ function focusLibraryResults(){
 }
 function libraryFocusIdentity(){
  if(ui.view!=='library'||ui.preview||ui.modal)return null;
- const focused=document.activeElement;if(!focused||isEditor(focused))return null;
+ const focused=document.activeElement;if(!focused||(isEditor(focused)&&!focused.matches?.('input[type="checkbox"][data-filter-tag]')))return null;
  const card=focused.closest?.('.library-card');if(card&&focused===card)return{card:card.dataset.itemId};
  const region=['.library-toolbar','.sidebar','.library-controls','.library-filter-panel','.inspector','.library-list-header'].find(selector=>focused.closest?.(selector));
  if(!region)return null;return{region,id:focused.id||'',tag:focused.tagName,data:{...focused.dataset}};
@@ -162,7 +162,7 @@ function libraryFocusIdentity(){
 function restoreLibraryFocus(identity){
  if(!identity||ui.view!=='library'||ui.preview||ui.modal)return;
  if(identity.card){const card=root.querySelector?.('.library-grid [data-item-id="'+identity.card+'"]');if(card)card.focus?.({preventScroll:true});else focusLibraryResults();return;}
- const controls=[...(root.querySelectorAll?.(identity.region+' button,'+identity.region+' [tabindex]')||[])],target=controls.find(node=>(identity.id?node.id===identity.id:node.tagName===identity.tag&&Object.entries(identity.data).every(([key,value])=>node.dataset[key]===value)));
+ const controls=[...(root.querySelectorAll?.(identity.region+' button,'+identity.region+' input[type="checkbox"],'+identity.region+' [tabindex]')||[])],target=controls.find(node=>(identity.id?node.id===identity.id:node.tagName===identity.tag&&Object.entries(identity.data).every(([key,value])=>node.dataset[key]===value)));
  target?.focus?.({preventScroll:true});
 }
 function libraryPaneTargets(){

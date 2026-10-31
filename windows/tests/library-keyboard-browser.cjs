@@ -12,12 +12,30 @@ async function main(){
   const pngs=await page.evaluate(()=>Array.from({length:6},(_,index)=>{const canvas=document.createElement('canvas');canvas.width=80;canvas.height=50;const ctx=canvas.getContext('2d');ctx.fillStyle='hsl('+index*47+' 70% 50%)';ctx.fillRect(0,0,80,50);return canvas.toDataURL('image/png');}));
   const fixture={prefix:'Library keyboard fixture',ids:[]},folder=store.modify('createFolder',{name:fixture.prefix+' folder'});fixture.folder=folder.id;fixture.folderName=folder.name;let image=0;
   for(let index=0;index<18;index++){const kind=['image','text','link'][index%3],value=store.insert(kind,kind==='image'?Buffer.from(pngs[image++].split(',')[1],'base64'):kind==='text'?fixture.prefix+' text '+index:'https://example.com/library-keyboard/'+index);store.modify('details',{id:value.id,name:fixture.prefix+' item '+String(index).padStart(2,'0')});value.retainedAt=Date.now();value.createdAt=Date.now()+18000-index*1000;fixture.ids.push(value.id);}
-  store.data.items[0].tags=['native-tab-a','native-tab-b','native-tab-c','native-tab-d'];
+  for(const [index,tags] of [['native-tab-a','native-tab-b','native-tab-c','native-tab-d'],['native-tab-a'],['native-tab-b']].entries()){const value=store.data.items.find(value=>value.id===fixture.ids[index]);assert.ok(value);value.tags=tags;}
   store.modify('setSettings',{patch:{libraryListMode:false,libraryInspectorVisible:true,librarySidebarVisible:true,language:'en'}});let surface={view:'shelves',windowVisible:true,version:'1.7.7'};
   await page.route('appmedia://**',route=>{const id=new URL(route.request().url()).pathname.split('/')[1],value=store.data.items.find(value=>value.id===id);return value?.imageFile?route.fulfill({contentType:'image/png',body:fs.readFileSync(path.join(directory,'media',value.imageFile))}):route.fulfill({status:404});});
   await page.exposeFunction('libraryStoreCommand',async(action,payload)=>{let result;if(['library','show','settings'].includes(action)){surface={...surface,view:action==='show'?'shelves':action,windowVisible:true};}else if(action==='hide')surface.windowVisible=false;else if(action==='searchImages')result={ids:[],scores:[],available:false,indexing:false};else if(action==='copy'){store.markCopied(payload.ids);result={};}else if(['paste','imageHistory'].includes(action))result={};else result=store.modify(action,payload);return{...store.publicState(),...surface,result};});
   await page.evaluate(state=>{const f=window.__shelfPerformance;window.clipboardLine.command=async(action,payload={})=>{const result=await window.libraryStoreCommand(action,payload);f.emit(result);return result;};f.emit(state);},{...store.publicState(),...surface});
   const until=async(reader,predicate,timeout=10000)=>{const end=Date.now()+timeout;let value,error;while(Date.now()<end){try{value=await reader();if(predicate(value))return value;}catch(e){error=e;}await new Promise(resolve=>setTimeout(resolve,20));}throw new Error('Timed out: '+JSON.stringify(value)+' '+(error?.message||''));};
+  await page.evaluate(()=>window.clipboardLine.command('library'));
+  await page.evaluate(()=>{const r=window.__shelfPerformance.renderer;r.ui.filtersOpen=true;r.ui.filterTags=[];r.render();});
+  const activeTag=()=>page.evaluate(()=>document.activeElement?.dataset?.filterTag||null),tagFilter=tag=>page.locator('.filter-tags input[data-filter-tag="'+tag+'"]');
+  await page.locator('#domain-filter').focus();await page.keyboard.press('Tab');assert.equal(await activeTag(),'native-tab-a','Tab reaches tag A');await page.keyboard.press('Space');
+  assert.equal(await activeTag(),'native-tab-a','Space keeps focus on tag A after filtering rerenders');
+  assert.equal(await tagFilter('native-tab-a').isChecked(),true);
+  const singleTagResults=await page.locator('.library-grid > .card').evaluateAll(nodes=>nodes.map(node=>node.dataset.itemId));
+  assert.deepEqual(new Set(singleTagResults),new Set([fixture.ids[0],fixture.ids[1]]),'tag A returns items that carry tag A');
+  await page.keyboard.press('Tab');assert.equal(await activeTag(),'native-tab-b','Tab advances to tag B after the tag A rerender');
+  await page.keyboard.press('Space');
+  assert.equal(await activeTag(),'native-tab-b','Space keeps focus on tag B after combined filtering rerenders');
+  assert.equal(await tagFilter('native-tab-b').isChecked(),true);
+  const combinedTagResults=await page.locator('.library-grid > .card').evaluateAll(nodes=>nodes.map(node=>node.dataset.itemId));
+  assert.deepEqual(combinedTagResults,[fixture.ids[0]],'tag filters match all selected tags');
+  assert.equal(await page.evaluate(()=>window.__shelfPerformance.renderer.ui.preview),null,'tag filtering does not open a preview');
+  checks.push({name:'Library tag checkboxes retain keyboard focus across single and combined filters without opening a preview',passed:true});
+  console.log('PASS Library tag checkboxes retain keyboard focus across single and combined filters without opening a preview');
+  await page.evaluate(()=>{const r=window.__shelfPerformance.renderer;r.ui.filterTags=[];r.ui.filtersOpen=false;r.render();const card=document.querySelector('.library-grid [data-item-id="'+r.ui.focus+'"]'),target=card||document.querySelector('.library-grid');target?.focus?.({preventScroll:true});});
   await page.evaluate(()=>{const r=window.__shelfPerformance.renderer;r.ui.sort='titleDescending';r.ui.filtersOpen=true;r.render();});
   await journey({page,fixture,until,editorSelectAll:process.platform==='darwin'?'Meta+a':'Control+a',check:(name,details={})=>{checks.push({name,passed:true,...details});console.log('PASS '+name);}});
   const oldSaveName=fixture.prefix+' pending old save';
