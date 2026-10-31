@@ -27,6 +27,26 @@ test('folder names share the macOS 64-grapheme and control-character rule',()=>f
 }));
 test('retention is per-kind; pinned/folder/tag records remain permanent',()=>fixture((s,time)=>{const text=s.insert('text','expiring text'),link=s.insert('link','https://example.com'),saved=s.insert('text','tagged');s.modify('tag',{ids:[saved.id],tags:['keep']});s.modify('setSettings',{patch:{retentionDays:{text:1,link:3,image:0}}});time(2*86400000);s.expire();assert.ok(text.trashedAt);assert.equal(link.trashedAt,null);assert.equal(saved.trashedAt,null);}));
 test('remove hides saved items, trashes temporary ones; undo preserves later edits',()=>fixture(s=>{const saved=s.insert('text','saved'),temp=s.insert('text','temporary');s.modify('pin',{ids:[saved.id]});s.modify('remove',{ids:[saved.id,temp.id]});assert.equal(saved.hiddenFromShelf,true);assert.ok(temp.trashedAt);s.modify('name',{id:saved.id,name:'Later name'});s.modify('undo');assert.equal(saved.hiddenFromShelf,false);assert.equal(temp.trashedAt,null);assert.equal(saved.name,'Later name');}));
+test('New note always creates a new retained record, even with the default or an existing text',()=>fixture(s=>{
+ const copied=s.insert('text','Meeting agenda');
+ const a=s.createNote(),b=s.createNote({}),c=s.createNote({text:'Meeting agenda',title:'Agenda'});
+ assert.equal(new Set([copied.id,a.id,b.id,c.id]).size,4);assert.equal(s.data.items.length,4);
+ assert.deepEqual([a.text,b.text,c.text],['New note','New note','Meeting agenda']);
+ for(const note of [a,b,c])assert.equal(s.data.items.find(i=>i.id===note.id),note);
+ assert.equal(c.name,'Agenda');assert.ok([a,b,c].every(note=>Number.isFinite(note.retainedAt)));assert.equal(copied.retainedAt,null);
+}));
+test('a capture or import of a note\'s text never merges or removes notes, also after reopening',()=>fixture((s,time,dir)=>{
+ const copied=s.insert('text','Meeting agenda');
+ time(2000);const a=s.createNote(),b=s.createNote({title:'Second'}),c=s.createNote({text:'Meeting agenda',title:'Agenda'});
+ s.modify('details',{id:a.id,note:'Keep this note'});
+ const before=JSON.stringify([a,b,c].map(note=>s.data.items.find(i=>i.id===note.id)));
+ time(3000);const captured=s.insert('text','New note');const recopied=s.insert('text','Meeting agenda');
+ assert.ok(![a.id,b.id,c.id].includes(captured.id));assert.equal(recopied.id,copied.id);
+ assert.equal(JSON.stringify([a,b,c].map(note=>s.data.items.find(i=>i.id===note.id))),before);
+ assert.ok([a,b,c].every(note=>!s.data.items.find(i=>i.id===note.id).trashedAt));
+ const reopened=new Store(dir,{clock:()=>4000});assert.ok([a,b,c].every(note=>reopened.data.items.find(i=>i.id===note.id)?.createdAsNote===true));
+ reopened.insert('text','New note');assert.equal(reopened.data.items.filter(i=>i.createdAsNote&&!i.trashedAt).length,3);
+}));
 test('explicit Trash invalidates removal undo and deletion requires Trash',()=>fixture(s=>{const item=s.insert('text','text');assert.throws(()=>s.modify('delete',{ids:[item.id]}));s.modify('remove',{ids:[item.id]});s.modify('restore',{ids:[item.id]});assert.equal(s.undoStack.length,0);s.modify('trash',{ids:[item.id]});s.modify('delete',{ids:[item.id]});assert.equal(s.data.items.length,0);}));
 test('batch operations are atomic when one content kind is invalid',()=>fixture(s=>{const text=s.insert('text','before'),image=s.insert('image',png);assert.throws(()=>s.modify('editText',{ids:[text.id,image.id],text:'after'}));assert.equal(s.item(text.id).text,'before');}));
 test('a failed command rolls back in place so background jobs keep the item objects they hold',()=>fixture(s=>{
