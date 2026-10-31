@@ -167,7 +167,7 @@ with that exact counterpart; both feeds must say 1.7.6 before Latest promotion.
 
 ## 1.7.8: keyboard-complete Library
 
-Mac build78 and Windows build71 implement the same Library keyboard workflow.
+Mac build78 and Windows build72 implement the same Library keyboard workflow.
 See [the bilingual guide](library-keyboard.md). The additive
 `contracts/library-keyboard.json` specifies 11 scenarios / 92 observations through the
 shipping Mac Model/Store and Windows renderer/Store. This contract proves state,
@@ -189,8 +189,8 @@ is changed. Trash undo is a bounded, in-process journal; persistent Trash remain
 restorable after restarting. Windows has one application-owned Store and does not
 watch foreign direct JSON edits while running.
 
-The genuine Windows upgrade baseline is 1.7.7/build70: 545777945 bytes, SHA256
-`89b9d3d3ddc91d1ddddfb6b07ee73930686d9d2cbbc80a4785746befc9ad9768`,
-source `1c93c163e7e45d102d13c1077dd8baa969eab8ba`. Stage
-`clipboardline-1.7.8-build78`, then publish `windows-1.7.8-build71` with that
+The genuine Windows upgrade baseline is 1.7.8/build71: 545781566 bytes, SHA256
+`69a2e7708c9846985a128b4cd5d9e5bb467ed02dd6e5bd66af8b284f8b507387`,
+source `57afe3a6ae5f777ac9071c94b0620aa2180e9539`. Stage
+`clipboardline-1.7.8-build78`, then publish `windows-1.7.8-build72` with that
 verified counterpart. Latest must contain both signed 1.7.8 feeds and packages.
