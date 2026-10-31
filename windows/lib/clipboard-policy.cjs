@@ -8,6 +8,41 @@ function privateClipboard(formats){
 }
 function validSequence(value){return Number.isInteger(value)&&value>0&&value<=0xffffffff;}
 const changed=Object.freeze({raced:true});
+// Only a single valid URL can replace a copied display label. Reject
+// ambiguous multi-link copies rather than silently saving the wrong target.
+function oneURL(urls,plainURL){
+  const values=[...new Set(urls.map(plainURL).filter(Boolean))];
+  return values.length===1?values[0]:null;
+}
+function linkedURL(format,value,plainURL){
+  if(format==='text/uri-list'){
+    const lines=value.split(/\r?\n/).map(line=>line.trim()).filter(line=>line&&!line.startsWith('#'));
+    return lines.length===1?plainURL(lines[0]):null;
+  }
+  // This parses URL attributes only, not HTML content or scripts. Invalid
+  // schemes, credentials and malformed inputs are rejected by plainURL.
+  const attrs=[...value.matchAll(/<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)];
+  if(attrs.length!==1)return null;
+  const href=(attrs[0][1]??attrs[0][2]??attrs[0][3])
+    .replace(/&(?:amp|#38|#x26);/gi,'&');
+  return oneURL([href],plainURL);
+}
+async function linkedClipboardRepresentation(entries,plainURL){
+  for(const format of ['text/uri-list','text/html']){
+    const entry=entries.find(item=>item.types.includes(format));
+    if(!entry)continue;
+    let blob;
+    try{blob=await entry.getType(format);}catch{continue;}
+    if(!blob||blob.size>1024*1024)continue;
+    let value;
+    try{value=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(await blob.arrayBuffer());}catch{continue;}
+    if(value.length>1024*1024)continue;
+    const url=linkedURL(format,value,plainURL);
+    if(url)return url;
+  }
+  return null;
+}
+
 // With link capture off a standalone URL is ordinary text, as on macOS.
 async function readClipboardContent({clipboard,sequence,marker,plainURL,captureLinks=true}){
   let before;try{before=await sequence();}catch{return null;}if(!validSequence(before))return null;
@@ -43,6 +78,10 @@ async function readClipboardContent({clipboard,sequence,marker,plainURL,captureL
         const url=plainURL(payload?.url);
         if(url){bytes=Buffer.from(url,'utf8');kind='link';value=url;}
       }catch{}
+    }
+    if(kind!=='link'&&captureLinks){
+      const url=await linkedClipboardRepresentation(entries,plainURL);
+      if(url){bytes=Buffer.from(url,'utf8');kind='link';value=url;}
     }
     if(kind!=='link'){
       // Use this item's payload, never a second live readText() of a replacement

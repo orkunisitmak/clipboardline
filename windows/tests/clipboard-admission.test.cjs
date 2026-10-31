@@ -93,6 +93,39 @@ test('invalid bookmark URLs fall back to the text label',async()=>{
  assert.deepEqual([result.kind,result.value],['text','OpenAI docs']);
  assert.deepEqual(api.requests,['electron application/bookmark','text/plain']);
 });
+test('shared linked URL representations admit a safe destination before the display label',async()=>{
+ for(const row of contract.linkedRepresentationCases){
+  const api=board([row.formats]);
+  const result=await read(api);
+  assert.deepEqual([result?.kind,result?.value],['link',row.url],row.name);
+  assert.equal(result.fingerprint,'link:'+require('node:crypto').createHash('sha256').update(row.url).digest('hex'),row.name);
+ }
+});
+test('HTML and URI representations never override disabled links or private items',async()=>{
+ for(const row of contract.linkedRepresentationCases.filter(item=>item.formats['text/plain'])){
+  const disabled=await readClipboardContent({...board([row.formats]),marker,plainURL,captureLinks:false});
+  assert.deepEqual([disabled?.kind,disabled?.value],['text','Read docs'],row.name);
+  const privateBoard=board([row.formats,{'com.agilebits.onepassword':''}]);
+  assert.equal(await read(privateBoard),null);
+  assert.equal(privateBoard.reads,0);
+ }
+});
+test('malformed, unsafe or ambiguous linked representations fall back to the original text',async()=>{
+ for(const formats of [
+  {'text/plain':'Read docs','text/html':'<a href="javascript:alert(1)">Read docs</a>'},
+  {'text/plain':'Read docs','text/uri-list':'file:///private/document.txt'},
+  {'text/plain':'Read docs','text/html':'<a href="https://example.com/a">A</a><a href="https://example.com/b">B</a>'},
+  {'text/plain':'Read docs','text/uri-list':'https://example.com/a\nhttps://example.com/b'}
+ ]){
+  const result=await read(board([formats]));
+  assert.deepEqual([result?.kind,result?.value],['text','Read docs']);
+ }
+});
+test('replaced clipboard generations never admit a linked URL',async()=>{
+ const api=board([{'text/plain':'Read docs','text/uri-list':'https://example.com/late'}],{duringRead:(type,value)=>{if(type==='text/uri-list')value.advance();}});
+ assert.deepEqual(await read(api),{raced:true});
+});
+
 test('a standalone URL is ordinary exact text while link capture is off, as on macOS',async()=>{
  const url=' https://example.com/a?b=1\r\n';
  const on=await read(board([{'text/plain':url}]));assert.deepEqual([on.kind,on.value],['link','https://example.com/a?b=1']);
