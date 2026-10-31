@@ -96,4 +96,16 @@ import XCTest
         XCTAssertFalse(try XCTUnwrap(menu.items.first { $0.title == L("Check for updates…") }).isEnabled)
         XCTAssertEqual(menu.items.filter { $0.submenu != nil }.count, 0)
     }
+
+    func testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let defaults = UserDefaults.standard, saved = defaults.object(forKey: "extraFolders")
+        defer { if let saved { defaults.set(saved, forKey: "extraFolders") } else { defaults.removeObject(forKey: "extraFolders") } }
+        let present = f.folder.appendingPathComponent("Present", isDirectory: true), unmounted = f.folder.appendingPathComponent("Unmounted", isDirectory: true)
+        try FileManager.default.createDirectory(at: present, withIntermediateDirectories: true)
+        defaults.set([unmounted.path], forKey: "extraFolders")
+        AppDelegate.extraFolders.append(present)
+        XCTAssertEqual(defaults.stringArray(forKey: "extraFolders") ?? [], [unmounted.path, present.path])
+        XCTAssertEqual(AppDelegate.existingExtraFolders.map(\.path), [present.path])
+    }
 }

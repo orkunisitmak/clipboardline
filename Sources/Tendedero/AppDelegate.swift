@@ -367,7 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         folderWatchers = []
         // A folder may also be watched for screenshots, like the Desktop; an
         // image both report hangs once.
-        for folder in Self.extraFolders {
+        for folder in Self.existingExtraFolders {
             let extra = ScreenshotWatcher(
                 folder: folder, anyImage: true,
                 onNew: { [weak self] url in self?.hangCapture(url) },
@@ -381,18 +381,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// folder, few enough that screenshots still have room on the line.
     static let maxExtraFolders = 3
 
-    /// The folders from "Also watch folders" that still exist. New images in
-    /// them hang like screenshots; taking one down leaves the file there.
+    /// The folders from "Also watch folders". New images in them hang like
+    /// screenshots; taking one down leaves the file there. A folder on an
+    /// unmounted volume stays listed (and saved) until the user removes it.
     static var extraFolders: [URL] {
-        get {
-            let paths = UserDefaults.standard.stringArray(forKey: "extraFolders") ?? []
-            return paths.compactMap { path in
-                var isDir: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else { return nil }
-                return URL(fileURLWithPath: path, isDirectory: true)
-            }
-        }
+        get { (UserDefaults.standard.stringArray(forKey: "extraFolders") ?? []).map { URL(fileURLWithPath: $0, isDirectory: true) } }
         set { UserDefaults.standard.set(newValue.map(\.path), forKey: "extraFolders") }
+    }
+
+    /// The listed folders that exist right now, which are the ones to watch.
+    static var existingExtraFolders: [URL] {
+        extraFolders.filter { (folder: URL) -> Bool in
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDir) && isDir.boolValue
+        }
     }
 
     private func chooseExtraFolder() {
