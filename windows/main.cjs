@@ -405,6 +405,7 @@ async function command(action,payload={}) {
         try{window.setIgnoreMouseEvents(true);}catch{}
       }
       window.webContents.startDrag({files:batch.files,icon});
+      if(view==='shelves')void hide(false);
     }catch(error){
       if(batch.batch)dragFiles.remove(batch.batch);
       throw error;
@@ -412,7 +413,6 @@ async function command(action,payload={}) {
       if(window&&!window.isDestroyed()){
         try{window.setIgnoreMouseEvents(false);}catch{}
       }
-      if(view==='shelves')void hide(false);
     }
   }
   else if(action==='dragStartOverlay'){
@@ -425,7 +425,7 @@ async function command(action,payload={}) {
     if(window&&!window.isDestroyed()){
       try{window.setIgnoreMouseEvents(false);}catch{}
     }
-    if(view==='shelves')void hide(false);
+    if(payload.completed&&view==='shelves')void hide(false);
     result=true;
   }
   else if(action==='setSettings'){

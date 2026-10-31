@@ -784,3 +784,28 @@ test('the Move to Trash confirmation uses the shared localized catalog entry',as
  f.api.emit({settings:{...f.state.settings,language:'en'}});await f.click('close-modal');await f.click('trash');
  assert.match(f.overlay,/Move 1 items to recoverable Trash\?/);
 });
+test('shelf cards have draggable=true, sag curve and pointer-events protection for drag gesture reliability',async()=>{
+ const f=fixture();await f.ready();
+ const cards=[...f.main.matchAll(/<article class="card kind-([^"]+)"[^>]*style="([^"]*)"[^>]*draggable="([^"]+)"/g)];
+ assert.ok(cards.length>0);
+ for(const card of cards){
+  assert.equal(card[3],'true','Card must be draggable');
+  assert.match(card[2],/--sag:\d+(\.\d+)?px/,'Shelf card must retain --sag rope curve');
+ }
+ const css=fs.readFileSync(path.join(__dirname,'../styles.css'),'utf8');
+ assert.match(css,/\.card\s+img\s*\{[^}]*pointer-events:\s*none/);
+ assert.match(css,/\.card\s+\.card-body[^}]*pointer-events:\s*none/);
+});
+test('shelf page-next and page-back advance and rewind ui.pages and synchronize selection to visible cards',async()=>{
+ const f=fixture();await f.ready();
+ const extra=navigationItems(f,{image:18,text:4,link:4});
+ f.api.emit({items:[...extra.image,...extra.text,...extra.link]});
+ await f.ready();
+ assert.match(f.main,/<span class="selection-info">1 \/ 2<\/span>/);
+ await f.click('page-next',{kind:'image'});
+ assert.match(f.main,/<span class="selection-info">2 \/ 2<\/span>/);
+ assert.equal(selectedCards(f).length,1);
+ await f.click('page-back',{kind:'image'});
+ assert.match(f.main,/<span class="selection-info">1 \/ 2<\/span>/);
+ assert.deepEqual(selectedCards(f),[extra.image[0].id]);
+});
