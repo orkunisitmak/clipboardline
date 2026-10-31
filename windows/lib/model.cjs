@@ -90,6 +90,9 @@ const graphemes=new Intl.Segmenter('en',{granularity:'grapheme'});
 // 64 graphemes can span far more UTF-16 units; this only bounds raw input.
 const TAG_INPUT_LIMIT=4096;
 const validTagName=name=>!/[\p{Cc}\p{Cf}]/u.test(name)&&[...graphemes.segment(name)].length<=64;
+// Match macOS nameAndPin: 1-160 Characters, at most 1024 UTF-8 bytes, and no
+// control, line or paragraph separator characters.
+function itemName(value){let name='';try{name=text(typeof value==='string'?value.trim():value,TAG_INPUT_LIMIT,true);}catch{}if(!name||[...graphemes.segment(name)].length>160||Buffer.byteLength(name)>1024||/[\p{Cc}\p{Zl}\p{Zp}]/u.test(name))fail('Enter a name (1–160 characters)');return name;}
 function saved(item) { return item.retainedAt != null || item.pinned || item.folderIds.length > 0 || item.tags.length > 0; }
 // Match macOS LinkIdentity.standalone: a copied URL keeps its link identity
 // when the source adds a trailing newline or surrounding spaces.
@@ -450,7 +453,7 @@ class Store {
         if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=text(payload.text,1024*1024,true);}
       }
       else if(action==='markCopied'){item.lastCopiedAt=now;item.captureRevision=crypto.randomUUID();}
-      else if (action === 'name') { item.name = text(payload.name, 200, true).trim(); item.pinned = true; item.retainedAt??=now; }
+      else if (action === 'name') { item.name = itemName(payload.name); item.pinned = true; item.retainedAt??=now; }
       else if (action === 'folder') {
         if (!this.data.folders.some(f => f.id === payload.folderId)) fail('Folder unavailable');
         if(payload.pinning!==undefined&&typeof payload.pinning!=='boolean')fail('Invalid folder pin option');

@@ -94,6 +94,12 @@
         "behavior": "An item without a name is titled by its content: a text by its first line that is not blank, with surrounding spaces and tabs removed and at most 120 grapheme clusters (lines end at LF or CRLF) and the localized \"Untitled note\" when every line is blank, a link by its fetched page title or else its host name and the localized \"Link\" when the stored URL does not parse, so an indented snippet or a long copied URL reads the same on both platforms.",
         "macos": "LibraryRecord.displayTitle returns the first non-blank line, trimmed and capped at 120 characters (Characters are grapheme clusters), or L(\"Untitled note\") for an all-blank text, and the metadata title, the URL host or L(\"Link\") for a link; LibraryInteractionTests.testUnnamedItemTitlesAreTheTrimmedFirstLineAndLinkHostLikeWindows covers it.",
         "windows": "title() in renderer.js applies the same rule (t('Untitled note') and t('Link') as fallbacks) to cards, title sorting and best-match ranking; library-ui.test.cjs runs the unnamed item titles scenario."
+      },
+      {
+        "id": "item-name-validation",
+        "behavior": "Name and pin trims the name and accepts 1 to 160 characters (grapheme clusters), at most 1024 UTF-8 bytes, with no control, line-separator or paragraph-separator characters. Any other name, including an empty one, is rejected with the shared \"Enter a name (1–160 characters)\" message and the item is left unchanged.",
+        "macos": "LibraryStore.nameAndPin validates the trimmed name with these limits and throws the localized \"Enter a name (1–160 characters)\" error.",
+        "windows": "The Store 'name' action validates through itemName with the same limits and error; model.test.cjs checks accepted names at the limits and rejects empty, oversized, multi-line, control-character, NUL and non-string names with the exact message."
       }
     ]
   },

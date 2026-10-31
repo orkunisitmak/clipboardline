@@ -76,6 +76,11 @@ library only when the open view is that folder or one of its subfolders.
 line, trimmed and capped at 120 grapheme clusters (Untitled note when every line is
 blank), and a link without a fetched title by its host name (Link when the stored URL
 does not parse).
+`item-name-validation` requires Name and pin to accept a trimmed name of 1-160
+characters and at most 1024 UTF-8 bytes without control or line/paragraph
+separators, and to reject anything else with `Enter a name (1–160 characters)`.
+Its evidence is `LibraryStore.nameAndPin` on macOS and the Windows `model.test.cjs`
+Name and pin case.
 
 The adapters execute application behavior:
 
