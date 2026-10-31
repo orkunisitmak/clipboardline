@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
 try {
  Add-Type -AssemblyName System.Windows.Forms
- $payload=[Console]::In.ReadToEnd()|ConvertFrom-Json
+ $payload=(New-Object IO.StreamReader([Console]::OpenStandardInput(),[Text.Encoding]::UTF8)).ReadToEnd()|ConvertFrom-Json
  $files=@($payload.files)
  if($files.Count -lt 1 -or $files.Count -gt 1000){throw 'Invalid file selection.'}
  $paths=New-Object System.Collections.Specialized.StringCollection
