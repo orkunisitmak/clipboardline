@@ -358,7 +358,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     init(data: Data, url: URL, contentType: String = "") throws {
         guard data.count <= 512 * 1024 else { throw PublicLinkError.tooLarge }
         let source = Self.decode(data, contentType: contentType)
-        let html = Self.replacing(#"(?is)<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>"#, in: source, with: "")
+        let html = Self.sanitizeHTML(source)
         let tags = try NSRegularExpression(pattern: #"(?is)<meta\b([^>]{0,8192})>"#)
         let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)
         var metadata: [String: String] = [:]
@@ -372,9 +372,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
             }
             if let key = values["property"] ?? values["name"], let value = values["content"], metadata[key.lowercased()] == nil { metadata[key.lowercased()] = String(value.prefix(2000)) }
         }
-        let titleTag = try NSRegularExpression(pattern: #"(?is)<title\b[^>]*>(.{0,8192}?)</title\s*>"#)
-        let titleMatch = titleTag.firstMatch(in: html, range: NSRange(html.startIndex..., in: html))
-            .flatMap { Range($0.range(at: 1), in: html) }.map { Self.entities(Self.replacing(#"<[^>]*>"#, in: String(html[$0]), with: "")) }
+        let titleMatch = Self.title(in: html).map { Self.entities(Self.stripTags($0)) }
         title = Self.clean(metadata["og:title"] ?? metadata["twitter:title"] ?? titleMatch, limit: 500)
         author = Self.clean(metadata["author"] ?? metadata["og:site_name"], limit: 200)
         let image = metadata["og:image:secure_url"] ?? metadata["og:image"] ?? metadata["twitter:image"]
@@ -412,6 +410,69 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     private static func replacing(_ pattern: String, in value: String, with replacement: String) -> String {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return value }
         return regex.stringByReplacingMatches(in: value, range: NSRange(value.startIndex..., in: value), withTemplate: replacement)
+    }
+    private static func sanitizeHTML(_ source: String) -> String {
+        var result = "", remaining = source[...]; var scanned = 0
+        while !remaining.isEmpty && scanned < source.count {
+            scanned += 1
+            guard remaining.first == "<" else {
+                result.append(remaining.removeFirst()); continue
+            }
+            let lower = String(remaining.prefix(512)).lowercased()
+            if lower.hasPrefix("<!--") {
+                guard let end = lower.range(of: "-->")?.upperBound else { break }
+                let offset = String(lower[..<end]).count
+                let next = remaining.index(remaining.startIndex, offsetBy: min(offset, remaining.count))
+                remaining = remaining[next...]; continue
+            }
+            if lower.hasPrefix("<script") || lower.hasPrefix("<style") {
+                guard let openingRelative = lower.firstIndex(of: ">") else { break }
+                let openingOffset = String(lower[..<openingRelative]).count
+                let consumed = remaining.index(remaining.startIndex, offsetBy: min(openingOffset, remaining.count))
+                if remaining[consumed...].first == ">" {
+                    remaining = remaining[remaining.index(after: consumed)...]
+                } else {
+                    remaining = remaining[consumed...]
+                }
+                let tag = lower.hasPrefix("<script") ? "</script" : "</style"
+                let closeText = String(remaining.prefix(min(remaining.count, 262144))).lowercased()
+                guard let close = closeText.range(of: tag)?.lowerBound else { break }
+                let closeOffset = String(closeText[..<close]).count
+                let closeStart = remaining.index(remaining.startIndex, offsetBy: closeOffset)
+                remaining = remaining[closeStart...]
+                if let closeEnd = remaining.prefix(512).firstIndex(of: ">") { remaining = remaining[remaining.index(after: closeEnd)...] }
+                continue
+            }
+            result.append(remaining.removeFirst())
+        }
+        return result
+    }
+    private static func title(in html: String) -> String? {
+        var from = html.startIndex
+        while let found = html.range(of: "<title", options: .caseInsensitive, range: from..<html.endIndex) {
+            let after = found.upperBound
+            let valid = after == html.endIndex || html[after].isWhitespace || html[after] == ">" || html[after] == "/"
+            if !valid { from = html.index(after, offsetBy: 1, limitedBy: html.endIndex) ?? html.endIndex; continue }
+            let openingLimit = html.index(after, offsetBy: 4096, limitedBy: html.endIndex) ?? html.endIndex
+            guard let opening = html[after..<openingLimit].firstIndex(of: ">") else { return nil }
+            let contentStart = html.index(after: opening)
+            guard let closing = html.range(of: "</title", options: .caseInsensitive, range: contentStart..<html.endIndex)?.lowerBound,
+                  html.distance(from: contentStart, to: closing) <= 8192,
+                  html[closing...].prefix(4096).firstIndex(of: ">") != nil else { return nil }
+            let closeRangeStart = closing
+            return String(html[contentStart..<closeRangeStart])
+        }
+        return nil
+    }
+    private static func stripTags(_ value: String) -> String {
+        var result = "", remaining = value[..<value.endIndex], output = 0
+        while !remaining.isEmpty && output < 8192 {
+            guard let opening = remaining.firstIndex(of: "<") else { result.append(contentsOf: remaining.prefix(8192-output)); break }
+            result.append(contentsOf: remaining[..<opening].prefix(8192-output))
+            guard let close = remaining[opening...].firstIndex(of: ">") else { break }
+            remaining = remaining[remaining.index(after: close)...]; output = result.count
+        }
+        return result
     }
     private static func clean(_ value: String?, limit: Int) -> String? {
         guard let value else { return nil }

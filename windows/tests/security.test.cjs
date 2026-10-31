@@ -50,6 +50,12 @@ test('metadata titles decode numeric references and collapse layout whitespace',
  assert.equal((await linkMetadata('https://example.com',page('<meta property="og:title" content="It&rsquo;s &copy; &unknown; &UUML;">'))).title,'It’s © &unknown; &UUML;');
  assert.equal((await linkMetadata('https://example.com',page('<title>  </title>'))).title,'example.com');
 });
+test('metadata title parsing is bounded against unmatched and nested markup',async()=>{
+ const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'});
+ const hostile='<'.repeat(100000)+'<title>Unclosed';
+ assert.equal((await linkMetadata('https://example.com',page(hostile))).title,'example.com');
+ assert.equal((await linkMetadata('https://example.com',page('<title>Safe <b>nested</b> &amp; text</title><p>'+'.'.repeat(100000)))).title,'Safe nested & text');
+});
 
 test('YouTube Music links use oEmbed through the canonical host',async()=>{
  let requested='';
