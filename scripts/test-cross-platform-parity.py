@@ -119,6 +119,20 @@ class CrossPlatformParityTests(unittest.TestCase):
         self.reports['macos']['observations'][0]['actual']['focused'] = 'not-an-item'
         self.rejected()
 
+    def observation(self, platform, action):
+        scenario = next(item['id'] for item in self.contract['scenarios'] if any(step['action'] == action for step in item['steps']))
+        index = next(i for i, step in enumerate(next(item for item in self.contract['scenarios'] if item['id'] == scenario)['steps']) if step['action'] == action)
+        return next(item for item in self.reports[platform]['observations'] if (item['scenarioId'], item['step']) == (scenario, index))
+
+    def test_command_that_acted_on_an_empty_shelf_is_rejected(self):
+        self.assertEqual(self.observation('windows', 'command')['actual']['effects'], [])
+        self.observation('windows', 'command')['actual']['effects'] = ['copy']
+        self.rejected()
+
+    def test_command_observation_without_effects_is_rejected(self):
+        del self.observation('macos', 'command')['actual']['effects']
+        self.rejected()
+
     def test_missing_snapshot_field_is_rejected(self):
         del self.reports['macos']['observations'][0]['actual']['searchEditing']
         self.rejected()
@@ -136,6 +150,16 @@ class CrossPlatformParityTests(unittest.TestCase):
         del self.contract['policy']['nativeExceptions'][0]['reason']
         self.contract_path.write_text(json.dumps(self.contract))
         self.rejected()
+
+    def test_shared_behavior_requires_both_platforms(self):
+        original = copy.deepcopy(self.contract)
+        self.assertIn('localized-notices', {item['id'] for item in original['policy']['sharedBehaviors']})
+        for mutate in [lambda behaviors: behaviors[0].pop('windows'), lambda behaviors: behaviors[0].update(macos=' '),
+                       lambda behaviors: behaviors.append(copy.deepcopy(behaviors[0])), lambda behaviors: behaviors[0].update(extra='x')]:
+            self.contract = copy.deepcopy(original); mutate(self.contract['policy']['sharedBehaviors'])
+            self.contract_path.write_text(json.dumps(self.contract)); self.rejected()
+        self.contract = copy.deepcopy(original); del self.contract['policy']['sharedBehaviors']
+        self.contract_path.write_text(json.dumps(self.contract)); self.rejected()
 
     def test_duplicate_scenario_or_item_alias_is_rejected(self):
         original = copy.deepcopy(self.contract)

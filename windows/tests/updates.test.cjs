@@ -31,3 +31,14 @@ test('installer timeout remains retryable without bypassing signature or integri
   await assert.rejects(s.updates.download(),/timed out/);assert.equal(s.updates.state.status,'available');assert.equal(s.updates.installer,null);
   s.updates.fetcher=async()=>({bytes:s.f.bytes});const file=await s.updates.download();assert.deepEqual(fs.readFileSync(file),s.f.bytes);assert.equal(s.updates.state.status,'ready');
 });
+
+
+test('automatic retry cooldown starts when a slow failed update check ends',async t=>{
+ const s=setup(t),scheduler=new AutomaticUpdateScheduler(s.updates,{clock:s.options.clock});
+ s.updates.fetcher=async()=>{s.calls.push('slow-offline');s.time(1_600_000);throw new Error('timed out');};
+ await scheduler.tick();
+ assert.equal(s.updates.state.lastAttemptAt,1_600_000);
+ s.updates.fetcher=async()=>{s.calls.push('retry');return{bytes:s.f.envelope(s.f.manifest)};};
+ s.time(1_899_999);await scheduler.tick();assert.deepEqual(s.calls,['slow-offline']);
+ s.time(1_900_000);await scheduler.tick();assert.deepEqual(s.calls,['slow-offline','retry']);
+});

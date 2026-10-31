@@ -131,6 +131,21 @@ import XCTest
         XCTAssertFalse(try command(.menu(.newNote), context: context, bindings: bindings).isEnabled)
     }
 
+    func testCopyStaysAvailableForTrashedItemsWhileEditingActionsDoNot() throws {
+        let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
+        let bindings = KeyboardBindings(defaults: fixture.defaults)
+        var context = ActionBarCatalog.Context()
+        context.origin = .library; context.libraryScope = .trash; context.isDeleted = true
+        context.selectedCount = 1; context.kind = .text; context.hasItems = true
+        let copy = try command(.keyboard(.copy), context: context, bindings: bindings)
+        XCTAssertTrue(copy.isEnabled); XCTAssertEqual(copy.disabledReason, "")
+        for action in [KeyboardAction.paste, .preview, .pin, .tag] {
+            XCTAssertFalse(try command(.keyboard(action), context: context, bindings: bindings).isEnabled)
+        }
+        context.selectedCount = 0
+        XCTAssertFalse(try command(.keyboard(.copy), context: context, bindings: bindings).isEnabled)
+    }
+
     func testCatalogFolderTagCommandsUseStableIDsAndCurrentScope() throws {
         let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
         let bindings = KeyboardBindings(defaults: fixture.defaults)

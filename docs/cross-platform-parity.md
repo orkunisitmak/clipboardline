@@ -29,14 +29,49 @@ versioned behavioral specification. Its synthetic items use portable aliases and
 are listed newest first. Every step contains an expected active row, focused
 item, complete selection, visible rows and native search-editing state.
 
-The current eleven scenarios (62 observations per platform) cover one selected image on opening, reopening,
+The current fourteen scenarios (86 observations per platform) cover one selected image on opening, reopening,
 hidden/empty/filtered image fallback, column-preserving vertical navigation and
 clamping, hidden/empty row skipping, horizontal navigation, adding and hiding
-rows, search caret keys, empty shelves, remapping, disabling and restoring defaults.
+rows, search caret keys, empty shelves, remapping, disabling and restoring defaults,
+and Enter, S, P, Space and Ctrl/Command+C doing nothing on an empty active shelf
+while other shelves hold items (`command` steps also observe their `effects`:
+any copy, preview, pin or take down; the expected list is empty).
 A future user-visible change must add
 or amend the relevant scenarios and both adapters in the same change. Extend the
 contract's scope as the product grows; passing the current shelf scenarios is not
 a claim that every feature has cross-platform coverage.
+
+`policy.sharedBehaviors` records shared user-visible behavior outside shelf
+navigation, with how macOS and Windows each implement it; the checker rejects an
+entry missing either platform. `localized-notices` requires notices and the
+shortcut-conflict message to follow the selected language, including refilled
+templates such as `Exported %d · failed %d`. Its Windows evidence is the
+renderer test that runs the shipped export through the Export shortcut.
+`localized-selection-count` requires the Library footer and the multi-selection
+details panel to show the count with the localized `%d selected` entry. The
+Windows folder picker uses the same entry; the macOS folder picker keeps its own
+`Pin %d items to a folder` heading.
+`link-title-charset` requires a fetched page title to be decoded with the page's
+declared character set (byte-order mark, `Content-Type`, XHTML declaration, early
+`<meta charset>`), falling back to windows-1252, so windows-1254 pages show their
+Turkish letters.
+`mixed-selection-pin` requires Pin on a
+selection of pinned and unpinned items to pin all of them, and to unpin only
+when every selected item is already pinned; the Library keyboard contract executes
+this on both platforms with an image, a text and a link selected.
+`subfolder-title` requires the Library title of a subfolder to list every
+ancestor, outermost first (`Parent / Child`, `Parent / Middle / Child`), so
+same-named subfolders of different parents can be told apart.
+`trash-restore-selection` requires restoring items from Library Trash to move
+focus and selection to the first item that remains in Trash and to clear the
+details panel when none remain.
+`trash-copy` requires the Copy action to stay enabled for an item in Library
+Trash, as the copy shortcut already works there, while editing actions wait for
+Restore.
+`item-name-trimming` requires an item name to be used without surrounding
+whitespace and a whitespace-only name to count as no name.
+`folder-removal-view` requires removing a folder to return the Library to My
+library only when the open view is that folder or one of its subfolders.
 
 The adapters execute application behavior:
 
@@ -130,7 +165,7 @@ with that exact counterpart; both feeds must say 1.7.6 before Latest promotion.
 
 Mac build78 and Windows build71 implement the same Library keyboard workflow.
 See [the bilingual guide](library-keyboard.md). The additive
-`contracts/library-keyboard.json` specifies 10 scenarios / 87 observations through the
+`contracts/library-keyboard.json` specifies 11 scenarios / 92 observations through the
 shipping Mac Model/Store and Windows renderer/Store. This contract proves state,
 not physical focus; native Mac focus/workflow tests, Cua acceptance and Windows
 source/packaged/installed keyboard journeys separately verify controls, panes,

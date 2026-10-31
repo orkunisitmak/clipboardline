@@ -93,7 +93,7 @@ class Updates {
         this.set({status:this.manifest?(this.installer?'ready':'available'):'current',version:manifest.version,message:this.manifest?`ClipBoardLine ${manifest.version} is available.`:'You are up to date.',checkedAt:this.clock(),error:null});
         this.saveQuietly();this.announce();
       } catch (error) {
-        this.set({status:this.manifest?(this.installer?'ready':'available'):'error',error:String(error.message).slice(0,300),message:'Update check failed: '+String(error.message).slice(0,300)});
+        this.set({status:this.manifest?(this.installer?'ready':'available'):'error',error:String(error.message).slice(0,300),message:'Update check failed: '+String(error.message).slice(0,300),lastAttemptAt:this.clock()});
       }return this.state;
     });
     this.checkPromise=operation;operation.finally(()=>{if(this.checkPromise===operation)this.checkPromise=null;});return operation;

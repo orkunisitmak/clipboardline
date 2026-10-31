@@ -104,9 +104,18 @@ import Combine
         switch query.scope {
         case .saved: L("My library"); case .favorites: L("Favorites"); case .unorganized: L("Unorganized")
         case .recent, .shelf: L("Recent copies"); case .trash: L("Trash")
-        case let .collection(id): collections.first { $0.id == id }?.name ?? L("Folder")
+        case let .collection(id): folderPath(id) ?? L("Folder")
         case let .tag(id): "#" + (tags.first { $0.id == id }?.name ?? L("Tag"))
         }
+    }
+    /// A subfolder reads "Parent / Middle / Child" (the whole parent chain, cycle-safe), as on Windows.
+    private func folderPath(_ id: UUID) -> String? {
+        guard collections.contains(where: { $0.id == id }) else { return nil }
+        var names: [String] = [], visited = Set<UUID>(), next: UUID? = id
+        while let current = next, visited.insert(current).inserted, let folder = collections.first(where: { $0.id == current }) {
+            names.insert(folder.name, at: 0); next = folder.parentID
+        }
+        return names.joined(separator: " / ")
     }
     func clearNotice() { notice = nil; store.notice = nil }
     func report(_ message: String) { notice = message }
@@ -240,6 +249,9 @@ import Combine
             let folders = try store.collections(), labels = try store.tags()
             if collections != folders { collections = folders }
             if tags != labels { tags = labels }
+            // A removed tag would stay as a filter with no chip, hiding every item.
+            let live = Set(labels.map(\.id))
+            if !query.tagIDs.isSubset(of: live) { query.tagIDs.formIntersection(live) }
         } catch { notice = error.localizedDescription }
         store.resolveImageSearch(query) { [weak self] resolved in
           guard let self, generation == self.queryGeneration else { return }
@@ -394,13 +406,28 @@ import Combine
             if !loading { finishKeyboardSelection() }
         } catch { report(error.localizedDescription) }
     }
-    func restore() { perform { try store.restore(actionIDs) } }
+    func restore() {
+        let targets = actionIDs
+        guard !targets.isEmpty else { return }
+        // The restored items leave Trash: select the first one that remains, as Windows does.
+        if query.scope == .trash { pendingKeyboardSelection = (nil, query) }
+        do { try store.restore(targets) }
+        catch { pendingKeyboardSelection = nil; report(error.localizedDescription) }
+    }
     func assign(_ folder: UUID, moving: Bool = false) {
         guard flushEdits() else { return }
         var source: UUID?; if moving, case let .collection(id) = query.scope { source = id }
         perform { try store.assign(actionIDs, to: folder, movingFrom: source) }
     }
     func addTag(_ name: String) { guard flushEdits() else { return }; perform { try store.addTag(name, to: actionIDs) } }
+    /// Remove a folder with its subfolders. Only a view of that subtree falls back to My library, as on Windows.
+    func removeFolder(_ id: UUID) {
+        guard flushEdits() else { return }
+        let removed = Set(((try? store.collections()) ?? collections).filter { $0.id == id || $0.parentID == id }.map(\.id))
+        var done = false
+        perform { try store.removeCollection(id); done = true }
+        if done, case let .collection(current) = query.scope, removed.contains(current) { changeScope(.saved) }
+    }
     func unassign(_ folder: UUID) { guard flushEdits(), let id = inspected?.id else { return }; perform { try store.unassign(id, from: folder) } }
     func removeTag(_ tag: UUID) { guard flushEdits(), let id = inspected?.id else { return }; perform { try store.removeTag(tag, from: id) } }
     func open() { guard let id = focusedID, let record = try? store.item(id), let url = record.linkURL ?? record.fileURL else { return }; NSWorkspace.shared.open(url) }

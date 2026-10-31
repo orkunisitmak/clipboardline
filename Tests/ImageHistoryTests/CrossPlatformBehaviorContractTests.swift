@@ -19,8 +19,8 @@ import XCTest
         switch kind { case "image": return .images; case "text": return .texts; case "link": return .links
         default: throw CocoaError(.coderReadCorrupt) }
     }
-    private func key(_ code: UInt16, characters: String = "") throws -> NSEvent {
-        try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+    private func key(_ code: UInt16, characters: String = "", flags: NSEvent.ModifierFlags = []) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
             windowNumber: 0, context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
     }
     private func revision() throws -> String {
@@ -68,15 +68,20 @@ import XCTest
                 }
                 aliases[record.id] = alias; fixture.date += 1
             }
+            var effects = [String]()
             let line = Line(defaults: fixture.defaults, inbox: fixture.inbox, now: { fixture.date }, breeze: false,
-                copyImage: { _ in }, copyText: { _ in }, library: store)
+                copyImage: { _ in effects.append("copy") }, copyText: { _ in effects.append("copy") }, library: store)
             let visible = try required(scenario["visibleKinds"], [String].self).map { try shelf($0) }
             line.setPresentation(try XCTUnwrap(ShelfPresentation.containing(Set(visible))), requestFocus: false)
             for kind in try required(scenario["pinnedOnlyKinds"], [String].self) {
                 switch try shelf(kind) { case .images: line.setFavoritesOnly(true); case .texts: line.texts.setFavoritesOnly(true); case .links: line.links.setFavoritesOnly(true) }
             }
-            let keyboard = LineKeyboard(line: line, onCopy: { _ in }, onPreview: { _ in }, onClose: {})
+            let keyboard = LineKeyboard(line: line, onCopy: { _ in effects.append("copy") }, onPreview: { _ in effects.append("preview") },
+                onClose: {}, onTextCopy: { _ in effects.append("copy") }, onTextPreview: { _ in effects.append("preview") },
+                onLinkPreview: { _ in effects.append("preview") })
             for (index, step) in try required(scenario["steps"], [[String: Any]].self).enumerated() {
+                // Library writes (pin, take down) and image-row changes count as effects too.
+                effects.removeAll(); let revisionBefore = store.revision, imagesBefore = line.items.map { "\($0.id)-\($0.pinned)" }
                 switch try required(step["action"], String.self) {
                 case "open": line.revealed = true
                 case "close": line.revealed = false
@@ -96,6 +101,18 @@ import XCTest
                 case "left": _ = keyboard.handle(try key(123))
                 case "right": _ = keyboard.handle(try key(124))
                 case "toggle": _ = line.toggleShelf(try shelf(try required(step["kind"], String.self)))
+                case "switchShelf": _ = keyboard.handle(try key(48))
+                case "command":
+                    let event: NSEvent
+                    switch try required(step["code"], String.self) {
+                    case "Enter": event = try key(36)
+                    case "KeyS": event = try key(1, characters: "s")
+                    case "KeyP": event = try key(35, characters: "p")
+                    case "Space": event = try key(49)
+                    case "KeyC": event = try key(8, characters: "c", flags: .command)
+                    default: throw CocoaError(.coderReadCorrupt)
+                    }
+                    _ = keyboard.handle(event)
                 case "openSearch": line.beginShelfSearch()
                 case "finishSearch":
                     line.finishShelfSearchEditing(line.activeShelf)
@@ -103,7 +120,13 @@ import XCTest
                     while line.shelfSearchIsSearching, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.005)) }
                 default: throw CocoaError(.coderReadCorrupt)
                 }
-                let actual = snapshot(line, aliases: aliases), expected = try required(step["expect"], [String: Any].self)
+                var actual = snapshot(line, aliases: aliases)
+                let expected = try required(step["expect"], [String: Any].self)
+                if step["action"] as? String == "command" {
+                    if store.revision != revisionBefore { effects.append("library") }
+                    if line.items.map({ "\($0.id)-\($0.pinned)" }) != imagesBefore { effects.append("images") }
+                    actual["effects"] = effects.sorted()
+                }
                 observations.append(["scenarioId": id, "step": index, "actual": actual])
                 let matches = NSDictionary(dictionary: actual).isEqual(to: expected)
                 if !matches { errors.append("\(id):\(index)") }

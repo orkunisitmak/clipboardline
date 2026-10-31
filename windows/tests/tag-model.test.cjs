@@ -29,3 +29,12 @@ test('global tag changes reject missing names, controls, overlong names and fold
 test('failed global tag persistence restores every affected membership and keeps disk intact',()=>fixture(store=>{
  const first=store.insert('text','One'),second=store.insert('text','Two');store.modify('tag',{ids:[first.id,second.id],tags:['shared']});const before=structuredClone(store.data),bytes=fs.readFileSync(store.file);store.persist=()=>{throw new Error('Synthetic save failure');};for(const action of ['renameTag','deleteTag']){assert.throws(()=>store.modify(action,{tag:'shared',name:'Renamed'}),/Synthetic save failure/);assert.deepEqual(store.data,before);assert.deepEqual(fs.readFileSync(store.file),bytes);}
 }));
+
+test('adding a tag reuses the existing spelling and drops surrounding # like macOS addTag',()=>fixture(store=>{
+ const first=store.insert('text','First'),second=store.insert('text','Second'),third=store.insert('text','Third');
+ store.modify('tag',{id:first.id,tags:['#Work# ']});assert.deepEqual(store.item(first.id).tags,['Work']);
+ store.modify('tag',{id:second.id,tags:['work']});assert.deepEqual(store.item(second.id).tags,['Work']);
+ store.modify('tag',{ids:[third.id],tags:['WORK','ＷＯＲＫ','#résumé','Resume','##']});assert.deepEqual(store.item(third.id).tags,['Work','résumé']);
+ store.modify('tag',{id:third.id,tags:['Work','résumé','new']});assert.deepEqual(store.item(third.id).tags,['Work','résumé','new']);
+ assert.throws(()=>store.modify('tag',{id:third.id,tags:['#'+'x'.repeat(65)]}),/Invalid tag name/);
+}));

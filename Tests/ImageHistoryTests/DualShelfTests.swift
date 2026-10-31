@@ -58,6 +58,21 @@ final class DualShelfTests: HistoryTestCase {
             XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: f.folder.appendingPathComponent(".test-trash").path).count, 5)
         }
     }
+    @MainActor func testPinKeyOnAMixedShelfSelectionPinsEveryItemAndOnlyAFullyPinnedSelectionUnpins() throws {
+        try fixture { f in
+            let line = f.line()
+            for i in 0..<3 { line.texts.add("Synthetic \(i)") }
+            let image = try XCTUnwrap(line.hang(try f.image(), quietly: true)); _ = line.hang(try f.image(), quietly: true)
+            line.texts.togglePin(line.texts.entries[0].id); try line.togglePin(image)
+            let keyboard = LineKeyboard(line: line, onCopy: { _ in }, onPreview: { _ in }, onClose: {})
+            line.selectAll(); _ = keyboard.handle(key(35, text: "p"))
+            XCTAssertEqual(line.items.map(\.pinned), [true, true])
+            line.setPresentation(.texts, requestFocus: false); line.texts.selectAll(); _ = keyboard.handle(key(35, text: "p"))
+            XCTAssertEqual(line.texts.entries.map(\.pinned), [true, true, true])
+            _ = keyboard.handle(key(35, text: "p"))
+            XCTAssertEqual(line.texts.entries.map(\.pinned), [false, false, false])
+        }
+    }
     @MainActor func testDeselectingFocusedItemStillCopiesOnlyRemainingSelection() throws {
         try fixture { f in
             var copies: [URL] = []; var text = ""

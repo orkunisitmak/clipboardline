@@ -185,7 +185,7 @@ struct Shortcut: Equatable {
         if modifiers.contains(.option) { text += "⌥" }
         if modifiers.contains(.shift) { text += "⇧" }
         if modifiers.contains(.command) { text += "⌘" }
-        return text + (key == " " ? L("Space") : key.uppercased())
+        return text + (key == " " ? L("Space") : UInt16(exactly: keyCode).flatMap { KeyShortcut.keyNames[$0] } ?? key.uppercased())
     }
 }
 

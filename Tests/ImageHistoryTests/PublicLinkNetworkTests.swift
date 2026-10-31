@@ -78,6 +78,37 @@ import XCTest
         XCTAssertThrowsError(try parser.append(Data(repeating: 65, count: 32_769)))
     }
 
+    func testHTMLDecodesCommonNamedEntitiesInTitles() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let parsed = try PublicLinkHTMLMetadata(data: Data("<title>G&uuml;nl&uuml;k &mdash; &Ccedil;i&ccedil;ek &unknown;</title>".utf8), url: url)
+        XCTAssertEqual(parsed.title, "Günlük — Çiçek &unknown;")
+    }
+
+    func testHTMLHonorsDeclaredMetaCharsetAndFallsBackToWindows1252() throws {
+        let url = URL(string: "https://public.example.org/page")!, title = "Çiğdem Şişli İstanbul ıüö"
+        func page(_ html: String, _ encoding: String.Encoding, type: String = "text/html") throws -> PublicLinkHTMLMetadata {
+            try PublicLinkHTMLMetadata(data: try XCTUnwrap(html.data(using: encoding)), url: url, contentType: type)
+        }
+        XCTAssertEqual(try page("<title>\(title)</title>", .windowsCP1254, type: "text/html; charset=windows-1254").title, title)
+        // The header wins over markup, an unknown header label falls through, and a UTF-8 BOM wins over a Latin-1 header.
+        XCTAssertEqual(try page("<meta charset=\"utf-8\"><title>\(title)</title>", .windowsCP1254, type: "text/html; charset=iso-8859-9").title, title)
+        XCTAssertEqual(try page("<meta charset=\"windows-1254\"><title>\(title)</title>", .windowsCP1254, type: "text/html; charset=bogus").title, title)
+        XCTAssertEqual(try page("<title>\(title)</title>", .utf8, type: "text/html; x-charset=windows-1254; charset=utf-8").title, title)
+        XCTAssertEqual(try page("\u{FEFF}<title>\(title)</title>", .utf8, type: "text/html; charset=iso-8859-1").title, title)
+        // An XML declaration counts for XHTML only.
+        XCTAssertEqual(try page("<?xml version=\"1.0\" encoding=\"windows-1254\"?><title>\(title)</title>", .utf8).title, title)
+        XCTAssertEqual(try page("<?xml version=\"1.0\" encoding=\"windows-1254\"?><html><head><title>\(title)</title>", .windowsCP1254, type: "application/xhtml+xml").title, title)
+        XCTAssertEqual(try page("<html><head><meta charset=\"ISO-8859-9\"><title>\(title)</title>", .windowsCP1254).title, title)
+        XCTAssertEqual(try page("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=windows-1254\"><meta property=\"og:title\" content=\"\(title)\">", .windowsCP1254).title, title)
+        // An unknown label falls through to the next declaration; a UTF-16 label in markup means UTF-8.
+        XCTAssertEqual(try page("<meta charset=\"bogus\"><meta charset=\"windows-1254\"><title>\(title)</title>", .windowsCP1254).title, title)
+        XCTAssertEqual(try page("<meta charset=\"utf-16\"><title>\(title)</title>", .utf8).title, title)
+        XCTAssertEqual(try page("<meta name=\"description\" data-charset=\"windows-1254\"><meta charset=\"utf-8\"><title>\(title)</title>", .utf8).title, title)
+        // Undeclared bytes that are not UTF-8 are windows-1252 like Windows, so 0x92 is a curly apostrophe, not a stripped control.
+        XCTAssertEqual(try page("<title>Café ’s</title>", .windowsCP1252).title, "Café ’s")
+        XCTAssertEqual(try page("<title>\(title)</title>", .utf8).title, title)
+    }
+
     func testHTMLExtractsBoundedTextAndOneSafeThumbnailWithoutExecutingOrFollowingOtherResources() throws {
         let url = URL(string: "https://public.example.org/page")!
         let html = #"<html><!--<meta property='og:title' content='comment'>--><script><meta property='og:title' content='script'>fetch('http://localhost')</script><title>fallback</title><meta content='A &amp; B &#x1F30D;' property='og:title'><meta name=author content='Writer'><meta property='og:image' content='/cover.png'><img src='http://localhost/tracking'><iframe src='http://localhost'></iframe></html>"#

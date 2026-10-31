@@ -20,6 +20,8 @@ struct KeyShortcut: Codable, Equatable {
         KeyShortcut(keyCode: kVK_ANSI_C, modifiers: controlKey | optionKey, keyLabel: "C"),
         KeyShortcut(keyCode: kVK_ANSI_C, modifiers: controlKey | shiftKey, keyLabel: "C")
     ]
+    /// Names for keys whose typed character is blank, a control code or a private-use glyph.
+    static let keyNames: [UInt16: String] = [123: "←", 124: "→", 125: "↓", 126: "↑", 36: "↩", 76: "↩", 49: "Space", 51: "⌫", 117: "⌦", 53: "Esc", 48: "Tab", 115: "Home", 119: "End", 116: "Page ↑", 121: "Page ↓", 122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6", 98: "F7", 100: "F8", 101: "F9", 109: "F10", 103: "F11", 111: "F12"]
     static func capture(_ event: NSEvent, allowPlain: Bool = false) -> KeyShortcut? {
         let flags = event.modifierFlags
         var modifiers = 0
@@ -27,8 +29,7 @@ struct KeyShortcut: Codable, Equatable {
         if flags.contains(.option) { modifiers |= optionKey }
         if flags.contains(.shift) { modifiers |= shiftKey }
         if flags.contains(.command) { modifiers |= cmdKey }
-        let labels: [UInt16: String] = [123: "←", 124: "→", 125: "↓", 126: "↑", 36: "↩", 76: "↩", 49: "Space", 51: "⌫", 117: "⌦", 53: "Esc", 48: "Tab", 115: "Home", 119: "End", 116: "Page ↑", 121: "Page ↓", 122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6", 98: "F7", 100: "F8", 101: "F9", 109: "F10", 103: "F11", 111: "F12"]
-        let label = labels[event.keyCode] ?? event.charactersIgnoringModifiers?.uppercased() ?? ""
+        let label = Self.keyNames[event.keyCode] ?? event.charactersIgnoringModifiers?.uppercased() ?? ""
         let shortcut = KeyShortcut(keyCode: Int(event.keyCode), modifiers: modifiers, keyLabel: label)
         return (allowPlain ? shortcut.isValidLocal : shortcut.isValid) ? shortcut : nil
     }

@@ -5,6 +5,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');const path=require('node:path');const os=require('node:os');const crypto=require('node:crypto');const {spawn}=require('node:child_process');
 const {_electron:electron}=require('playwright');
 const {windowsEnvironment}=require('../lib/windows-environment.cjs');
+const {readJsonRetry}=require('./read-json-retry.cjs');
 const appIconAcceptance=require('./app-icon-acceptance.cjs');
 const statusTrayAcceptance=require('./status-tray-acceptance.cjs');
 const shelfPerformanceAcceptance=require('./shelf-performance-acceptance.cjs');
@@ -157,6 +158,7 @@ async function main(){
   await shortcutParity({page,application,check,until,output});
   await libraryPreview({page,application,check,until,output,waitForCropBox});
   await libraryKeyboardAcceptance({page,application,check,until,output});
+  await require('./settings-toggle-focus-acceptance.cjs')({page,until,check});
   await textPreview({page,application,check,until,output});
   await scrollStateAcceptance({page,application,check,until,output});
   await libraryFolderDrag({page,application,check,until,output});
@@ -169,7 +171,7 @@ async function main(){
   await page.evaluate(()=>window.clipboardLine.command('hide'));
   const fixtureOutput=path.join(data,'native-target.json');const ps=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
   fixture=spawn(ps,['-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',path.resolve('tests/native-fixture.ps1'),'-Output',fixtureOutput],{windowsHide:false,stdio:'ignore',env:windowsEnvironment()});
-  const fixtureState=()=>JSON.parse(fs.readFileSync(fixtureOutput,'utf8'));
+  const fixtureState=()=>readJsonRetry(fixtureOutput);
   const fixtureCommand=async payload=>{const serial=crypto.randomUUID(),file=fixtureOutput+'.commands';fs.writeFileSync(file+'.tmp',JSON.stringify({...payload,serial}));for(let attempt=0;;attempt++){try{fs.renameSync(file+'.tmp',file);break;}catch(error){if(!['EPERM','EACCES','EBUSY'].includes(error.code)||attempt>=20)throw error;await new Promise(resolve=>setTimeout(resolve,25));}}const result=await until(fixtureState,value=>value.lastSerial===serial);assert.equal(result.commandError,'',result.commandError);return result;};
   await until(fixtureState,s=>s.ready);
   await application.evaluate(()=>global.__clipboardLineTest.command('show'));
@@ -330,7 +332,7 @@ async function main(){
   await page.evaluate(()=>window.clipboardLine.command('hide'));await fixtureCommand({action:'focus',target:'plain'});await application.evaluate(()=>global.__clipboardLineTest.command('show'));
   const protectedTarget=await application.evaluate(()=>global.__clipboardLineTest.getTarget()),otherOutput=path.join(data,'unrelated-target.json');
   otherFixture=spawn(ps,['-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',path.resolve('tests/native-fixture.ps1'),'-Output',otherOutput],{windowsHide:false,stdio:'ignore',env:windowsEnvironment()});
-  const otherState=()=>JSON.parse(fs.readFileSync(otherOutput,'utf8'));await until(otherState,value=>value.ready&&value.foreground===value.handle);
+  const otherState=()=>readJsonRetry(otherOutput);await until(otherState,value=>value.ready&&value.foreground===value.handle);
   const unrelated=await application.evaluate(async(_electron,target)=>{try{await global.__clipboardLineTest.native.preparePaste(target);return{ok:true};}catch(error){return{error:error.message};}},protectedTarget);
   assert.match(unrelated.error||'',/Another (?:application|window)/);const unrelatedAfter=otherState();assert.equal(unrelatedAfter.foreground,unrelatedAfter.handle);assert.equal(unrelatedAfter.text,'');
   const otherExited=new Promise(resolve=>otherFixture.once('exit',resolve));otherFixture.kill();await otherExited;otherFixture=null;

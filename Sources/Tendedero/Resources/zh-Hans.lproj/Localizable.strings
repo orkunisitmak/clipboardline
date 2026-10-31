@@ -354,6 +354,39 @@
 "Verifying update…" = "Verifying update…";
 "Version %@ is ready to install." = "Version %@ is ready to install.";
 "You are up to date." = "You are up to date.";
+"The update repository is invalid." = "更新仓库无效。";
+"The release contains an invalid download address." = "发布版本包含无效的下载地址。";
+"The update manifest is malformed." = "更新清单格式有误。";
+"The update manifest signature is invalid." = "更新清单的签名无效。";
+"The update manifest contains invalid release information." = "更新清单包含无效的发布信息。";
+"The update belongs to another repository." = "此更新属于另一个仓库。";
+"The update is not newer than the installed application." = "此更新不比已安装的应用新。";
+"The update archive exceeds the download limit." = "更新压缩包超出了下载大小限制。";
+"The update has no application information." = "更新中没有应用信息。";
+"The update belongs to another application." = "此更新属于另一个应用。";
+"The update executable is invalid." = "更新的可执行文件无效。";
+"The update staging directory is not private." = "更新的暂存文件夹不是私有的。";
+"The update is missing a supported architecture." = "更新缺少受支持的架构。";
+"The application signature is missing." = "缺少应用签名。";
+"The application signature is invalid." = "应用签名无效。";
+"The signing certificate could not be read." = "无法读取签名证书。";
+"An ad-hoc or unrelated application cannot install updates." = "临时签名或无关的应用无法安装更新。";
+"The application identity is missing." = "缺少应用身份信息。";
+"The application identity could not be read." = "无法读取应用身份信息。";
+"The application identity is empty." = "应用身份信息为空。";
+"The installed build is invalid." = "已安装的构建版本无效。";
+"The downloaded version does not match the release." = "下载的版本与发布版本不一致。";
+"This update needs a newer version of macOS." = "此更新需要较新版本的 macOS。";
+"The update changed the trusted application identity." = "此更新更改了受信任的应用身份。";
+"The update is not signed by the installed application's publisher." = "此更新不是由已安装应用的发布者签名的。";
+"The installed architectures have different signing identities." = "已安装的各架构的签名身份不一致。";
+"The update download is incomplete." = "更新下载不完整。";
+"The update download failed its integrity check." = "更新下载未通过完整性检查。";
+"The update staging directory is already in use." = "更新的暂存文件夹已被占用。";
+"The update archive could not be opened." = "无法打开更新压缩包。";
+"The installed application path is unsafe." = "已安装应用的路径不安全。";
+"Move the app to a writable Applications folder before updating." = "更新前，请先将应用移到可写入的“应用程序”文件夹。";
+"The update installer is missing." = "缺少更新安装程序。";
 
 /* Image markup additions. */
 "Annotation color" = "批注颜色";
@@ -496,3 +529,9 @@
 "Focus previous pane" = "聚焦上一个面板";
 
 "Undo Move to Trash" = "撤销移到废纸篓";
+
+/* Image markup errors. */
+"The image markup document is invalid." = "图像标记文档无效。";
+"This image could not be opened for markup." = "无法打开此图像进行标记。";
+"Markup supports images up to 80 megapixels." = "标记功能支持最高 8000 万像素的图像。";
+"The marked image could not be rendered." = "无法渲染已标记的图像。";

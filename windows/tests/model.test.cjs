@@ -1,16 +1,59 @@
 'use strict';
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const os=require('node:os');const path=require('node:path');
-const {Store,plainURL}=require('../lib/model.cjs');
+const {Store,plainURL,protectDirectory}=require('../lib/model.cjs');
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
 function fixture(fn){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-model-'));let now=1000;try{const store=new Store(dir,{clock:()=>now});return fn(store,value=>{now=value;},dir);}finally{fs.rmSync(dir,{recursive:true,force:true});}}
 test('exact recopy moves a text to front and preserves saved organization',()=>fixture((s,time)=>{const first=s.insert('text','API key exact value');s.modify('name',{id:first.id,name:'Service key'});const folder=s.modify('createFolder',{name:'Work'});s.modify('folder',{ids:[first.id],folderId:folder.id});s.modify('tag',{ids:[first.id],tags:['api']});time(2000);s.insert('text','something else');time(3000);const latest=s.insert('text','API key exact value');assert.equal(s.data.items.length,2);assert.equal(latest.id,first.id);assert.equal(latest.name,'Service key');assert.deepEqual(latest.folderIds,[folder.id]);assert.deepEqual(latest.tags,['api']);assert.equal(latest.createdAt,3000);assert.equal(s.data.items[0].id,first.id);}));
 test('dedup normalizes selection newlines while preserving spaces and case',()=>fixture(s=>{for(const value of ['foo','foo ','Foo','foo\n'])s.insert('text',value);assert.equal(s.data.items.length,3);assert.equal(s.data.items[0].text,'foo\n');}));
 test('URLs must be a sole public-protocol URL, normal prose stays text',()=>{assert.equal(plainURL('hello https://example.com'),null);assert.equal(plainURL('javascript:alert(1)'),null);assert.equal(plainURL('https://secret@example.com'),null);assert.equal(plainURL('https://example.com'), 'https://example.com/');});
+test('a URL copied with surrounding whitespace keeps its link identity like macOS',()=>{
+ assert.equal(plainURL('https://example.com/path\n'),'https://example.com/path');assert.equal(plainURL('  https://example.com \r\n'),'https://example.com/');
+ assert.equal(plainURL('https://example.com/a b'),null);assert.equal(plainURL(' \n '),null);
+ fixture(s=>{const link=s.insert('link','https://example.com/\n');assert.equal(link.url,'https://example.com/');assert.equal(s.insert('link','https://example.com/').id,link.id);});
+});
+test('sibling folder names are unique ignoring case and diacritics like macOS',()=>fixture(s=>{
+ const work=s.modify('createFolder',{name:'Work'});assert.throws(()=>s.modify('createFolder',{name:' wörk '}),/already exists/);
+ const child=s.modify('createFolder',{name:'Work',parentId:work.id});assert.equal(child.parentId,work.id);
+ const other=s.modify('createFolder',{name:'Personal'});assert.throws(()=>s.modify('renameFolder',{id:other.id,name:'WORK'}),/already exists/);assert.equal(s.data.folders.find(folder=>folder.id===other.id).name,'Personal');
+ s.modify('renameFolder',{id:work.id,name:'work'});assert.equal(s.data.folders.find(folder=>folder.id===work.id).name,'work');
+}));
+test('folder names share the macOS 64-grapheme and control-character rule',()=>fixture(s=>{
+ const limit='f'.repeat(64),flags='\u{1F1F9}\u{1F1F7}'.repeat(64),folder=s.modify('createFolder',{name:limit});assert.equal(folder.name,limit);
+ assert.equal(s.modify('createFolder',{name:flags}).name,flags);
+ for(const name of ['f'.repeat(65),'bad\u0007name','zero\u200Bwidth','a\u0000b'])assert.throws(()=>s.modify('createFolder',{name}),/Invalid (folder name|text)/);
+ const other=s.modify('createFolder',{name:'Other'});
+ for(const name of ['f'.repeat(65),'bad\u0007name','zero\u200Bwidth'])assert.throws(()=>s.modify('renameFolder',{id:other.id,name}),/Invalid folder name/);
+ assert.equal(s.data.folders.find(entry=>entry.id===other.id).name,'Other');assert.equal(s.data.folders.length,3);
+}));
 test('retention is per-kind; pinned/folder/tag records remain permanent',()=>fixture((s,time)=>{const text=s.insert('text','expiring text'),link=s.insert('link','https://example.com'),saved=s.insert('text','tagged');s.modify('tag',{ids:[saved.id],tags:['keep']});s.modify('setSettings',{patch:{retentionDays:{text:1,link:3,image:0}}});time(2*86400000);s.expire();assert.ok(text.trashedAt);assert.equal(link.trashedAt,null);assert.equal(saved.trashedAt,null);}));
 test('remove hides saved items, trashes temporary ones; undo preserves later edits',()=>fixture(s=>{const saved=s.insert('text','saved'),temp=s.insert('text','temporary');s.modify('pin',{ids:[saved.id]});s.modify('remove',{ids:[saved.id,temp.id]});assert.equal(saved.hiddenFromShelf,true);assert.ok(temp.trashedAt);s.modify('name',{id:saved.id,name:'Later name'});s.modify('undo');assert.equal(saved.hiddenFromShelf,false);assert.equal(temp.trashedAt,null);assert.equal(saved.name,'Later name');}));
 test('explicit Trash invalidates removal undo and deletion requires Trash',()=>fixture(s=>{const item=s.insert('text','text');assert.throws(()=>s.modify('delete',{ids:[item.id]}));s.modify('remove',{ids:[item.id]});s.modify('restore',{ids:[item.id]});assert.equal(s.undoStack.length,0);s.modify('trash',{ids:[item.id]});s.modify('delete',{ids:[item.id]});assert.equal(s.data.items.length,0);}));
 test('batch operations are atomic when one content kind is invalid',()=>fixture(s=>{const text=s.insert('text','before'),image=s.insert('image',png);assert.throws(()=>s.modify('editText',{ids:[text.id,image.id],text:'after'}));assert.equal(s.item(text.id).text,'before');}));
+test('a failed command rolls back in place so background jobs keep the item objects they hold',()=>fixture(s=>{
+ // OCR and link previews hold an item across awaits and discard their result unless store.data.items still includes it.
+ const text=s.insert('text','before'),image=s.insert('image',png),other=s.insert('text','other');
+ assert.throws(()=>s.modify('editText',{ids:[text.id,image.id],text:'after'}));
+ assert.throws(()=>s.modify('createFolder',{name:''}));
+ for(const held of [text,image,other])assert.ok(s.data.items.includes(held));
+ assert.equal(text.text,'before');assert.deepEqual(s.data.items.map(item=>item.id),[other.id,image.id,text.id]);
+ // A corrupt library can repeat an id; rolling back must keep both entries' own content.
+ const twin={...structuredClone(text),text:'twin'};s.data.items.push(twin);
+ assert.throws(()=>s.modify('createFolder',{name:''}));
+ assert.deepEqual(s.data.items.filter(item=>item.id===text.id).map(item=>item.text),['before','twin']);assert.ok(s.data.items.includes(text)&&s.data.items.includes(twin));
+}));
 test('safe JSON persistence reloads content and stores rollback copy',()=>fixture((s,_time,dir)=>{const item=s.insert('text','private locally saved');s.modify('pin',{ids:[item.id]});assert.equal(new Store(dir).item(item.id).pinned,true);assert.ok(fs.existsSync(path.join(dir,'library.json.backup')));if(process.platform!=='win32')assert.equal(fs.statSync(path.join(dir,'library.json')).mode&0o777,0o600);else{const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');const raw=require('node:child_process').execFileSync(powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'..','native','protect-directory.ps1'),'-Directory',dir,'-Check'],{windowsHide:true,encoding:'utf8',env:require('../lib/windows-environment.cjs').windowsEnvironment()});const acl=JSON.parse(raw);assert.equal(acl.protected,true);assert.ok(acl.principals.includes(acl.currentUser));assert.deepEqual([...new Set(acl.principals)].sort(),[acl.currentUser,'S-1-5-18','S-1-5-32-544'].sort());}}));
+test('added and renamed tags share the macOS 64-grapheme and control-character rule',()=>fixture(s=>{
+ const value=s.insert('text','tagged'),limit='t'.repeat(64),long='t'.repeat(65);
+ s.modify('tag',{ids:[value.id],tags:[limit]});assert.deepEqual(value.tags,[limit]);
+ assert.throws(()=>s.modify('tag',{ids:[value.id],tags:[limit,long]}),/Invalid tag name/);assert.deepEqual(s.item(value.id).tags,[limit]);
+ assert.throws(()=>s.modify('tag',{ids:[value.id],tags:[limit,'bad\u0007tag']}),/Invalid tag name/);
+ assert.throws(()=>s.modify('renameTag',{tag:limit,name:long}),/Invalid tag name/);
+ s.item(value.id).tags=[long];s.modify('tag',{ids:[value.id],tags:[long,'new']});assert.deepEqual(s.item(value.id).tags,[long,'new']);
+ const accented='e\u0301'.repeat(64),flags='\u{1F1F9}\u{1F1F7}'.repeat(64);s.modify('tag',{ids:[value.id],tags:[accented,flags]});assert.deepEqual(s.item(value.id).tags,[accented,flags]);
+ assert.throws(()=>s.modify('tag',{ids:[value.id],tags:[accented,flags,'e\u0301'.repeat(65)]}),/Invalid tag name/);
+ s.modify('renameTag',{tag:accented,name:'a\u0301'.repeat(64)});assert.deepEqual(s.item(value.id).tags,['a\u0301'.repeat(64),flags]);
+ for(const name of ['zero\u200Bwidth','soft\u00ADhyphen','family\u{1F468}\u200D\u{1F469}'])assert.throws(()=>s.modify('tag',{ids:[value.id],tags:[name]}),/Invalid tag name/);
+}));
 test('corrupt library is preserved rather than replaced',()=>fixture((s,_time,dir)=>{s.insert('text','important');fs.writeFileSync(s.file,'broken JSON');assert.throws(()=>new Store(dir),/Original data was preserved/);assert.equal(fs.readFileSync(s.file,'utf8'),'broken JSON');}));
 test('managed PNG storage is hashed, immutable, private and protocol-only in public state',()=>fixture(s=>{const item=s.insert('image',png);assert.equal(fs.readFileSync(s.mediaPath(item.id)).toString('hex'),png.toString('hex'));const before=item.imageFile;s.modify('saveImage',{id:item.id,dataUrl:'data:image/png;base64,'+png.toString('base64'),crop:{x:0,y:0,width:1,height:1},annotations:[{type:'marker',x:0,y:0}]});assert.equal(item.imageFile,before);const state=s.publicState().items[0];assert.equal(state.imageFile,undefined);assert.equal(state.mediaUrl,'appmedia://media/'+item.id+'?v='+state.mediaRevision);assert.throws(()=>s.mediaPath('../library.json'));}));
 test('oversize or invalid image and path traversal data are rejected',()=>fixture(s=>{assert.throws(()=>s.insert('image',Buffer.from('not png')));const item=s.insert('image',png);item.imageFile='../../library.json';assert.throws(()=>s.mediaPath(item.id));}));
@@ -54,6 +97,12 @@ test('backup cleanup failure is explicit and recoverable after the deletion comm
   assert.equal(JSON.parse(fs.readFileSync(s.file,'utf8')).pendingBackupRefresh,true);
   s.modify('cleanup');assert.equal(s.publicState().needsDeletionCleanup,false);assert.equal(s.privacyWarning,'');assert.equal(fs.existsSync(file),false);assert.equal(JSON.parse(fs.readFileSync(s.file+'.backup','utf8')).items.length,0);
 }));
+test('application data protection retries only a timed-out PowerShell start once',()=>{
+ const timeout=()=>Object.assign(new Error('spawnSync powershell.exe ETIMEDOUT'),{code:'ETIMEDOUT'}),options={powershell:'powershell.exe',script:'protect-directory.ps1'};
+ let calls=[];assert.equal(protectDirectory('C:\\data',{...options,run:(_file,args,settings)=>{calls.push(settings.timeout);if(calls.length===1)throw timeout();assert.deepEqual(args.slice(-2),['-Directory','C:\\data']);return 'ok';}}),'ok');assert.deepEqual(calls,[15000,45000]);
+ calls=[];assert.throws(()=>protectDirectory('C:\\data',{...options,run:(_file,_args,settings)=>{calls.push(settings.timeout);throw Object.assign(new Error('Access denied'),{status:1});}}),/Access denied/);assert.deepEqual(calls,[15000]);
+ calls=[];assert.throws(()=>protectDirectory('C:\\data',{...options,run:(_file,_args,settings)=>{calls.push(settings.timeout);throw timeout();}}),/ETIMEDOUT/);assert.deepEqual(calls,[15000,45000]);
+});
 test('image unlink failure remains pending and retries safely on next startup',()=>fixture((s,_time,dir)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('trash',{ids:[item.id]});const unlink=fs.unlinkSync;
   try{fs.unlinkSync=destination=>{if(destination===file)throw Object.assign(new Error('synthetic file in use'),{code:'EACCES'});return unlink(destination);};assert.throws(()=>s.modify('delete',{ids:[item.id]}),error=>error.committed&&/incomplete/.test(error.message));}finally{fs.unlinkSync=unlink;}
@@ -79,6 +128,10 @@ test('retaining and inspector details save without pinning and preserve content 
  assert.equal(item.pinned,false);assert.equal(item.retainedAt,1000);assert.equal(item.name,'Friendly name');assert.equal(item.note,'Searchable note');
  time(3000);assert.equal(s.insert('text','Exact value').id,item.id);assert.equal(item.note,'Searchable note');assert.equal(item.name,'Friendly name');assert.equal(item.retainedAt,1000);
  const image=s.insert('image',png);assert.throws(()=>s.modify('details',{ids:[item.id,image.id],name:'Must roll back',text:'Invalid mixed edit'}));assert.equal(s.item(item.id).name,'Friendly name');
+}));
+test('a blank or padded item name is trimmed so a blank one falls back to the content',()=>fixture(s=>{
+ const item=s.insert('text','Quarterly plan\nsecond line');s.modify('details',{id:item.id,name:'   '});assert.equal(item.name,'');
+ s.modify('details',{id:item.id,name:'  Padded name \t'});assert.equal(item.name,'Padded name');
 }));
 test('old pinned and organized records migrate to sticky Saved without changing original dates',()=>fixture((s,time,dir)=>{
  const item=s.insert('text','Legacy saved');s.modify('pin',{id:item.id});delete item.retainedAt;s.persist();time(9000);
@@ -112,4 +165,22 @@ test('fresh global defaults match Mac while old toggle choices and optional-off 
  const old=JSON.parse(fs.readFileSync(s.file,'utf8'));delete old.settings.shortcuts.library;delete old.settings.shortcuts.copyLatest;fs.writeFileSync(s.file,JSON.stringify(old));
  const restored=new Store(dir);assert.equal(restored.data.settings.shortcuts.toggle,'Control+Alt+Space');assert.equal(restored.data.settings.shortcuts.library,'');assert.equal(restored.data.settings.shortcuts.copyLatest,'');
  restored.modify('setSettings',{patch:{shortcuts:{library:'Control+Alt+L',copyLatest:'Control+Alt+C'}}});assert.equal(new Store(dir).data.settings.shortcuts.library,'Control+Alt+L');restored.modify('setSettings',{patch:{shortcuts:{library:'',copyLatest:''}}});assert.equal(new Store(dir).data.settings.shortcuts.copyLatest,'');assert.throws(()=>restored.modify('setSettings',{patch:{shortcuts:{unknown:'Control+Alt+U'}}}),/Invalid shortcut/);
+}));
+test('selection lookups keep request order and reject missing items',()=>fixture(s=>{
+ const first=s.insert('text','first'),second=s.insert('text','second');assert.deepEqual(s.selected([first.id,second.id]).map(item=>item.id),[first.id,second.id]);
+ assert.throws(()=>s.selected([first.id,'00000000-0000-4000-8000-000000000000']),/no longer exists/);
+ s.modify('trash',{ids:[first.id]});s.modify('delete',{ids:[first.id]});assert.deepEqual(s.data.items.map(item=>item.id),[second.id]);
+}));
+test('link preview metadata stores its thumbnail only while the link still exists',()=>fixture((s,time,dir)=>{
+ const files=()=>fs.readdirSync(path.join(dir,'media')),url='https://example.com/a';
+ const gone=s.insert('link',url);s.modify('trash',{ids:[gone.id]});assert.equal(s.setLinkMetadata(gone,url,{title:'T',thumbnail:png}),false);assert.deepEqual(files(),[]);assert.equal(gone.title,'');
+ const deleted=s.insert('link','https://example.com/b');s.modify('trash',{ids:[deleted.id]});s.modify('delete',{ids:[deleted.id]});assert.equal(s.setLinkMetadata(deleted,deleted.url,{title:'T',thumbnail:png}),false);assert.deepEqual(files(),[]);
+ const live=s.insert('link','https://example.com/c');assert.equal(s.setLinkMetadata(live,live.url,{title:'Title',author:'Writer',thumbnail:png}),true);
+ assert.equal(live.title,'Title');assert.equal(live.author,'Writer');assert.deepEqual(files(),[live.thumbnailFile]);
+ assert.equal(s.setLinkMetadata(live,'https://example.com/other',{title:'X'}),false);assert.equal(live.title,'Title');
+}));
+test('pin on a mixed selection pins every item and only a fully pinned selection unpins like macOS',()=>fixture(s=>{
+ const a=s.insert('text','first pin'),b=s.insert('text','second pin'),pinned=()=>[a,b].map(value=>s.item(value.id).pinned);
+ s.modify('pin',{ids:[a.id]});s.modify('pin',{ids:[a.id,b.id]});assert.deepEqual(pinned(),[true,true]);
+ s.modify('pin',{ids:[a.id,b.id]});assert.deepEqual(pinned(),[false,false]);
 }));

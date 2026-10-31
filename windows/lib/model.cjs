@@ -78,24 +78,47 @@ function settings(patch, previous = DEFAULTS) {
   }
   return out;
 }
+// Match macOS libraryFolded: sibling folder names ignore case, width and diacritics.
+const foldedName=value=>value.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase();
 function trashUndoFingerprint(item){return crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex');}
 function trashUndoMatches(item,entry){return !!item&&item.trashedAt!=null&&item.trashedAt===entry.afterTrashedAt&&item.updatedAt===entry.afterUpdatedAt&&(item.captureRevision??null)===entry.captureRevision&&trashUndoFingerprint(item)===entry.fingerprint;}
 function availableTrashUndo(items,journal){if(!journal?.length)return false;const byID=new Map(items.map(item=>[item.id,item]));for(let index=journal.length-1;index>=0;index--)if(journal[index].some(entry=>trashUndoMatches(byID.get(entry.id),entry)))return true;return false;}
+// Match macOS cleanedName: at most 64 Characters (grapheme clusters, like
+// Swift's String.count) and nothing from CharacterSet.controlCharacters (Cc and
+// Cf), whether a tag or folder is added or renamed.
+const graphemes=new Intl.Segmenter('en',{granularity:'grapheme'});
+// 64 graphemes can span far more UTF-16 units; this only bounds raw input.
+const TAG_INPUT_LIMIT=4096;
+const validTagName=name=>!/[\p{Cc}\p{Cf}]/u.test(name)&&[...graphemes.segment(name)].length<=64;
 function saved(item) { return item.retainedAt != null || item.pinned || item.folderIds.length > 0 || item.tags.length > 0; }
+// Match macOS LinkIdentity.standalone: a copied URL keeps its link identity
+// when the source adds a trailing newline or surrounding spaces.
 function plainURL(value) {
-  if (typeof value !== 'string' || /\s/.test(value) || value.length > 8192) return null;
+  if (typeof value !== 'string') return null;
+  value = value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, '');
+  if (!value || /\s/.test(value) || value.length > 8192) return null;
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
 
+// A cold PowerShell start can exceed 15 seconds on a busy machine, for example
+// while antivirus scans it. The script is idempotent, so retry only a timed-out
+// attempt once with a longer limit before refusing to open the library.
+const PROTECTION_TIMEOUTS=[15000,45000];
+function protectDirectory(directory,{powershell,script,run=execFileSync}){
+  for(const [attempt,timeout] of PROTECTION_TIMEOUTS.entries()){
+    try{return run(powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-Directory',directory],{windowsHide:true,timeout,stdio:['ignore','pipe','pipe'],env:windowsEnvironment()});}
+    catch(error){if(error?.code!=='ETIMEDOUT'||attempt===PROTECTION_TIMEOUTS.length-1)throw error;}
+  }
+}
 class Store {
   constructor(directory, {clock = Date.now} = {}) {
-    this.directory = path.resolve(directory); this.clock = clock; this.undoStack = []; this.trashUndoStack = []; this.textIdentities = new WeakMap();this.revision=0;
+    this.directory = path.resolve(directory); this.clock = clock; this.undoStack = []; this.trashUndoStack = []; this.textIdentities = new WeakMap();this.revision=0;this.inFlightMediaReferences=new Map();
     fs.mkdirSync(this.directory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.directory).isSymbolicLink())fail('Application data must not be a symlink.');
     if(process.platform==='win32'){
       const script=__dirname.includes('app.asar')?path.join(process.resourcesPath,'native','protect-directory.ps1'):path.join(__dirname,'..','native','protect-directory.ps1');
       const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
-      try{execFileSync(powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-Directory',this.directory],{windowsHide:true,timeout:15000,stdio:['ignore','pipe','pipe'],env:windowsEnvironment()});}
+      try{protectDirectory(this.directory,{powershell,script});}
       catch(error){const detail=String(error.stderr||error.message||'').replaceAll(this.directory,'[application data]').replace(/[\r\n]+/g,' ').slice(0,900);fail('The private application data permissions could not be secured. Existing files were preserved. '+detail);}
     }
     // mkdirSync's mode applies only on creation; tighten an existing folder too.
@@ -144,9 +167,30 @@ class Store {
     } finally { if (descriptor != null) fs.closeSync(descriptor); if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
   }
   mediaReferences(){return new Set(this.data.items.flatMap(item=>[item.imageFile,item.renderedFile,item.thumbnailFile,item.videoFile,item.renderedVideoFile]).filter(Boolean));}
+  retainInFlightMedia(filename){this.inFlightMediaReferences.set(filename,(this.inFlightMediaReferences.get(filename)||0)+1);}
+  releaseInFlightMedia(files){for(const filename of files){const count=this.inFlightMediaReferences.get(filename)||0;if(count<=1)this.inFlightMediaReferences.delete(filename);else this.inFlightMediaReferences.set(filename,count-1);}}
+  mediaReferencesForCapacityCleanup(){
+    const referenced=this.mediaReferences(),backup=this.file+'.backup';let backupStat;
+    try{backupStat=fs.lstatSync(backup);}catch(error){if(error.code!=='ENOENT')return null;}
+    if(backupStat){
+      if(!backupStat.isFile()||backupStat.size>64*1024*1024)return null;
+      let previous;try{previous=JSON.parse(fs.readFileSync(backup,'utf8'));}catch{return null;}
+      if(previous?.schema!==1||!Array.isArray(previous.items)||previous.items.length>20000)return null;
+      for(const item of previous.items){
+        if(!item||typeof item!=='object'||Array.isArray(item))return null;
+        for(const filename of [item.imageFile,item.renderedFile,item.thumbnailFile,item.videoFile,item.renderedVideoFile]){
+          if(filename==null||filename==='')continue;
+          if(typeof filename!=='string'||!MANAGED_MEDIA.test(filename))return null;
+          referenced.add(filename);
+        }
+      }
+    }
+    for(const filename of this.inFlightMediaReferences.keys())referenced.add(filename);
+    return referenced;
+  }
   preparePermanentDeletion(){
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
-    const referenced=this.mediaReferences(),files=fs.readdirSync(this.mediaDirectory).filter(name=>MANAGED_MEDIA.test(name)&&!referenced.has(name));
+    const referenced=this.mediaReferences();for(const filename of this.inFlightMediaReferences.keys())referenced.add(filename);const files=fs.readdirSync(this.mediaDirectory).filter(name=>MANAGED_MEDIA.test(name)&&!referenced.has(name));
     this.data.pendingDeletionFiles=[...new Set([...(this.data.pendingDeletionFiles||[]),...files])];
     this.data.pendingBackupRefresh=true;
   }
@@ -165,14 +209,14 @@ class Store {
       // records cannot survive in that older snapshot or be resurrected from it.
       this.refreshPrivateBackup();
       if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())throw new Error('Managed media directory changed.');
-      const referenced=this.mediaReferences();
+      const referenced=this.mediaReferences();for(const filename of this.inFlightMediaReferences.keys())referenced.add(filename);
       for(const name of pending){if(!MANAGED_MEDIA.test(name))throw new Error('Invalid managed filename.');if(referenced.has(name))continue;try{fs.unlinkSync(path.join(this.mediaDirectory,name));}catch(error){if(error.code!=='ENOENT')throw error;}}
       this.data.pendingDeletionFiles=[];this.data.pendingBackupRefresh=false;
       try{this.persist();}catch(error){this.data.pendingDeletionFiles=pending;this.data.pendingBackupRefresh=true;throw error;}
       this.privacyWarning='';
     }catch(error){const problem=incompleteDeletion('The local backup or unused managed images could not be removed.');this.privacyWarning=problem.message;throw problem;}
   }
-  selected(value) { const selected = ids(value); const result = selected.map(id => this.data.items.find(i => i.id === id)); if (result.some(i => !i)) fail('An item no longer exists'); return result; }
+  selected(value) { const selected = ids(value), byID = new Map(this.data.items.map(i => [i.id, i])); const result = selected.map(id => byID.get(id)); if (result.some(i => !i)) fail('An item no longer exists'); return result; }
   item(id) { return this.selected([id])[0]; }
   unsavedHistorySnapshot(kind='all') {
     if(kind!=='all'&&!KINDS.includes(kind))fail('Invalid history type');
@@ -181,6 +225,12 @@ class Store {
   }
   invalidateTrashUndo(value){const affected=new Set(value);this.trashUndoStack=this.trashUndoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
   markCopied(value){this.modify('markCopied',{ids:value});}
+  // Applies fetched preview metadata only while the link is still live, so a link removed during the fetch gets no stored thumbnail.
+  setLinkMetadata(item,url,{title,author,thumbnail}){
+    if(!this.data.items.includes(item)||item.trashedAt||item.url!==url)return false;
+    let thumbnailFile='';if(thumbnail)try{thumbnailFile=this.putPNG(thumbnail);}catch{}
+    item.title=title||new URL(url).hostname;item.author=author||'';if(thumbnailFile)item.thumbnailFile=thumbnailFile;this.persist();return true;
+  }
   putPNG(buffer) {
     if (!Buffer.isBuffer(buffer) || buffer.length < 24 || buffer.length > 64 * 1024 * 1024 || buffer.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') fail('Invalid PNG image');
     const width = buffer.readUInt32BE(16), height = buffer.readUInt32BE(20);
@@ -202,7 +252,7 @@ class Store {
     if(item.kind!=='image'||!filename||!/^[a-f0-9]{64}\.png$/.test(filename))fail('Image poster unavailable');
     const file=path.join(this.mediaDirectory,filename);if(!fs.existsSync(file)||!fs.lstatSync(file).isFile()||fs.lstatSync(file).isSymbolicLink())fail('Image poster unavailable');return file;
   }
-  async putVideo(source,{signal}={}){
+  async putVideo(source,{signal,onManagedFile}={}){
     if(typeof source!=='string'||!path.isAbsolute(source)||!['.mp4','.mov'].includes(path.extname(source).toLowerCase()))fail('Invalid recording file');
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Unsafe managed media directory');
     const before=await fs.promises.lstat(source);if(!before.isFile()||before.isSymbolicLink()||before.size<12||before.size>MAXIMUM_VIDEO_BYTES)fail('Recording exceeds the 2 GB limit or is unavailable');
@@ -213,32 +263,48 @@ class Store {
       for(;;){if(signal?.aborted)fail('Video operation canceled');const {bytesRead}=await input.read(buffer,0,buffer.length,null);if(!bytesRead)break;total+=bytesRead;if(total>MAXIMUM_VIDEO_BYTES)fail('Recording exceeds the 2 GB limit');const bytes=buffer.subarray(0,bytesRead);hash.update(bytes);let written=0;while(written<bytesRead){const result=await output.write(bytes,written,bytesRead-written,null);if(!result.bytesWritten)fail('Recording could not be saved');written+=result.bytesWritten;}}
       const after=await input.stat(),pathAfter=await fs.promises.lstat(source);if(total!==before.size||after.size!==before.size||after.mtimeMs!==before.mtimeMs||pathAfter.isSymbolicLink()||pathAfter.ino!==before.ino||pathAfter.mtimeMs!==before.mtimeMs)fail('Recording changed while importing');
       await output.sync();await output.close();output=null;if(signal?.aborted)fail('Video operation canceled');const filename=hash.digest('hex')+path.extname(source).toLowerCase(),destination=path.join(this.mediaDirectory,filename);
+      onManagedFile?.(filename);
       try{await fs.promises.link(temporary,destination);}catch(error){if(error.code!=='EEXIST')throw error;const existing=await fs.promises.lstat(destination);if(!existing.isFile()||existing.isSymbolicLink()||existing.size!==total)fail('Managed recording is unsafe');}
       if(signal?.aborted)fail('Video operation canceled');return filename;
     }finally{await input?.close();await output?.close();try{await fs.promises.unlink(temporary);}catch(error){if(error.code!=='ENOENT')throw error;}}
   }
   async recordingAssets(value){
-    const details=recordingMetadata(value),videoFile=await this.putVideo(value.file,{signal:value.signal});
-    let poster=value.posterPNG;
-    if(!poster){if(typeof value.posterFile!=='string'||!path.isAbsolute(value.posterFile))fail('Recording poster unavailable');const stat=await fs.promises.lstat(value.posterFile);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>4*1024*1024)fail('Recording poster unavailable');poster=await fs.promises.readFile(value.posterFile);}
-    if(!Buffer.isBuffer(poster)||poster.length>4*1024*1024)fail('Invalid recording poster');
-    if(value.signal?.aborted)fail('Video operation canceled');return{details,videoFile,posterFile:this.putPNG(poster)};
+    const inFlightMediaFiles=[],retain=filename=>{this.retainInFlightMedia(filename);inFlightMediaFiles.push(filename);};
+    try{
+      const details=recordingMetadata(value),videoFile=await this.putVideo(value.file,{signal:value.signal,onManagedFile:retain});
+      let poster=value.posterPNG;
+      if(!poster){if(typeof value.posterFile!=='string'||!path.isAbsolute(value.posterFile))fail('Recording poster unavailable');const stat=await fs.promises.lstat(value.posterFile);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>4*1024*1024)fail('Recording poster unavailable');poster=await fs.promises.readFile(value.posterFile);}
+      if(!Buffer.isBuffer(poster)||poster.length>4*1024*1024)fail('Invalid recording poster');
+      if(value.signal?.aborted)fail('Video operation canceled');const posterFile=this.putPNG(poster);retain(posterFile);return{details,videoFile,posterFile,inFlightMediaFiles};
+    }catch(error){this.releaseInFlightMedia(inFlightMediaFiles);throw error;}
   }
   async insertRecording(value){
-    const assets=await this.recordingAssets(value),matching=this.data.items.filter(item=>item.recording&&!item.trashedAt&&item.videoFile===assets.videoFile),prior=matching.sort((a,b)=>b.createdAt-a.createdAt)[0];
-    if(value.signal?.aborted)fail('Video operation canceled');
-    if(!prior&&this.data.items.length>=20000)fail('Library item limit reached');const before=clone(this.data),now=this.clock();
+    const assets=await this.recordingAssets(value);
     try{
-      const item=prior||{id:crypto.randomUUID(),kind:'image',recording:true,text:'',url:'',title:'',name:'',pinned:false,folderIds:[],tags:[],note:'',retainedAt:null,lastCopiedAt:null,createdAt:now,updatedAt:now,trashedAt:null,hiddenFromShelf:false,annotations:[],crop:null,ocrText:'',imageFile:assets.posterFile,renderedFile:'',videoFile:assets.videoFile,renderedVideoFile:'',...assets.details};
-      item.createdAt=now;item.updatedAt=now;item.hiddenFromShelf=false;item.captureRevision=crypto.randomUUID();
-      this.data.items=[item,...this.data.items.filter(entry=>entry.id!==item.id)];this.expire(false);this.persist();return item;
-    }catch(error){this.data=before;throw error;}
+      const matching=this.data.items.filter(item=>item.recording&&!item.trashedAt&&item.videoFile===assets.videoFile),prior=matching.sort((a,b)=>b.createdAt-a.createdAt)[0];
+      if(value.signal?.aborted)fail('Video operation canceled');
+      if(!prior&&this.data.items.length>=20000){
+        this.releaseInFlightMedia(assets.inFlightMediaFiles);assets.inFlightMediaFiles=[];
+        const error=new Error('Library item limit reached'),referenced=this.mediaReferencesForCapacityCleanup();
+        if(referenced)for(const filename of [assets.videoFile,assets.posterFile])if(MANAGED_MEDIA.test(filename)&&!referenced.has(filename))try{fs.unlinkSync(path.join(this.mediaDirectory,filename));}catch{}
+        throw error;
+      }
+      const before=clone(this.data),live=this.liveItems(),now=this.clock();
+      try{
+        const item=prior||{id:crypto.randomUUID(),kind:'image',recording:true,text:'',url:'',title:'',name:'',pinned:false,folderIds:[],tags:[],note:'',retainedAt:null,lastCopiedAt:null,createdAt:now,updatedAt:now,trashedAt:null,hiddenFromShelf:false,annotations:[],crop:null,ocrText:'',imageFile:assets.posterFile,renderedFile:'',videoFile:assets.videoFile,renderedVideoFile:'',...assets.details};
+        item.createdAt=now;item.updatedAt=now;item.hiddenFromShelf=false;item.captureRevision=crypto.randomUUID();
+        this.data.items=[item,...this.data.items.filter(entry=>entry.id!==item.id)];this.expire(false);this.persist();return item;
+      }catch(error){this.rollback(before,live);throw error;}
+    }finally{this.releaseInFlightMedia(assets.inFlightMediaFiles);}
   }
   async commitRecordingTrim(value){
     const expected=this.item(value.id);if(!expected.recording||expected.trashedAt||typeof value.sourceFingerprint!=='string'||(expected.renderedVideoFile||expected.videoFile).slice(0,64)!==value.sourceFingerprint)fail('The recording changed before trimming');
-    const assets=await this.recordingAssets(value),item=this.item(value.id);if(!item.recording||item.trashedAt||(item.renderedVideoFile||item.videoFile).slice(0,64)!==value.sourceFingerprint)fail('The recording changed while trimming');
-    if(value.signal?.aborted)fail('Video operation canceled');
-    const before=clone(this.data);try{Object.assign(item,assets.details,{renderedVideoFile:assets.videoFile,renderedFile:assets.posterFile,updatedAt:this.clock()});this.persist();return item;}catch(error){this.data=before;throw error;}
+    const assets=await this.recordingAssets(value);
+    try{
+      const item=this.item(value.id);if(!item.recording||item.trashedAt||(item.renderedVideoFile||item.videoFile).slice(0,64)!==value.sourceFingerprint)fail('The recording changed while trimming');
+      if(value.signal?.aborted)fail('Video operation canceled');
+      const before=clone(this.data),live=this.liveItems();try{Object.assign(item,assets.details,{renderedVideoFile:assets.videoFile,renderedFile:assets.posterFile,updatedAt:this.clock()});this.persist();return item;}catch(error){this.rollback(before,live);throw error;}
+    }finally{this.releaseInFlightMedia(assets.inFlightMediaFiles);}
   }
   insert(kind, value, extra = {}) {
     if (!KINDS.includes(kind)) fail('Invalid content kind');
@@ -250,7 +316,13 @@ class Store {
     const matching = this.data.items.filter(i => i.kind === kind && !i.trashedAt &&
       (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? i.url === url : !i.recording&&i.imageFile === imageFile));
     const prior = matching.sort((a, b) => b.updatedAt - a.updatedAt)[0];
-    if(!prior&&this.data.items.length>=20000)fail('Library item limit reached');
+    if(!prior&&this.data.items.length>=20000){
+      if(kind==='image'){
+        const referenced=this.mediaReferencesForCapacityCleanup();
+        if(referenced&&!referenced.has(imageFile)&&MANAGED_MEDIA.test(imageFile))try{fs.unlinkSync(path.join(this.mediaDirectory,imageFile));}catch{}
+      }
+      fail('Library item limit reached');
+    }
     const now = this.clock();
     const item = prior || {id: crypto.randomUUID(), kind, text: textValue, url, title: '', name: '', pinned: false, folderIds: [], tags: [],
       imageFile, renderedFile: '', ocrText: '', annotations: [], crop: null, note:'', retainedAt:null, lastCopiedAt:null, createdAt: now, updatedAt: now, trashedAt: null, hiddenFromShelf: false};
@@ -281,9 +353,13 @@ class Store {
     }
     if (persist && changed) this.persist();
   }
+  liveItems(){return [...this.data.items];}
+  // Restore in place: OCR and link-preview jobs hold item objects across awaits and drop their result once store.data.items no longer includes them.
+  // The snapshot and the live list were taken together, so match by position: each live object is reused at most once, even if a corrupt library repeats an id.
+  rollback(before,live){before.items=before.items.map((saved,index)=>{const item=live[index];if(!item||item.id!==saved.id)return saved;for(const key of Object.keys(item))delete item[key];return Object.assign(item,saved);});this.data=before;}
   modify(action, payload = {}) {
-    const before=clone(this.data), undo=clone(this.undoStack), trashUndo=clone(this.trashUndoStack);
-    try{return this.modifyTransaction(action,payload);}catch(error){if(!error.committed){this.data=before;this.undoStack=undo;this.trashUndoStack=trashUndo;}throw error;}
+    const before=clone(this.data), live=this.liveItems(), undo=clone(this.undoStack), trashUndo=clone(this.trashUndoStack);
+    try{return this.modifyTransaction(action,payload);}catch(error){if(!error.committed){this.rollback(before,live);this.undoStack=undo;this.trashUndoStack=trashUndo;}throw error;}
   }
   modifyTransaction(action, payload = {}) {
     const now = this.clock();
@@ -327,24 +403,25 @@ class Store {
     if(action==='cleanup'){this.finishPermanentDeletion();return;}
     if (action === 'setSettings') { this.data.settings = settings(payload.patch, this.data.settings);this.pruneRecentFolders();this.expire(false); this.persist(); return; }
     if (action === 'createFolder') {
-      const name = text(payload.name, 120).trim(); if (!name) fail('Folder name is empty');
+      const name = text(payload.name, TAG_INPUT_LIMIT).trim(); if (!name) fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');
       const parentId = payload.parentId || null;
       if(parentId){const parent=this.data.folders.find(f=>f.id===parentId);if(!parent)fail('Parent folder is unavailable');if(parent.parentId!=null)fail('Only top-level folders can contain subfolders');}
+      if(this.data.folders.some(f=>(f.parentId??null)===parentId&&foldedName(f.name)===foldedName(name)))fail('A folder with this name already exists');
       const folder = {id: crypto.randomUUID(), name, parentId}; this.data.folders.push(folder); this.persist(); return folder;
     }
     if(action==='renameFolder'||action==='removeFolder') {
       const folder=this.data.folders.find(f=>f.id===payload.id);if(!folder)fail('Folder unavailable');const originalMemberships=new Map(this.data.items.map(item=>[item.id,JSON.stringify(item.folderIds)]));
-      if(action==='renameFolder'){folder.name=text(payload.name,120).trim();if(!folder.name)fail('Folder name is empty');}
+      if(action==='renameFolder'){const name=text(payload.name,TAG_INPUT_LIMIT).trim();if(!name)fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');folder.name=name;if(this.data.folders.some(f=>f!==folder&&(f.parentId??null)===(folder.parentId??null)&&foldedName(f.name)===foldedName(folder.name)))fail('A folder with this name already exists');}
       else {const removed=new Set([folder.id]);let changed=true;while(changed){changed=false;for(const child of this.data.folders)if(removed.has(child.parentId)&&!removed.has(child.id)){removed.add(child.id);changed=true;}}this.data.folders=this.data.folders.filter(f=>!removed.has(f.id));for(const item of this.data.items)if(item.folderIds.some(id=>removed.has(id))){item.retainedAt??=now;item.folderIds=item.folderIds.filter(id=>!removed.has(id));}}
       this.pruneRecentFolders();this.persist();this.invalidateTrashUndo(this.data.items.filter(item=>originalMemberships.get(item.id)!==JSON.stringify(item.folderIds)).map(item=>item.id));return;
     }
     if(action==='renameTag'||action==='deleteTag') {
-      const tag=text(payload.tag,80).trim(),affected=this.data.items.filter(item=>item.tags.includes(tag));
+      const tag=text(payload.tag,TAG_INPUT_LIMIT).trim(),affected=this.data.items.filter(item=>item.tags.includes(tag));
       if(!tag||!affected.length)fail('Tag unavailable');
       let name;
       if(action==='renameTag'){
-        name=text(payload.name,256).trim();
-        if(!name||Array.from(name).length>64||/[\u0000-\u001f\u007f-\u009f]/u.test(name))fail('Invalid tag name');
+        name=text(payload.name,TAG_INPUT_LIMIT).trim();
+        if(!name||!validTagName(name))fail('Invalid tag name');
         const folded=value=>value.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase();
         if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&folded(value)===folded(name))))fail('A tag with this name already exists');
       }
@@ -362,6 +439,8 @@ class Store {
       this.undoStack.push(items.map(i => ({id: i.id, trashedAt: i.trashedAt, hiddenFromShelf: i.hiddenFromShelf})));
       if (this.undoStack.length > 32) this.undoStack.shift();
     }
+    // Match macOS addTag: tags are unique ignoring case, width and diacritics, so a new spelling reuses the existing one.
+    const knownTags=new Map();if(action==='tag')for(const other of this.data.items)for(const tag of other.tags){const key=foldedName(tag);if(!knownTags.has(key))knownTags.set(key,tag);}
     const targetPin = typeof payload.value === 'boolean' ? payload.value : items.some(i => !i.pinned);
     for (const item of items) {
       if (action === 'pin') {item.pinned = targetPin;if(targetPin)item.retainedAt??=now;}
@@ -383,10 +462,13 @@ class Store {
         if(typeof payload.folderId!=='string'||!this.data.folders.some(f=>f.id===payload.folderId))fail('Folder unavailable');
         item.folderIds=item.folderIds.filter(id=>id!==payload.folderId);
       } else if(action==='removeTag') {
-        const tag=text(payload.tag,80).trim();item.tags=item.tags.filter(value=>value!==tag);
+        const tag=text(payload.tag,TAG_INPUT_LIMIT).trim();item.tags=item.tags.filter(value=>value!==tag);
       } else if (action === 'tag') {
         if (!Array.isArray(payload.tags) || payload.tags.length > 50) fail('Invalid tags');
-        item.tags = [...new Set(payload.tags.map(tag => text(tag, 80).trim()).filter(Boolean))];
+        const tags = [...new Set(payload.tags.map(tag => { tag = text(tag, TAG_INPUT_LIMIT).trim(); if (item.tags.includes(tag)) return tag; tag = tag.replace(/^#+|#+$/g, '').trim(); const key = foldedName(tag), known = item.tags.find(own => foldedName(own) === key) ?? knownTags.get(key) ?? tag; if (tag) knownTags.set(key, known); return tag && known; }).filter(Boolean))];
+        // Existing longer tags stay editable; only newly added names must fit.
+        if (tags.some(tag => !item.tags.includes(tag) && !validTagName(tag))) fail('Invalid tag name');
+        item.tags = tags;
         if(item.tags.length)item.retainedAt??=now;
       } else if (action === 'remove') { if (saved(item)) item.hiddenFromShelf = true; else{item.trashedAt = now;item.trashRevision=crypto.randomUUID();} }
       else if (action === 'trash') item.trashedAt = now;
@@ -403,7 +485,7 @@ class Store {
       if(action!=='markCopied')item.updatedAt = now;
     }
     if(action==='folder'&&payload.rememberRecent===true)this.data.settings.recentPinFolderIds=[payload.folderId,...this.data.settings.recentPinFolderIds.filter(id=>id!==payload.folderId)].slice(0,8);
-    if (action === 'delete') this.data.items = this.data.items.filter(i => !items.includes(i));
+    if (action === 'delete') { const removed = new Set(items); this.data.items = this.data.items.filter(i => !removed.has(i)); }
     if (['delete', 'trash', 'restore'].includes(action)) this.undoStack = this.undoStack.filter(batch => !batch.some(old => items.some(i => i.id === old.id)));
     if(action==='delete')this.preparePermanentDeletion();
     this.persist();
@@ -423,4 +505,4 @@ class Store {
     };
   }
 }
-module.exports = {Store, KINDS, DEFAULTS, settings, saved, plainURL, text, ids};
+module.exports = {Store, KINDS, DEFAULTS, settings, saved, plainURL, text, ids, protectDirectory};

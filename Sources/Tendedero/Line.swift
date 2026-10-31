@@ -512,11 +512,16 @@ final class Line: ObservableObject {
         }
     }
 
+    /// A mixed selection pins every item, as on Windows; only a fully pinned selection unpins.
     func pinActiveSelection() {
+        func apply(_ ids: Set<UUID>, pinned: (UUID) -> Bool, toggle: (UUID) -> Void) {
+            let pin = ids.contains { !pinned($0) }
+            for id in ids where pinned(id) != pin { toggle(id) }
+        }
         switch activeShelf {
-        case .texts: for id in texts.selectedIDs.isEmpty ? Set(texts.focusedID.map { [$0] } ?? []) : texts.selectedIDs { texts.togglePin(id) }
-        case .links: for id in links.selectedIDs.isEmpty ? Set(links.focusedID.map { [$0] } ?? []) : links.selectedIDs { links.togglePin(id) }
-        case .images: for id in selectedIDs.isEmpty ? Set(focusedID.map { [$0] } ?? []) : selectedIDs { pinFromUI(id) }
+        case .texts: apply(texts.selectedIDs.isEmpty ? Set(texts.focusedID.map { [$0] } ?? []) : texts.selectedIDs, pinned: { id in texts.entries.first { $0.id == id }?.pinned ?? false }, toggle: { texts.togglePin($0) })
+        case .links: apply(links.selectedIDs.isEmpty ? Set(links.focusedID.map { [$0] } ?? []) : links.selectedIDs, pinned: { id in links.entries.first { $0.id == id }?.favorite ?? false }, toggle: { links.togglePin($0) })
+        case .images: apply(selectedIDs.isEmpty ? Set(focusedID.map { [$0] } ?? []) : selectedIDs, pinned: { id in items.first { $0.id == id }?.pinned ?? false }, toggle: { pinFromUI($0) })
         }
     }
     var focusedActionID: UUID? {
@@ -1110,7 +1115,9 @@ final class Line: ObservableObject {
     private func scheduleGust() {
         DispatchQueue.main.asyncAfter(deadline: .now() + .random(in: 7...16)) { [weak self] in
             guard let self else { return }
-            if !self.items.isEmpty && self.draggingID == nil { self.gust += 1 }
+            // Tucked away, nobody sees the sway; a gust would still re-render
+            // every view that watches the line.
+            if self.revealed && !self.items.isEmpty && self.draggingID == nil { self.gust += 1 }
             self.scheduleGust()
         }
     }

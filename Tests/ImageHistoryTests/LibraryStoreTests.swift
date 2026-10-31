@@ -55,6 +55,23 @@ import XCTest
         XCTAssertTrue(try library.item(record.id)?.retainedAt != nil)
         var failed = false; do { _ = try library.createCollection("child", parent: UUID()) } catch { failed = true }; XCTAssertTrue(failed)
     }
+    func testPinnedImageWhoseManagedCopyIsGoneCanStillLeaveTheShelfGoToTrashAndRestore() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let record = try library.captureImage(try f.image(owned: false))
+        try library.toggleFavorite([record.id])
+        let managed = try XCTUnwrap(library.item(record.id)?.fileURL); XCTAssertTrue(library.files.isAppCopy(managed))
+        try FileManager.default.removeItem(at: managed)
+        // Removing a card must not need a file it can no longer protect.
+        try library.removeFromShelf([record.id])
+        XCTAssertEqual(try library.item(record.id)?.onShelf, false); XCTAssertNil(try library.item(record.id)?.deletedAt)
+        try library.trash([record.id])
+        XCTAssertNotNil(try library.item(record.id)?.deletedAt)
+        try library.restore([record.id])
+        let restored = try XCTUnwrap(library.item(record.id)); XCTAssertNil(restored.deletedAt); XCTAssertTrue(restored.onShelf)
+        // Pinning still refuses a file that cannot be copied.
+        let external = try library.captureImage(try f.image(owned: false)); try FileManager.default.removeItem(at: try XCTUnwrap(external.fileURL))
+        XCTAssertThrowsError(try library.toggleFavorite([external.id]))
+    }
     func testMovingFromParentRemovesChildMembershipButKeepsOtherFoldersAndOriginal() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let url = try f.image(owned: false), bytes = try Data(contentsOf: url), record = try library.captureImage(url)
@@ -74,6 +91,16 @@ import XCTest
         XCTAssertEqual(Set(try library.query(LibraryQuery(scope: .recent, domain: "YouTube.com")).map(\.id)), Set(expected))
         XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, domain: "WWW.YouTube.com.")).count, 3)
         XCTAssertTrue(try library.query(LibraryQuery(scope: .recent, domain: "%youtube.com")).isEmpty)
+    }
+    func testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let plan = try XCTUnwrap(library.captureText("Quarterly plan\nsecond line")), other = try XCTUnwrap(library.captureText("Middle"))
+        try library.retain([plan.id, other.id])
+        try library.update(plan.id) { $0.title = "   " }
+        XCTAssertEqual(try library.item(plan.id)?.displayTitle, "Quarterly plan")
+        try library.update(plan.id) { $0.title = "  Zulu \n" }
+        XCTAssertEqual(try library.item(plan.id)?.displayTitle, "Zulu")
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .saved, sort: .title)).map(\.id), [other.id, plan.id])
     }
     func testTagRenameSearchTurkishAndLiteralSQLCharacters() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)

@@ -27,6 +27,68 @@
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
       }
+    ],
+    "sharedBehaviors": [
+      {
+        "id": "localized-notices",
+        "behavior": "Main-process notices (copy, export, import and error results) and the browsing-shortcut conflict message are shown in the language selected in Settings, using the shared catalog keys, including the \"Exported %d · failed %d\" and \"This shortcut is already used for %@\" templates with their real counts and action names.",
+        "macos": "Notices and the shortcut conflict use L(...) and String(format:) with the shared Localizable.strings catalog.",
+        "windows": "The renderer looks main-process notices up in the shared catalog, refills numeric templates, and formats the conflict with the catalog key; renderer-ui.test.cjs runs the shipped export through the Export shortcut in Turkish."
+      },
+      {
+        "id": "localized-selection-count",
+        "behavior": "The Library footer and the multi-selection details panel show the number of selected items with the shared \"%d selected\" catalog entry in the language selected in Settings.",
+        "macos": "LibraryWindow uses String(format: L(\"%d selected\"), count) for the footer and the multi-selection title.",
+        "windows": "The renderer formats the count with the shared \"%d selected\" catalog entry (selectedLabel); renderer-ui.test.cjs checks the footer and the details panel in Turkish, Spanish, Simplified Chinese and English. The Windows folder picker also shows its count with this entry and is checked by the same test."
+      },
+      {
+        "id": "width-insensitive-search",
+        "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I.",
+        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift).",
+        "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac; shelf-render.test.cjs checks both through the shipped renderer."
+      },
+      {
+        "id": "link-title-charset",
+        "behavior": "A fetched page title and Open Graph text are decoded with the page's declared character set, in this order: UTF-8 byte-order mark, Content-Type charset, XML declaration (XHTML only), early meta charset; unknown labels are skipped, a meta UTF-16 label means UTF-8, and undeclared bytes that are not UTF-8 are windows-1252, so older windows-1254 / ISO-8859-9 pages show their Turkish letters.",
+        "macos": "PublicLinkHTMLMetadata.decode follows that order with CoreFoundation IANA names; PublicLinkNetworkTests.testHTMLHonorsDeclaredMetaCharsetAndFallsBackToWindows1252 covers it.",
+        "windows": "decodeHTML in lib/network.cjs follows that order with TextDecoder; security.test.cjs covers it."
+      },
+      {
+        "id": "mixed-selection-pin",
+        "behavior": "Pin on a selection that contains both pinned and unpinned items pins every item; only a selection that is already fully pinned unpins.",
+        "macos": "LibraryStore.toggleFavorite and Line.pinActiveSelection compute one target for the whole selection, matching the action bar, which offers Unpin only when every selected item is pinned; LibraryKeyboardContractTests runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json.",
+        "windows": "Store.modify('pin') pins every selected item when any is unpinned (targetPin); model.test.cjs covers a mixed selection and renderer-ui.test.cjs runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json."
+      },
+      {
+        "id": "subfolder-title",
+        "behavior": "The Library title of a subfolder is the names of all its ancestors and its own name, outermost first, joined with \" / \" (for example Parent / Child, or Parent / Middle / Child for imported deeper folders), so same-named subfolders of different parents can be told apart; a top-level folder shows only its name.",
+        "macos": "LibraryModel.title builds the path by walking the whole LibraryCollection.parentID chain (cycle-safe) and shows it as the Library window title; LibraryInteractionTests.testSubfolderTitleIncludesItsParentLikeWindows covers it.",
+        "windows": "libraryTitle() in renderer.js shows folderPath() for the folder scope; library-ui.test.cjs checks the toolbar title of a subfolder."
+      },
+      {
+        "id": "trash-restore-selection",
+        "behavior": "Restoring items from Library Trash moves focus and selection to the first item that remains in Trash, and clears the details panel when none remain, so the panel never shows Restore for an item that already left Trash.",
+        "macos": "LibraryModel.restore() queues a keyboard selection that finishKeyboardSelection resolves to the first remaining item after the reload; LibraryInteractionTests.testRestoringFromTrashSelectsTheFirstRemainingItemLikeWindows covers it.",
+        "windows": "The restore action calls reconcileLibraryFocus() and renders, which keeps a surviving focus or falls back to the first remaining item; library-ui.test.cjs covers it."
+      },
+      {
+        "id": "trash-copy",
+        "behavior": "An item in Library Trash can be copied: the Copy action stays enabled in the action list for a selection in Trash, matching the copy shortcut, while paste, preview, pin and the other editing actions stay disabled until the item is restored.",
+        "macos": "ActionBarCatalog.keyboardAvailability enables .copy for any selection, as LibraryModel.perform(.copy) already copied it; ActionBarCatalogTests.testCopyStaysAvailableForTrashedItemsWhileEditingActionsDoNot covers it.",
+        "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
+      },
+      {
+        "id": "item-name-trimming",
+        "behavior": "An item name is used without its surrounding whitespace, and a name that is only whitespace counts as no name, so the card, the title ordering and the search index fall back to the item's content instead of showing a blank title.",
+        "macos": "LibraryRecord.displayTitle trims the stored title and ignores a blank one; LibraryStoreTests.testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows covers it.",
+        "windows": "The details command stores the name trimmed and title() falls back to the content for an empty name; model.test.cjs covers a blank and a padded name."
+      },
+      {
+        "id": "folder-removal-view",
+        "behavior": "Removing a folder returns the Library to My library only when the open view is that folder or one of its subfolders; removing any other folder leaves the current view, filters and selection as they are.",
+        "macos": "LibraryModel.removeFolder(_:) collects the removed folder and its subfolders before the removal and calls changeScope(.saved) only when the open collection is among them; LibraryInteractionTests.testRemovingAnotherFolderKeepsTheOpenViewLikeWindows covers it.",
+        "windows": "The confirm handler sets activeFolderRemoved from folderSubtreeContains() and resets the scope only then; library-ui.test.cjs covers an unrelated folder and the active ancestor."
+      }
     ]
   },
   "itemSets": {
@@ -104,7 +166,19 @@
         "text": "Shared contract l2"
       }
     ],
-    "empty": []
+    "empty": [],
+    "images-only": [
+      {
+        "id": "i1",
+        "kind": "image",
+        "text": "Shared contract i1"
+      },
+      {
+        "id": "i2",
+        "kind": "image",
+        "text": "Shared contract i2"
+      }
+    ]
   },
   "scenarios": [
     {
@@ -1501,6 +1575,141 @@
               "link"
             ],
             "searchEditing": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "empty-active-shelf-ignores-item-commands",
+      "itemSet": "images-only",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i1",
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "switchShelf",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "Enter",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyS",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyP",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "Space",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyC",
+          "ctrl": true,
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
           }
         }
       ]

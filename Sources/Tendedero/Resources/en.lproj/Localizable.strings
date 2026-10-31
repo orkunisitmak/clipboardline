@@ -354,6 +354,39 @@
 "Verifying update…" = "Verifying update…";
 "Version %@ is ready to install." = "Version %@ is ready to install.";
 "You are up to date." = "You are up to date.";
+"The update repository is invalid." = "The update repository is invalid.";
+"The release contains an invalid download address." = "The release contains an invalid download address.";
+"The update manifest is malformed." = "The update manifest is malformed.";
+"The update manifest signature is invalid." = "The update manifest signature is invalid.";
+"The update manifest contains invalid release information." = "The update manifest contains invalid release information.";
+"The update belongs to another repository." = "The update belongs to another repository.";
+"The update is not newer than the installed application." = "The update is not newer than the installed application.";
+"The update archive exceeds the download limit." = "The update archive exceeds the download limit.";
+"The update has no application information." = "The update has no application information.";
+"The update belongs to another application." = "The update belongs to another application.";
+"The update executable is invalid." = "The update executable is invalid.";
+"The update staging directory is not private." = "The update staging directory is not private.";
+"The update is missing a supported architecture." = "The update is missing a supported architecture.";
+"The application signature is missing." = "The application signature is missing.";
+"The application signature is invalid." = "The application signature is invalid.";
+"The signing certificate could not be read." = "The signing certificate could not be read.";
+"An ad-hoc or unrelated application cannot install updates." = "An ad-hoc or unrelated application cannot install updates.";
+"The application identity is missing." = "The application identity is missing.";
+"The application identity could not be read." = "The application identity could not be read.";
+"The application identity is empty." = "The application identity is empty.";
+"The installed build is invalid." = "The installed build is invalid.";
+"The downloaded version does not match the release." = "The downloaded version does not match the release.";
+"This update needs a newer version of macOS." = "This update needs a newer version of macOS.";
+"The update changed the trusted application identity." = "The update changed the trusted application identity.";
+"The update is not signed by the installed application's publisher." = "The update is not signed by the installed application's publisher.";
+"The installed architectures have different signing identities." = "The installed architectures have different signing identities.";
+"The update download is incomplete." = "The update download is incomplete.";
+"The update download failed its integrity check." = "The update download failed its integrity check.";
+"The update staging directory is already in use." = "The update staging directory is already in use.";
+"The update archive could not be opened." = "The update archive could not be opened.";
+"The installed application path is unsafe." = "The installed application path is unsafe.";
+"Move the app to a writable Applications folder before updating." = "Move the app to a writable Applications folder before updating.";
+"The update installer is missing." = "The update installer is missing.";
 
 /* Image markup additions. */
 "Annotation color" = "Annotation color";
@@ -496,3 +529,9 @@
 "Focus previous pane" = "Focus previous pane";
 
 "Undo Move to Trash" = "Undo Move to Trash";
+
+/* Image markup errors. */
+"The image markup document is invalid." = "The image markup document is invalid.";
+"This image could not be opened for markup." = "This image could not be opened for markup.";
+"Markup supports images up to 80 megapixels." = "Markup supports images up to 80 megapixels.";
+"The marked image could not be rendered." = "The marked image could not be rendered.";

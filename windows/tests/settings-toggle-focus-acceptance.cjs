@@ -1,0 +1,32 @@
+'use strict';
+const assert=require('node:assert/strict');
+
+module.exports=async function settingsToggleFocusAcceptance({page,until,check}){
+ const previous=await page.evaluate(()=>window.clipboardLine.state());
+ const wasChecked=previous.settings.sounds===true;
+ await page.evaluate(()=>window.clipboardLine.command('settings'));
+ await until(()=>page.evaluate(()=>window.clipboardLine.state()),state=>state.view==='settings');
+ await page.locator('.settings-tabs [data-action="settings-tab"][data-tab="general"]').click();
+ const toggle=page.locator('input[data-setting="sounds"]');
+ await toggle.waitFor({state:'visible'});
+ await toggle.focus();
+ await page.keyboard.press('Space');
+ await until(()=>page.evaluate(()=>window.clipboardLine.state()),state=>state.settings.sounds===!wasChecked);
+ const focusedSetting=await page.evaluate(()=>document.activeElement?.dataset?.setting||null);
+ assert.equal(focusedSetting,'sounds','toggling a Settings checkbox with Space must retain focus after the settings save rerenders the UI');
+ await page.keyboard.press('Space');
+ await until(()=>page.evaluate(()=>window.clipboardLine.state()),state=>state.settings.sounds===wasChecked);
+ const initialVisibleKinds=(await page.evaluate(()=>window.clipboardLine.state())).settings.visibleKinds;
+ const wasVisible=initialVisibleKinds.includes('image');
+ const visibleKind=page.locator('input[data-visible-kind="image"]');
+ await visibleKind.focus();
+ await page.keyboard.press('Space');
+ await until(()=>page.evaluate(()=>window.clipboardLine.state()),state=>state.settings.visibleKinds.includes('image')===!wasVisible);
+ const focusedKind=await page.evaluate(()=>document.activeElement?.dataset?.visibleKind||null);
+ assert.equal(focusedKind,'image','toggling a visible-kind checkbox with Space must retain focus after the settings save rerenders the UI');
+ await page.keyboard.press('Space');
+ await until(()=>page.evaluate(()=>window.clipboardLine.state()),state=>state.settings.visibleKinds.includes('image')===wasVisible);
+ check('Settings checkboxes preserve keyboard focus across saved-state rerenders');
+ await page.evaluate(()=>window.clipboardLine.command('library'));
+ await until(()=>page.evaluate(()=>window.clipboardLine.state()),state=>state.view==='library');
+};

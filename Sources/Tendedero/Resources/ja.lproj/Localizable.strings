@@ -354,6 +354,39 @@
 "Verifying update…" = "Verifying update…";
 "Version %@ is ready to install." = "Version %@ is ready to install.";
 "You are up to date." = "You are up to date.";
+"The update repository is invalid." = "アップデートのリポジトリが無効です。";
+"The release contains an invalid download address." = "リリースに無効なダウンロードアドレスが含まれています。";
+"The update manifest is malformed." = "アップデートのマニフェストの形式が正しくありません。";
+"The update manifest signature is invalid." = "アップデートのマニフェストの署名が無効です。";
+"The update manifest contains invalid release information." = "アップデートのマニフェストに無効なリリース情報が含まれています。";
+"The update belongs to another repository." = "このアップデートは別のリポジトリのものです。";
+"The update is not newer than the installed application." = "このアップデートは、インストール済みのアプリより新しくありません。";
+"The update archive exceeds the download limit." = "アップデートのアーカイブがダウンロード上限を超えています。";
+"The update has no application information." = "アップデートにアプリ情報がありません。";
+"The update belongs to another application." = "このアップデートは別のアプリのものです。";
+"The update executable is invalid." = "アップデートの実行ファイルが無効です。";
+"The update staging directory is not private." = "アップデートの作業用フォルダがプライベートではありません。";
+"The update is missing a supported architecture." = "アップデートに対応するアーキテクチャが含まれていません。";
+"The application signature is missing." = "アプリの署名がありません。";
+"The application signature is invalid." = "アプリの署名が無効です。";
+"The signing certificate could not be read." = "署名用の証明書を読み取れませんでした。";
+"An ad-hoc or unrelated application cannot install updates." = "アドホック署名のアプリや無関係なアプリは、アップデートをインストールできません。";
+"The application identity is missing." = "アプリのIDがありません。";
+"The application identity could not be read." = "アプリのIDを読み取れませんでした。";
+"The application identity is empty." = "アプリのIDが空です。";
+"The installed build is invalid." = "インストール済みのビルドが無効です。";
+"The downloaded version does not match the release." = "ダウンロードしたバージョンがリリースと一致しません。";
+"This update needs a newer version of macOS." = "このアップデートには、より新しいバージョンのmacOSが必要です。";
+"The update changed the trusted application identity." = "アップデートにより、信頼されているアプリのIDが変更されました。";
+"The update is not signed by the installed application's publisher." = "アップデートが、インストール済みのアプリの発行元によって署名されていません。";
+"The installed architectures have different signing identities." = "インストール済みのアーキテクチャの署名IDが一致しません。";
+"The update download is incomplete." = "アップデートのダウンロードが完了していません。";
+"The update download failed its integrity check." = "アップデートのダウンロードが整合性チェックに失敗しました。";
+"The update staging directory is already in use." = "アップデートの作業用フォルダはすでに使用されています。";
+"The update archive could not be opened." = "アップデートのアーカイブを開けませんでした。";
+"The installed application path is unsafe." = "インストール済みのアプリの場所が安全ではありません。";
+"Move the app to a writable Applications folder before updating." = "アップデートする前に、アプリを書き込み可能な「アプリケーション」フォルダに移動してください。";
+"The update installer is missing." = "アップデートのインストーラが見つかりません。";
 
 /* Image markup additions. */
 "Annotation color" = "注釈の色";
@@ -496,3 +529,9 @@
 "Focus previous pane" = "前のペインにフォーカス";
 
 "Undo Move to Trash" = "ゴミ箱への移動を取り消す";
+
+/* Image markup errors. */
+"The image markup document is invalid." = "画像マークアップのドキュメントが無効です。";
+"This image could not be opened for markup." = "この画像をマークアップ用に開けませんでした。";
+"Markup supports images up to 80 megapixels." = "マークアップは最大8,000万画素の画像に対応しています。";
+"The marked image could not be rendered." = "マークアップした画像をレンダリングできませんでした。";

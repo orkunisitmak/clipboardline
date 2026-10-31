@@ -125,7 +125,7 @@ struct LinkMetadata: Equatable {
         let type = response.headers["content-type"]?.lowercased() ?? ""
         guard type.contains("text/html") || type.contains("application/xhtml+xml") else { return LinkMetadata(title: response.url.host) }
         let parsed = try await Task.detached(priority: .utility) {
-            try PublicLinkHTMLMetadata(data: response.body, url: response.url)
+            try PublicLinkHTMLMetadata(data: response.body, url: response.url, contentType: type)
         }.value
         var result = LinkMetadata(title: parsed.title, author: parsed.author)
         if let thumbnail = parsed.thumbnailURL {

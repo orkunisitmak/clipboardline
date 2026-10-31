@@ -15,7 +15,9 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 KINDS = ['image', 'text', 'link']
 FIELDS = {'activeKind', 'focused', 'selected', 'visibleKinds', 'searchEditing'}
-ACTIONS = {'open', 'close', 'up', 'down', 'left', 'right', 'toggle', 'openSearch', 'finishSearch', 'remap', 'key'}
+ACTIONS = {'open', 'close', 'up', 'down', 'left', 'right', 'toggle', 'openSearch', 'finishSearch', 'remap', 'key',
+           'switchShelf', 'command'}
+COMMAND_CODES = {'Enter', 'KeyS', 'KeyP', 'Space', 'KeyC'}
 PLATFORMS = {'macos': ('darwin', 'model'), 'windows': ('win32', 'renderer')}
 
 
@@ -56,7 +58,10 @@ def valid_ordered_kinds(values):
 
 
 def valid_snapshot(value, aliases):
-    if not isinstance(value, dict) or set(value) != FIELDS:
+    # Command steps also report `effects`: every copy, preview, pin or take-down they caused.
+    if not isinstance(value, dict) or set(value) - {'effects'} != FIELDS:
+        return False
+    if 'effects' in value and not (isinstance(value['effects'], list) and all(isinstance(item, str) for item in value['effects'])):
         return False
     if not valid_ordered_kinds(value['visibleKinds']) or value['activeKind'] not in value['visibleKinds']:
         return False
@@ -68,7 +73,8 @@ def valid_snapshot(value, aliases):
     if selected != sorted(set(selected)):
         return False
     focused = value['focused']
-    return ((focused is None and selected == []) or
+    # No focus on the active shelf still leaves the selection other shelves keep.
+    return ((focused is None and all(aliases.get(item) != value['activeKind'] for item in selected)) or
             (isinstance(focused, str) and focused in aliases and selected == [focused] and
              aliases[focused] == value['activeKind']))
 
@@ -88,6 +94,13 @@ def load_contract(path):
         isinstance(item.get(key), str) and item[key].strip() for key in ['id', 'macos', 'windows', 'reason'])
         for item in exceptions), 'OS-native exceptions require an explicit reason on both platforms')
     require(len({item['id'] for item in exceptions}) == len(exceptions), 'Duplicate OS-native exception')
+    # Shared user-visible behaviors outside shelf navigation record how each
+    # platform implements them; both platforms are required, never one alone.
+    behaviors = policy.get('sharedBehaviors')
+    require(isinstance(behaviors, list) and all(isinstance(item, dict) and set(item) == {'id', 'behavior', 'macos', 'windows'} and all(
+        isinstance(item[key], str) and item[key].strip() for key in item) for item in behaviors),
+        'Shared behaviors require a description for both platforms')
+    require(len({item['id'] for item in behaviors}) == len(behaviors), 'Duplicate shared behavior')
     item_sets, scenarios = contract.get('itemSets'), contract.get('scenarios')
     require(isinstance(item_sets, dict) and bool(item_sets) and isinstance(scenarios, list) and bool(scenarios),
             'Shared fixtures and scenarios are required')
@@ -123,7 +136,11 @@ def load_contract(path):
                         'Unsupported shared shortcut mapping')
             if step['action'] == 'key':
                 require(step.get('code') == 'KeyX', 'Unsupported shared keyboard input')
+            if step['action'] == 'command':
+                require(step.get('code') in COMMAND_CODES and step.get('ctrl', False) == (step['code'] == 'KeyC'),
+                        'Unsupported shared item command')
             require(valid_snapshot(step.get('expect'), aliases), 'Malformed expected shared state')
+            require(('effects' in step['expect']) == (step['action'] == 'command'), 'Only command steps expect effects')
             expected[(identifier, index)] = step['expect']
     return contract, hashlib.sha256(data).hexdigest(), expected, aliases_by_scenario
 

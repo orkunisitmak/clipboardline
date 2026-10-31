@@ -8,7 +8,8 @@ function privateClipboard(formats){
 }
 function validSequence(value){return Number.isInteger(value)&&value>0&&value<=0xffffffff;}
 const changed=Object.freeze({raced:true});
-async function readClipboardContent({clipboard,sequence,marker,plainURL}){
+// With link capture off a standalone URL is ordinary text, as on macOS.
+async function readClipboardContent({clipboard,sequence,marker,plainURL,captureLinks=true}){
   let before;try{before=await sequence();}catch{return null;}if(!validSequence(before))return null;
   const current=async()=>{try{return await sequence()===before;}catch{return false;}};
   const entries=await clipboard.read();
@@ -40,9 +41,12 @@ async function readClipboardContent({clipboard,sequence,marker,plainURL}){
     bytes=Buffer.from(await blob.arrayBuffer());if(bytes.length>1024*1024)return null;
     try{value=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);}catch{return null;}
     if(!value||! /\P{White_Space}/u.test(value))return null;
-    const url=plainURL(value);kind=url?'link':'text';if(url)value=url;
+    const url=captureLinks?plainURL(value):null;kind=url?'link':'text';if(url)value=url;
   }
   if(!await current())return changed;
-  return{kind,value,owned:false,fingerprint:kind+':'+crypto.createHash('sha256').update(bytes).digest('hex')};
+  return{kind,value,sequence:before,owned:false,fingerprint:kind+':'+crypto.createHash('sha256').update(bytes).digest('hex')};
 }
-module.exports={privateClipboard,readClipboardContent};
+// A notification is a repeat only for the same native generation. An identical later copy is a new copy
+// (it re-adds an item the user deleted or hid), as macOS changeCount does.
+function repeatedGeneration(state,content){if(content.sequence===state.sequence)return true;state.sequence=content.sequence;return false;}
+module.exports={privateClipboard,readClipboardContent,repeatedGeneration};

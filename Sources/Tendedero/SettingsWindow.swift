@@ -18,7 +18,10 @@ final class SettingsModel: ObservableObject {
     let line: Line
     let allowsSystemChanges: Bool
     let updates: AppUpdateController
-    @Published var updatesRequest = 0
+    // Kept here rather than in the view: the view is rebuilt each time the
+    // window opens, and would replay a stored request or forget a choice.
+    @Published var updatesRequest = 0 { didSet { section = .updates } }
+    @Published var historyCleanupKind: LibraryKind?
     @Published var section: SettingsSection = .general
     @Published var shortcutWarning: String?
     var onCommands: () -> Void = {}
@@ -59,9 +62,16 @@ final class SettingsModel: ObservableObject {
     var languageNeedsRestart: Bool { language != launchLanguage }
     // Re-read on the existing presentation/activation refresh rather than
     // retaining a warning after the user grants access in System Settings.
-    var needsPastePermission: Bool { !pastePermissionGranted() }
+    private(set) var needsPastePermission = false
+    // Both are system queries. The view renders on every line change, so it
+    // reads these cached values instead of asking the system each time.
+    private(set) var opensAtLogin = false
 
-    func refresh() { objectWillChange.send() }
+    func refresh() {
+        needsPastePermission = !pastePermissionGranted()
+        opensAtLogin = SMAppService.mainApp.status == .enabled
+        objectWillChange.send()
+    }
     func binding<Value>(get: @escaping () -> Value, set: @escaping (Value) -> Void) -> Binding<Value> {
         Binding(get: { get() }, set: { [weak self] value in set(value); self?.refresh() })
     }
@@ -108,9 +118,16 @@ final class SettingsWindowController: NSWindowController {
         window.center()
         super.init(window: window)
         window.onBeforeMouseKeyFocus = { [weak self] in self?.onBeforeMouseKeyFocus?() }
+        NotificationCenter.default.addObserver(self, selector: #selector(windowWillClose(_:)), name: NSWindow.willCloseNotification, object: window)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    /// The window outlives closing, but its view does not: a kept view would
+    /// re-render on every line change while nobody can see it.
+    @objc private func windowWillClose(_ notification: Notification) { window?.contentView = NSView() }
     func present() {
+        if let window, !(window.contentView is NSHostingView<SettingsView>) {
+            window.contentView = NSHostingView(rootView: SettingsView(model: model, line: model.line))
+        }
         model.refresh()
         NSApp.activate(ignoringOtherApps: true)
         showWindow(nil); window?.makeKeyAndOrderFront(nil)
@@ -147,7 +164,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 private struct SettingsView: View {
     @ObservedObject var model: SettingsModel
     @ObservedObject var line: Line
-    @State private var historyCleanupKind: LibraryKind?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -191,7 +207,6 @@ private struct SettingsView: View {
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in model.refresh() }
-        .onReceive(model.$updatesRequest) { if $0 > 0 { model.section = .updates } }
     }
 
     private var general: some View {
@@ -229,7 +244,7 @@ private struct SettingsView: View {
             }
             Section {
                 Toggle(L("Sounds"), isOn: model.binding(get: { line.soundOn }, set: { line.soundOn = $0 }))
-                Toggle(L("Open at login"), isOn: model.binding(get: { SMAppService.mainApp.status == .enabled }, set: { _ in model.changeLogin() }))
+                Toggle(L("Open at login"), isOn: model.binding(get: { model.opensAtLogin }, set: { _ in model.changeLogin() }))
                     .disabled(!model.allowsSystemChanges)
             }
         }
@@ -276,14 +291,14 @@ private struct SettingsView: View {
     }
 
     private var history: some View {
-        let cleanupCount = try? line.library?.unsavedHistoryCount(kind: historyCleanupKind)
+        let cleanupCount = try? line.library?.unsavedHistoryCount(kind: model.historyCleanupKind)
         return Section {
             ForEach(LibraryKind.allCases, id: \.self) { kind in
                 Picker(kind == .image ? L("Images") : kind == .text ? L("Texts") : L("Links"), selection: model.binding(get: { line.retentionDays(for: kind) }, set: { line.setRetentionDays($0, for: kind) })) {
                     ForEach(ImageHistory.dayChoices, id: \.self) { Text(String(format: L("Keep for %d days"), $0)).tag($0) }
                 }
             }
-            Picker(L("Copies to clear"), selection: $historyCleanupKind) {
+            Picker(L("Copies to clear"), selection: $model.historyCleanupKind) {
                 Text(L("All types")).tag(nil as LibraryKind?)
                 Text(L("Images")).tag(LibraryKind.image as LibraryKind?)
                 Text(L("Texts")).tag(LibraryKind.text as LibraryKind?)
@@ -292,7 +307,7 @@ private struct SettingsView: View {
             if let count = cleanupCount {
                 Text(String(format: L("%d unsaved copies"), count)).font(.caption).foregroundStyle(.secondary)
             }
-            Button(L("Clear unsaved copies…")) { model.clearHistory(historyCleanupKind) }
+            Button(L("Clear unsaved copies…")) { model.clearHistory(model.historyCleanupKind) }
                 .disabled(line.library == nil || cleanupCount == 0)
         } header: { Text(L("History")) } footer: {
             Text(L("Unsaved copies expire to recoverable Trash. Saved items and original files are kept."))
