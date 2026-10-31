@@ -60,7 +60,7 @@ class Updates {
   save(){
     this.safeDirectory();const destination=this.cachePath();if(fs.existsSync(destination)&&fs.lstatSync(destination).isSymbolicLink())throw new Error('Unsafe update cache');
     const temporary=destination+'.tmp-'+crypto.randomUUID();
-    try{fs.writeFileSync(temporary,JSON.stringify({envelope:this.envelope?.toString('base64'),checkedAt:this.state.checkedAt,lastAttemptAt:this.state.lastAttemptAt,announcedBuild:this.announcedBuild,installer:this.installer?path.basename(this.installer):null}),{flag:'wx',mode:0o600});fs.renameSync(temporary,destination);}
+    try{fs.writeFileSync(temporary,JSON.stringify({envelope:this.envelope?.toString('base64'),checkedAt:this.state.checkedAt,lastAttemptAt:this.state.lastAttemptAt,lastAttemptFailed:!!this.state.error,announcedBuild:this.announcedBuild,installer:this.installer?path.basename(this.installer):null}),{flag:'wx',mode:0o600});fs.renameSync(temporary,destination);}
     finally{if(fs.existsSync(temporary))fs.unlinkSync(temporary);}
   }
   saveQuietly(){try{this.save();}catch{}}
@@ -69,8 +69,11 @@ class Updates {
       if(fs.lstatSync(this.directory).isSymbolicLink())return;const cache=this.cachePath(),stat=fs.lstatSync(cache);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>400000)return;
       const value=JSON.parse(fs.readFileSync(cache,'utf8'));if(typeof value.envelope!=='string'||value.envelope.length>300000)return;
       const envelope=Buffer.from(value.envelope,'base64'),manifest=verifyEnvelope(envelope,this.publicKey);this.envelope=envelope;
-      const date=value.checkedAt;this.state.checkedAt=Number.isFinite(date)&&date>0&&date<=this.clock()+60000?date:null;
-      this.state.lastAttemptAt=this.state.checkedAt;this.announcedBuild=Number.isSafeInteger(value.announcedBuild)?value.announcedBuild:0;
+      const validDate=date=>Number.isFinite(date)&&date>0&&date<=this.clock()+60000?date:null;
+      this.state.checkedAt=validDate(value.checkedAt);
+      this.state.lastAttemptAt=validDate(value.lastAttemptAt)??this.state.checkedAt;
+      this.state.error=value.lastAttemptFailed===true?'Previous update check failed.':null;
+      this.announcedBuild=Number.isSafeInteger(value.announcedBuild)?value.announcedBuild:0;
       if(this.newer(manifest)){
         this.manifest=manifest;const file=path.join(this.directory,`ClipBoardLine-Setup-${manifest.build}.exe`);
         if(value.installer===path.basename(file)){try{this.installer=verifiedInstaller(file,manifest);}catch{}}
@@ -94,6 +97,7 @@ class Updates {
         this.saveQuietly();this.announce();
       } catch (error) {
         this.set({status:this.manifest?(this.installer?'ready':'available'):'error',error:String(error.message).slice(0,300),message:'Update check failed: '+String(error.message).slice(0,300),lastAttemptAt:this.clock()});
+        this.saveQuietly();
       }return this.state;
     });
     this.checkPromise=operation;operation.finally(()=>{if(this.checkPromise===operation)this.checkPromise=null;});return operation;
