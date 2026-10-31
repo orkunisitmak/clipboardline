@@ -106,6 +106,8 @@ struct LinkMetadata: Equatable {
         }
         return (LinkMetadata(title: response.title, author: response.author_name), imageURL)
     }
+    /// Requests one page and reads its preview. Cancellation is checked on both sides of the parse
+    /// because that parse runs detached and cannot be interrupted once it has started.
     static func fetchMetadata(_ url: URL) async throws -> LinkMetadata {
         guard PublicLinkDestination(url) != nil else { throw PublicLinkError.blockedURL }
         let network = PublicLinkNetwork()
@@ -124,9 +126,14 @@ struct LinkMetadata: Equatable {
         let response = try await network.fetch(url, limit: 512 * 1024)
         let type = response.headers["content-type"]?.lowercased() ?? ""
         guard type.contains("text/html") || type.contains("application/xhtml+xml") else { return LinkMetadata(title: response.url.host) }
+        // The parse runs as an unstructured task, so it cannot be cancelled from here. Checking on both
+        // sides means a stopped service or a switched-off feature never spends the remaining work on
+        // this page, and never fetches a thumbnail for a preview nobody will show.
+        try Task.checkCancellation()
         let parsed = try await Task.detached(priority: .utility) {
             try PublicLinkHTMLMetadata(data: response.body, url: response.url, contentType: type)
         }.value
+        try Task.checkCancellation()
         var result = LinkMetadata(title: parsed.title, author: parsed.author)
         if let thumbnail = parsed.thumbnailURL {
             result.thumbnail = try? await network.fetch(thumbnail, limit: 5 * 1024 * 1024).body

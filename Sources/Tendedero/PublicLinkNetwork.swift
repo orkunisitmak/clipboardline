@@ -355,29 +355,26 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     let author: String?
     let thumbnailURL: URL?
 
+    /// Metadata lives in the document head, so this window caps the bytes one parse looks at. The tags
+    /// inside it are collected by a forward scan instead of by regular expressions: a quantified
+    /// pattern costs one rescan of the remaining window for every candidate tag, so markup repeating
+    /// an opening tag without ever closing it costs time by the square of the window, and shrinking
+    /// the window only scales that square down. A scan visits each candidate once.
+    static let metadataWindowBytes = 32 * 1024
+    /// Characters a tag may spend reaching its `>`, kept at the budgets the patterns used.
+    private static let metaAttributeWindowCharacters = 8192
+    private static let tagAttributeWindowCharacters = 4096
+    private static let titleBodyWindowCharacters = 8192
+
     init(data: Data, url: URL, contentType: String = "") throws {
         guard data.count <= 512 * 1024 else { throw PublicLinkError.tooLarge }
-        let source = Self.decode(data, contentType: contentType)
-        let html = Self.replacing(#"(?is)<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>"#, in: source, with: "")
-        let tags = try NSRegularExpression(pattern: #"(?is)<meta\b([^>]{0,8192})>"#)
-        let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)
-        var metadata: [String: String] = [:]
-        for tag in tags.matches(in: html, range: NSRange(html.startIndex..., in: html)).prefix(256) {
-            guard let range = Range(tag.range(at: 1), in: html) else { continue }
-            let raw = String(html[range]); var values: [String: String] = [:]
-            for attribute in attributes.matches(in: raw, range: NSRange(raw.startIndex..., in: raw)) {
-                guard let key = Range(attribute.range(at: 1), in: raw),
-                      let value = (2...4).compactMap({ Range(attribute.range(at: $0), in: raw) }).first else { continue }
-                values[String(raw[key]).lowercased()] = Self.entities(String(raw[value]))
-            }
-            if let key = values["property"] ?? values["name"], let value = values["content"], metadata[key.lowercased()] == nil { metadata[key.lowercased()] = String(value.prefix(2000)) }
-        }
-        let titleTag = try NSRegularExpression(pattern: #"(?is)<title\b[^>]*>(.{0,8192}?)</title\s*>"#)
-        let titleMatch = titleTag.firstMatch(in: html, range: NSRange(html.startIndex..., in: html))
-            .flatMap { Range($0.range(at: 1), in: html) }.map { Self.entities(Self.replacing(#"<[^>]*>"#, in: String(html[$0]), with: "")) }
-        title = Self.clean(metadata["og:title"] ?? metadata["twitter:title"] ?? titleMatch, limit: 500)
-        author = Self.clean(metadata["author"] ?? metadata["og:site_name"], limit: 200)
-        let image = metadata["og:image:secure_url"] ?? metadata["og:image"] ?? metadata["twitter:image"]
+        // Decode inside the window, so a long tail costs neither parse time nor UTF-8 repair.
+        let head = Self.window(of: data)
+        let source = Self.decode(head, contentType: contentType)
+        let found = Self.read(source)
+        title = Self.clean(found.metadata["og:title"] ?? found.metadata["twitter:title"] ?? found.title, limit: 500)
+        author = Self.clean(found.metadata["author"] ?? found.metadata["og:site_name"], limit: 200)
+        let image = found.metadata["og:image:secure_url"] ?? found.metadata["og:image"] ?? found.metadata["twitter:image"]
         thumbnailURL = image.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }.flatMap { PublicLinkDestination($0)?.url }
     }
     /// Encoding sniffing order, as in windows/lib/network.cjs decodeHTML: UTF-8 BOM, Content-Type charset,
@@ -409,9 +406,296 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         guard converted != 0xFFFF_FFFF else { return nil }
         return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(converted))
     }
+
+    /// One pass over the document collecting `<meta>` values and the first `<title>` body, skipping
+    /// comment, script and style content. Those bodies have no length of their own, so they are
+    /// skipped by searching for the closing token from a marker that only moves forward: one failed
+    /// search settles every later candidate in the same document.
+    private static func read(_ html: String) -> (metadata: [String: String], title: String?) {
+        var metadata: [String: String] = [:]
+        var title: String?
+        var examinedTags = 0
+        var cursor = html.startIndex
+        var closings: [String: (searched: String.Index, found: String.Index?)] = [:]
+        var verifiedClosings: [String: (searched: String.Index, found: String.Index?)] = [:]
+        let lastAngle = html.lastIndex(of: ">")
+        /// Where a closing token lies at or after `position`. Requests for one token arrive in increasing
+        /// order, so two forward-only records answer them: `closings` remembers how far a raw search for
+        /// the token ran, `verifiedClosings` remembers the answer once a candidate has been checked. The
+        /// second record matters because a walk that rejects `</titlex>` candidates pushes the raw record
+        /// past them; without it a later opener starts behind that record and walks the same stretch again.
+        func closingToken(_ token: String, atOrAfter position: String.Index, endsWithTag: Bool = false) -> String.Index? {
+            if endsWithTag, let known = verifiedClosings[token], known.searched <= position {
+                // A verified answer covers every position from the one it was asked at up to the tag itself.
+                if let hit = known.found {
+                    if hit >= position { return hit }
+                } else {
+                    return nil
+                }
+            }
+            var from = position
+            while true {
+                var found: String.Index?
+                if let known = closings[token], known.searched <= from {
+                    // A search that found nothing at or behind this point rules the whole tail out.
+                    guard let hit = known.found else {
+                        if endsWithTag { verifiedClosings[token] = (position, nil) }
+                        return nil
+                    }
+                    if hit >= from { found = hit }
+                }
+                if found == nil {
+                    found = from < html.endIndex
+                        ? html.range(of: token, options: .caseInsensitive, range: from..<html.endIndex)?.lowerBound
+                        : nil
+                    closings[token] = (from, found)
+                    if found == nil, endsWithTag { verifiedClosings[token] = (position, nil) }
+                }
+                guard let candidate = found else { return nil }
+                guard endsWithTag else { return candidate }
+                // </titlex> is not a closing tag, so a rejected candidate must not end the search. The
+                // step past it goes through the raw record, which keeps the walk forward-only.
+                var after = html.index(candidate, offsetBy: token.count)
+                while after < html.endIndex, html[after].isWhitespace { after = html.index(after, offsetBy: 1) }
+                guard after < html.endIndex, html[after] == ">" else { from = html.index(after: candidate); continue }
+                verifiedClosings[token] = (position, candidate)
+                return candidate
+            }
+        }
+        var nextAngle: (searched: String.Index, found: String.Index?)?
+
+        /// Characters from the start of the document to a position, answered by a walker that only ever moves
+        /// forward. Each tag asks for two positions - its opener and the `>` that ends it - and both sequences
+        /// arrive in increasing order, so one pass over the document answers every tag. Measuring a tag on its
+        /// own with `index(_:offsetBy:limitedBy:)` walked the whole budget for every tag whatever the tag's own
+        /// length was: 32 KiB of closed `<meta>` tags cost 97.5 ms that way, against 2.3 ms before this scan
+        /// existed. A walker asked for a position behind where it stands starts over, so a caller that ever
+        /// moved backwards gets a measured distance rather than a wrong one.
+        var angleWalk = (at: html.startIndex, characters: 0)
+        var openerWalk = (at: html.startIndex, characters: 0)
+        func characters(to position: String.Index, walking walker: inout (at: String.Index, characters: Int)) -> Int {
+            if walker.at > position {
+                walker.at = html.startIndex
+                walker.characters = 0
+            }
+            while walker.at < position {
+                walker.at = html.index(after: walker.at)
+                walker.characters += 1
+            }
+            return walker.characters
+        }
+        /// Whether `end` lies within `window` characters of `position`, in the grapheme steps the budgets count.
+        func spans(_ position: String.Index, to end: String.Index, within window: Int) -> Bool {
+            characters(to: end, walking: &angleWalk) - characters(to: position, walking: &openerWalk) < window
+        }
+
+
+        var nextQuote: (searched: String.Index, found: String.Index?)?
+        var quoteCloses: [Character: (searched: String.Index, found: String.Index?)] = [:]
+
+        /// Where the next quote of `mark` lies at or after `position`, remembered the way the `>` search is.
+        /// The quote that closes a value is looked up once per value, and a tag whose value is closed past its
+        /// own `>` asks that question again for every opener in front of it: without the memory each of them
+        /// rewalks the value and everything behind it, so the openers price the document by themselves.
+        func closingQuote(_ mark: Character, after position: String.Index) -> String.Index? {
+            if let known = quoteCloses[mark], known.searched <= position {
+                // A search that found nothing at or behind this point rules the whole tail out.
+                guard let hit = known.found else { return nil }
+                if hit >= position { return hit }
+            }
+            let found = position < html.endIndex
+                ? html.range(of: String(mark), range: position..<html.endIndex)?.lowerBound
+                : nil
+            quoteCloses[mark] = (position, found)
+            return found
+        }
+
+        /// Where the next `>` lies at or after `position`, remembered so the search only ever moves forward.
+        func angleSearch(after position: String.Index) -> String.Index? {
+            guard let lastAngle, lastAngle >= position else { return nil }
+            if let known = nextAngle, known.searched <= position {
+                // A search that found nothing at or behind this point rules the whole tail out.
+                guard let hit = known.found else { return nil }
+                if hit >= position { return hit }
+            }
+            let found = html.range(of: ">", range: position..<html.endIndex)?.lowerBound
+            nextAngle = (position, found)
+            return found
+        }
+        /// Where the first quote that opens an attribute value lies at or after `position`. A quote opens a
+        /// value only where `=` precedes it, spaces allowed between: the apostrophe in `name=it's` is ordinary
+        /// text, and reading it as a value start drags the end of the tag into the markup after it. Like the
+        /// `>` search, this one is remembered and only moves forward, so a page whose tags quote nothing pays
+        /// for one pass over itself rather than one pass per tag.
+        func valueQuote(atOrAfter position: String.Index) -> String.Index? {
+            if let known = nextQuote, known.searched <= position {
+                guard let hit = known.found else { return nil }
+                if hit >= position { return hit }
+            }
+            var probe = position
+            while probe < html.endIndex {
+                let mark = html[probe]
+                if mark == "\"" || mark == "'" {
+                    var before = probe
+                    while before > position {
+                        let previous = html.index(before: before)
+                        guard html[previous].isWhitespace else { break }
+                        before = previous
+                    }
+                    let sign = before == position ? position : html.index(before: before)
+                    if html[sign] == "=" {
+                        nextQuote = (position, probe)
+                        return probe
+                    }
+                }
+                probe = html.index(after: probe)
+            }
+            nextQuote = (position, nil)
+            return nil
+        }
+        /// Where a `<meta>` tag ends: its first `>` that is not inside a quoted attribute value. A page may
+        /// quote a `>` inside a value - a description that quotes another tag - and ending the tag at that
+        /// `>` hands the rest of the value to the attribute parser as if it were this tag's own attributes, so
+        /// a `<meta>` written inside a description becomes the next tag and the page names its own `og:title`
+        /// or `og:image` from inside a sentence. A quote that never closes is not a value, so such a tag ends
+        /// at its plain `>` as it did before. Windows ends the tag the same way in windows/lib/network.cjs,
+        /// which carries the measurements for this shape.
+        func quotedTagEnd(after position: String.Index) -> String.Index? {
+            var at = position
+            while let candidate = angleSearch(after: at) {
+                guard let quote = valueQuote(atOrAfter: at), quote <= candidate else { return candidate }
+                guard let closedAt = closingQuote(html[quote], after: html.index(after: quote)) else { return candidate }
+                at = html.index(after: closedAt)
+            }
+            return nil
+        }
+        /// Where the next `>` lies at or after `position`, when it sits inside `window` characters. The
+        /// search itself is `angleSearch`: remembered the way a closing token is, it only ever moves
+        /// forward, so a `>` too far away for one opener is not walked again by the next. Without that
+        /// memory each unclosed opener repeats the same stretch and the parse costs the document size
+        /// by itself.
+        func tagEnd(after position: String.Index, window: Int) -> String.Index? {
+            guard let candidate = angleSearch(after: position) else { return nil }
+            guard spans(position, to: candidate, within: window) else { return nil }
+            return candidate
+        }
+        func opens(_ token: String, at position: String.Index) -> Bool {
+            guard let end = html.index(position, offsetBy: token.count, limitedBy: html.endIndex) else { return false }
+            return html[position..<end].lowercased() == token
+        }
+        func isWord(_ position: String.Index) -> Bool {
+            position != html.endIndex && (html[position].isLetter || html[position].isNumber || html[position] == "_")
+        }
+        while let open = html.range(of: "<", range: cursor..<html.endIndex)?.lowerBound {
+            cursor = html.index(after: open)
+            if opens("<!--", at: open) {
+                if let end = closingToken("-->", atOrAfter: html.index(open, offsetBy: 4)) { cursor = html.index(end, offsetBy: 3) }
+                continue
+            }
+            if opens("<script", at: open) || opens("<style", at: open) {
+                let name = opens("<script", at: open) ? "script" : "style"
+                let afterName = html.index(open, offsetBy: name.count + 1)
+                guard !isWord(afterName), let close = tagEnd(after: afterName, window: tagAttributeWindowCharacters) else { continue }
+                guard let end = closingToken("</" + name, atOrAfter: html.index(after: close), endsWithTag: true) else { continue }
+                var after = html.index(end, offsetBy: name.count + 2)
+                while after < html.endIndex, html[after].isWhitespace { after = html.index(after, offsetBy: 1) }
+                guard after < html.endIndex, html[after] == ">" else { continue }
+                cursor = html.index(after, offsetBy: 1)
+                continue
+            }
+            if opens("<meta", at: open) {
+                let afterName = html.index(open, offsetBy: 5)
+                guard !isWord(afterName), let close = quotedTagEnd(after: afterName) else { continue }
+                // How much of a tag may be read is not where the next tag begins. The search resumes
+                // after the tag that was located whatever its length, otherwise a tag whose value quotes
+                // markup past the budget holds the next search inside its own text and hands the page a
+                // `<meta>` of its own invention. The character budget and the 256-tag cap are unchanged.
+                guard spans(afterName, to: close, within: metaAttributeWindowCharacters), examinedTags < 256 else {
+                    cursor = html.index(after: close)
+                    continue
+                }
+                examinedTags += 1
+                let values = Self.attributeValues(in: String(html[afterName..<close]))
+                if let key = values["property"] ?? values["name"], let value = values["content"], metadata[key.lowercased()] == nil { metadata[key.lowercased()] = String(value.prefix(2000)) }
+                cursor = html.index(after: close)
+                continue
+            }
+            if title == nil, opens("<title", at: open) {
+                let afterName = html.index(open, offsetBy: 6)
+                guard !isWord(afterName), let close = tagEnd(after: afterName, window: tagAttributeWindowCharacters) else { continue }
+                let bodyStart = html.index(after: close)
+                let bodyLimit = html.index(bodyStart, offsetBy: titleBodyWindowCharacters, limitedBy: html.endIndex) ?? html.endIndex
+                guard let end = closingToken("</title", atOrAfter: bodyStart, endsWithTag: true), end < bodyLimit else { continue }
+                var after = html.index(end, offsetBy: 7)
+                while after < bodyLimit, html[after].isWhitespace { after = html.index(after, offsetBy: 1) }
+                guard after < bodyLimit, html[after] == ">" else { continue }
+                title = Self.entities(Self.replacing(#"<[^>]*>"#, in: String(html[bodyStart..<end]), with: ""))
+                cursor = html.index(after, offsetBy: 1)
+                continue
+            }
+        }
+        return (metadata, title)
+    }
+    /// The attributes of one tag, read in a single pass with the rules an attribute pattern applies: a
+    /// name that runs on, or a quote that never closes, cannot make a later position re-walk the
+    /// characters before it. Units are UTF-16, the width the pattern saw, so that a non-ASCII space
+    /// separates a name from its `=` and ends an unquoted value here exactly as it did there.
+    private static func attributeValues(in raw: String) -> [String: String] {
+        let units = Array(raw.utf16)
+        var values: [String: String] = [:]
+        func isNameStart(_ unit: UInt16) -> Bool { unit >= 65 && unit <= 90 || unit >= 97 && unit <= 122 || unit == 95 || unit == 58 }
+        func isName(_ unit: UInt16) -> Bool { isNameStart(unit) || unit >= 48 && unit <= 57 || unit == 45 || unit == 46 }
+        func isSpace(_ unit: UInt16) -> Bool {
+            unit >= 9 && unit <= 13 || unit == 32 || unit == 133 || unit == 160 || unit == 5760
+                || unit >= 8192 && unit <= 8202 || unit == 8232 || unit == 8233 || unit == 8239
+                || unit == 8287 || unit == 12288
+        }
+        func isValueStop(_ unit: UInt16) -> Bool { isSpace(unit) || unit == 34 || unit == 39 || unit == 61 || unit == 60 || unit == 62 || unit == 96 }
+        func skippingSpaces(from start: Int) -> Int {
+            var position = start
+            while position < units.count, isSpace(units[position]) { position += 1 }
+            return position
+        }
+        var index = 0
+        while index < units.count {
+            guard isNameStart(units[index]) else { index += 1; continue }
+            var nameEnd = index + 1
+            while nameEnd < units.count, isName(units[nameEnd]) { nameEnd += 1 }
+            let equals = skippingSpaces(from: nameEnd)
+            guard equals < units.count, units[equals] == 61 else { index = equals; continue }
+            let value = skippingSpaces(from: equals + 1)
+            guard value < units.count else { break }
+            let key = String(decoding: units[index..<nameEnd], as: UTF16.self).lowercased()
+            let quote = units[value]
+            if quote == 34 || quote == 39 {
+                var close = value + 1
+                while close < units.count, units[close] != quote { close += 1 }
+                guard close < units.count else { index = value + 1; continue }
+                values[key] = Self.entities(String(decoding: units[(value + 1)..<close], as: UTF16.self))
+                index = close + 1
+                continue
+            }
+            var end = value
+            while end < units.count, !isValueStop(units[end]) { end += 1 }
+            guard end > value else { index = value + 1; continue }
+            values[key] = Self.entities(String(decoding: units[value..<end], as: UTF16.self))
+            index = end
+        }
+        return values
+    }
     private static func replacing(_ pattern: String, in value: String, with replacement: String) -> String {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return value }
         return regex.stringByReplacingMatches(in: value, range: NSRange(value.startIndex..., in: value), withTemplate: replacement)
+    }
+    /// Truncates to the parsing window without cutting a UTF-8 sequence in half: the bytes before a
+    /// continuation byte belong to the same scalar, and a lead byte at the edge would start one that
+    /// never arrives. A cut in the middle of a sequence makes the whole document fail to decode.
+    private static func window(of input: Data) -> Data {
+        guard input.count > metadataWindowBytes else { return input }
+        var end = input.index(input.startIndex, offsetBy: metadataWindowBytes)
+        while end > input.startIndex, input[input.index(before: end)] & 0xC0 == 0x80 { end = input.index(before: end) }
+        if end > input.startIndex, input[input.index(before: end)] >= 0xC0 { end = input.index(before: end) }
+        return input[input.startIndex..<end]
     }
     private static func clean(_ value: String?, limit: Int) -> String? {
         guard let value else { return nil }
