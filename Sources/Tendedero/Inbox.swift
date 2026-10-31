@@ -1,5 +1,49 @@
 import Foundation
 
+enum InboxSettings {
+    static let keys = [
+        "location",
+        "locationScreenshot",
+        "locationRecording",
+        "thumbnail",
+        "target",
+        "targetScreenshot",
+        "targetRecording"
+    ]
+
+    static func isApplied(current: [String: Any], folder: URL) -> Bool {
+        let location = current["locationScreenshot"] as? String ?? current["location"] as? String
+        return path(location, matches: folder)
+    }
+
+    static func restorableKeys(current: [String: Any], folder: URL) -> Set<String> {
+        Set(keys.filter { isManagedValue(current[$0], for: $0, folder: folder) })
+    }
+
+    static func userChangedKeys(current: [String: Any], folder: URL) -> Set<String> {
+        Set(keys.filter { !isManagedValue(current[$0], for: $0, folder: folder) })
+    }
+
+    private static func isManagedValue(_ value: Any?, for key: String, folder: URL) -> Bool {
+        switch key {
+        case "location", "locationScreenshot", "locationRecording":
+            return path(value as? String, matches: folder)
+        case "thumbnail":
+            return (value as? Bool) == false
+        case "target", "targetScreenshot", "targetRecording":
+            return (value as? String) == "file"
+        default:
+            return false
+        }
+    }
+
+    private static func path(_ value: String?, matches folder: URL) -> Bool {
+        guard let value else { return false }
+        return URL(fileURLWithPath: (value as NSString).expandingTildeInPath).standardizedFileURL
+            == folder.standardizedFileURL
+    }
+}
+
 /// Inbox mode: Tendedero takes over where screenshots go.
 ///
 /// It changes the macOS screenshot settings in the Options menu of
@@ -34,6 +78,16 @@ enum Inbox {
     private static let offeredKey = "inboxOffered"
     private static let savedKey = "inboxSavedSettings"
 
+    private static let preferences: [(String, CFString)] = [
+        ("location", locationKey),
+        ("locationScreenshot", screenshotLocationKey),
+        ("locationRecording", recordingLocationKey),
+        ("thumbnail", thumbnailKey),
+        ("target", targetKey),
+        ("targetScreenshot", screenshotTargetKey),
+        ("targetRecording", recordingTargetKey)
+    ]
+
     static let folder: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("Tendedero/Screenshots", isDirectory: true)
@@ -53,55 +107,79 @@ enum Inbox {
 
     /// Whether macOS is currently sending screenshots to our folder.
     static var isApplied: Bool {
-        guard let current = CFPreferencesCopyAppValue(locationKey, domain) as? String else { return false }
-        return URL(fileURLWithPath: (current as NSString).expandingTildeInPath).standardizedFileURL
-            == folder.standardizedFileURL
+        InboxSettings.isApplied(current: currentSettings(), folder: folder)
     }
 
     static func apply() {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        // Never save our own values as the "previous" ones, for example after
-        // a crash left them applied.
+        let current = currentSettings()
         var saved = UserDefaults.standard.dictionary(forKey: savedKey) ?? [:]
-        if !isApplied {
-            saved = [:]
-            saved["location"] = CFPreferencesCopyAppValue(locationKey, domain) as? String
-            saved["locationScreenshot"] = CFPreferencesCopyAppValue(screenshotLocationKey, domain) as? String
-            saved["thumbnail"] = CFPreferencesCopyAppValue(thumbnailKey, domain) as? Bool
+        if saved.isEmpty {
+            // Start a new snapshot before taking over any system settings.
+            saved = current
+        } else {
+            // Older snapshots did not contain recording or target preferences.
+            // Capture those before filling them with Inbox's values.
+            if saved["recordingSaved"] == nil {
+                saved["locationRecording"] = current["locationRecording"]
+                saved["recordingSaved"] = true
+            }
+            if saved["targetSaved"] == nil {
+                saved["target"] = current["target"]
+                saved["targetScreenshot"] = current["targetScreenshot"]
+                saved["targetRecording"] = current["targetRecording"]
+                saved["targetSaved"] = true
+            }
+
+            // If macOS changed a preference while Inbox was active, remember
+            // that choice before applying Inbox's values again.
+            for key in InboxSettings.userChangedKeys(current: current, folder: folder) {
+                if let value = current[key] {
+                    saved[key] = value
+                } else {
+                    saved.removeValue(forKey: key)
+                }
+            }
         }
-        // Recordings and the target came later: settings saved by an earlier
-        // version lack them, and the value macOS has now is still the user's own.
-        if saved["recordingSaved"] == nil {
-            saved["locationRecording"] = CFPreferencesCopyAppValue(recordingLocationKey, domain) as? String
-            saved["recordingSaved"] = true
-        }
-        if saved["targetSaved"] == nil {
-            saved["target"] = CFPreferencesCopyAppValue(targetKey, domain) as? String
-            saved["targetScreenshot"] = CFPreferencesCopyAppValue(screenshotTargetKey, domain) as? String
-            saved["targetRecording"] = CFPreferencesCopyAppValue(recordingTargetKey, domain) as? String
-            saved["targetSaved"] = true
-        }
+        saved["recordingSaved"] = true
+        saved["targetSaved"] = true
         UserDefaults.standard.set(saved, forKey: savedKey)
-        set(locationKey, folder.path)
-        set(screenshotLocationKey, folder.path)
-        set(recordingLocationKey, folder.path)
-        set(targetKey, "file")
-        set(screenshotTargetKey, "file")
-        set(recordingTargetKey, "file")
-        set(thumbnailKey, false)
+
+        for (name, key) in preferences {
+            set(key, managedValue(for: name))
+        }
     }
 
     static func restore() {
-        guard isApplied else { return }
-        let saved = UserDefaults.standard.dictionary(forKey: savedKey) ?? [:]
-        set(locationKey, saved["location"])
-        set(screenshotLocationKey, saved["locationScreenshot"])
-        set(recordingLocationKey, saved["locationRecording"])
-        set(targetKey, saved["target"])
-        set(screenshotTargetKey, saved["targetScreenshot"])
-        set(recordingTargetKey, saved["targetRecording"])
-        set(thumbnailKey, saved["thumbnail"])
+        guard let saved = UserDefaults.standard.dictionary(forKey: savedKey) else { return }
+        let restoreKeys = InboxSettings.restorableKeys(current: currentSettings(), folder: folder)
+        for (name, key) in preferences where restoreKeys.contains(name) {
+            set(key, saved[name])
+        }
         UserDefaults.standard.removeObject(forKey: savedKey)
+    }
+
+    private static func currentSettings() -> [String: Any] {
+        var current: [String: Any] = [:]
+        for (name, key) in preferences {
+            if let value = CFPreferencesCopyAppValue(key, domain) {
+                current[name] = value
+            }
+        }
+        return current
+    }
+
+    private static func managedValue(for name: String) -> Any? {
+        switch name {
+        case "location", "locationScreenshot", "locationRecording":
+            return folder.path
+        case "thumbnail":
+            return false
+        case "target", "targetScreenshot", "targetRecording":
+            return "file"
+        default:
+            return nil
+        }
     }
 
     /// Writes through cfprefsd, so the screenshot service sees it at once.
