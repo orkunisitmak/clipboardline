@@ -123,6 +123,8 @@ class Store {
     }
     this.mediaDirectory = path.join(this.directory, 'media'); fs.mkdirSync(this.mediaDirectory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
+    // Remove staging files a killed process left behind (putPNG '.png-' and putVideo '.video-'); exact names, regular files only.
+    for(const name of fs.readdirSync(this.mediaDirectory))if(/^\.(?:png|video)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(name))try{const file=path.join(this.mediaDirectory,name);if(fs.lstatSync(file).isFile())fs.unlinkSync(file);}catch{}
     this.file = path.join(this.directory, 'library.json');
     this.data = {schema: 1, items: [], folders: [], settings: clone(DEFAULTS)};
     if (fs.existsSync(this.file)) {
@@ -235,7 +237,8 @@ class Store {
     if (!width || !height || width * height > 80_000_000) fail('Image is too large');
     const filename = crypto.createHash('sha256').update(buffer).digest('hex') + '.png';
     const destination = path.join(this.mediaDirectory, filename);
-    if (!fs.existsSync(destination)) fs.writeFileSync(destination, buffer, {flag: 'wx', mode: 0o600});
+    // Write beside the target and rename, so a failed or interrupted write never leaves a truncated file under the content hash.
+    if (!fs.existsSync(destination) || fs.statSync(destination).size !== buffer.length) {const temporary = path.join(this.mediaDirectory, '.png-' + crypto.randomUUID());try {fs.writeFileSync(temporary, buffer, {flag: 'wx', mode: 0o600});fs.renameSync(temporary, destination);} finally {fs.rmSync(temporary, {force: true});}}
     return filename;
   }
   mediaPath(id, original = false) {

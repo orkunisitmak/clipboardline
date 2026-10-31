@@ -17,6 +17,12 @@ test('sibling folder names are unique ignoring case and diacritics like macOS',(
  const other=s.modify('createFolder',{name:'Personal'});assert.throws(()=>s.modify('renameFolder',{id:other.id,name:'WORK'}),/already exists/);assert.equal(s.data.folders.find(folder=>folder.id===other.id).name,'Personal');
  s.modify('renameFolder',{id:work.id,name:'work'});assert.equal(s.data.folders.find(folder=>folder.id===work.id).name,'work');
 }));
+test('a failed PNG write never leaves a truncated file under the content hash',()=>fixture(s=>{
+ const original=fs.writeFileSync;let failed=false;
+ fs.writeFileSync=function(target,data,...rest){if(!failed&&typeof target==='string'&&target.startsWith(s.mediaDirectory)){failed=true;original.call(fs,target,data.subarray(0,10),...rest);throw Object.assign(new Error('synthetic disk full'),{code:'ENOSPC'});}return original.call(fs,target,data,...rest);};
+ try{assert.throws(()=>s.insert('image',png),/disk full/);}finally{fs.writeFileSync=original;}
+ const item=s.insert('image',png);assert.deepEqual(fs.readFileSync(s.mediaPath(item.id)),png);assert.deepEqual(fs.readdirSync(s.mediaDirectory),[item.imageFile]);
+}));
 test('folder names share the macOS 64-grapheme and control-character rule',()=>fixture(s=>{
  const limit='f'.repeat(64),flags='\u{1F1F9}\u{1F1F7}'.repeat(64),folder=s.modify('createFolder',{name:limit});assert.equal(folder.name,limit);
  assert.equal(s.modify('createFolder',{name:flags}).name,flags);
@@ -170,6 +176,15 @@ test('selection lookups keep request order and reject missing items',()=>fixture
  const first=s.insert('text','first'),second=s.insert('text','second');assert.deepEqual(s.selected([first.id,second.id]).map(item=>item.id),[first.id,second.id]);
  assert.throws(()=>s.selected([first.id,'00000000-0000-4000-8000-000000000000']),/no longer exists/);
  s.modify('trash',{ids:[first.id]});s.modify('delete',{ids:[first.id]});assert.deepEqual(s.data.items.map(item=>item.id),[second.id]);
+}));
+test('opening the Store removes stale .png-/.video- temporaries from a killed process and leaves everything else',()=>fixture((s,_time,dir)=>{
+ const id='0f8fad5b-d9cb-469f-a165-70867728950e',media=s.mediaDirectory,stale=['.png-'+id,'.video-'+id],keep=['.png-'+id+'.x','.png-nope','x.png-'+id,'.video-'+id.slice(1)];
+ for(const name of [...stale,...keep])fs.writeFileSync(path.join(media,name),'x');
+ const dirLike='.png-'+id.replace(/^0/,'1');fs.mkdirSync(path.join(media,dirLike));fs.writeFileSync(path.join(media,dirLike,'inner'),'x');
+ let link='';try{fs.symlinkSync(path.join(dir,'library.json'),path.join(media,link='.video-'+id.replace(/^0/,'2')));}catch{link='';}
+ const item=s.insert('image',png),reopened=new Store(dir);
+ assert.deepEqual(fs.readdirSync(media).sort(),[...keep,dirLike,...(link?[link]:[]),item.imageFile].sort());
+ assert.ok(fs.existsSync(path.join(media,dirLike,'inner')));assert.deepEqual(fs.readFileSync(reopened.mediaPath(item.id)),png);
 }));
 test('link preview metadata stores its thumbnail only while the link still exists',()=>fixture((s,time,dir)=>{
  const files=()=>fs.readdirSync(path.join(dir,'media')),url='https://example.com/a';
