@@ -95,6 +95,42 @@ function meta(html, name) {
   }
   return '';
 }
+function strippedTags(value, limit = 8192) {
+  let output = '', at = 0;
+  while (at < value.length && output.length < limit) {
+    const next = value.indexOf('<', at);
+    if (next < 0) { output += value.slice(at, at + limit - output.length); break; }
+    output += value.slice(at, Math.min(next, at + limit - output.length));
+    if (output.length >= limit) break;
+    const end = value.indexOf('>', next + 1);
+    if (end < 0) break;
+    at = end + 1;
+  }
+  return output;
+}
+function titleTag(html) {
+  const openingLimit = 4096, titleLimit = 8192;
+  const lower = html.toLowerCase();
+  let at = 0;
+  while (at < html.length) {
+    const opening = lower.indexOf('<title', at);
+    if (opening < 0) return '';
+    const afterName = opening + '<title'.length;
+    const delimiter = html[afterName];
+    if (delimiter && !/[\s/>]/.test(delimiter)) { at = afterName + 1; continue; }
+    const openingEndLimit = Math.min(html.length, opening + openingLimit);
+    const openingHead = html.slice(afterName, openingEndLimit);
+    const endOffset = openingHead.indexOf('>');
+    if (endOffset < 0) return '';
+    const end = afterName + endOffset;
+    const closing = lower.indexOf('</title', end + 1);
+    if (closing < 0 || closing > end + titleLimit) return '';
+    const closeEnd = html.indexOf('>', closing + 1);
+    if (closeEnd < 0 || closeEnd > end + titleLimit) return '';
+    return strippedTags(html.slice(end + 1, closing), titleLimit);
+  }
+  return '';
+}
 async function linkMetadata(input, fetcher = metadataFetch) {
   metadataGuard(new URL(input));
   const url = new URL(input); const youtube = /^(www\.|m\.|music\.)?youtube\.com$/.test(url.hostname) || url.hostname === 'youtu.be';
@@ -109,7 +145,7 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
   const html = decodeHTML(response.bytes, response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
-  const title = collapse(meta(html, 'og:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
+  const title = collapse(meta(html, 'og:title')) || collapse(entities(titleTag(html))) || url.hostname;
   let thumbnail = meta(html, 'og:image');
   if (thumbnail) try { thumbnail = new URL(thumbnail, response.url).href; } catch { thumbnail = ''; }
   return {title: title.slice(0, 500), thumbnail};
