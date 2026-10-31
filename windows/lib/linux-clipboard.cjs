@@ -98,9 +98,10 @@ class ClipboardWatcher{
   start(){
     if(this.clipboard.kind==='wayland'){
       const child=this.spawner('wl-paste',['--watch','echo','changed'],{stdio:['ignore','pipe','ignore']});this.child=child;
-      // The first line reports the selection present at startup, as Windows
-      // reports its initial sequence; both admit that clipboard once.
-      child.stdout.on('data',chunk=>{for(const line of chunk.toString().split('\n'))if(line.trim()==='changed')this.bump();});
+      // The first line reports the selection present at startup, even an empty
+      // one. Only later changes count, as on Windows and macOS.
+      let launched=false;
+      child.stdout.on('data',chunk=>{for(const line of chunk.toString().split('\n'))if(line.trim()==='changed'){if(launched)this.bump();launched=true;}});
       // GNOME has no data-control protocol and wl-paste exits at once there.
       // Any watcher exit keeps the same sequence counter alive by polling.
       child.on('error',()=>{if(this.child===child)this.child=null;if(!this.stopped)this.poll();});

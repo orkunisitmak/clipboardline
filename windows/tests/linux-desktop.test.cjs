@@ -131,9 +131,17 @@ test('a Wayland watcher that exits (GNOME, no data-control) keeps the sequence a
   const {EventEmitter}=require('node:events');const data={'text/plain':'a'},{value}=clipboard('wayland',data);
   const child=Object.assign(new EventEmitter(),{stdout:new EventEmitter(),kill(){}});
   const watcher=new ClipboardWatcher(value,{interval:5,spawner:()=>child}).start();
-  child.stdout.emit('data',Buffer.from('changed\n'));assert.equal(watcher.read(),2);
+  child.stdout.emit('data',Buffer.from('changed\nchanged\n'));assert.equal(watcher.read(),2);
   child.emit('exit',1);await new Promise(resolve=>setTimeout(resolve,30));data['text/plain']='b';await new Promise(resolve=>setTimeout(resolve,30));watcher.kill();
   assert.equal(watcher.read(),3);
+});
+
+test('a Wayland watcher never reports the clipboard present at launch, so the first real copy is captured',()=>{
+  const {EventEmitter}=require('node:events'),{value}=clipboard('wayland',{'text/plain':'a'}),changes=[];
+  const child=Object.assign(new EventEmitter(),{stdout:new EventEmitter(),kill(){}});
+  const watcher=new ClipboardWatcher(value,{changed:sequence=>changes.push(sequence),spawner:()=>child}).start();
+  child.stdout.emit('data',Buffer.from('changed\n'));assert.deepEqual(changes,[]);
+  child.stdout.emit('data',Buffer.from('changed\n'));assert.deepEqual(changes,[2]);watcher.kill();
 });
 
 test('a failed ydotool paste explains how to enable the service',async()=>{
