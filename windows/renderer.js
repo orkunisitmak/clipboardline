@@ -981,15 +981,29 @@ document.addEventListener('dragstart',event=>{
  if(!ids.length){event.preventDefault();if(deferred)render();return;}
  const text=values.filter(value=>value.kind!=='image').map(value=>value.kind==='link'?value.url:value.text).join('\n\n');
  event.dataTransfer.effectAllowed='copy';
- if(text)event.dataTransfer.setData('text/plain',text);
+ if(text){
+  try{event.dataTransfer.setData('text/plain',text);}catch{}
+  try{event.dataTransfer.setData('Text',text);}catch{}
+  try{event.dataTransfer.setData('text/html',esc(text));}catch{}
+ }
  event.dataTransfer.setData(libraryDragType,JSON.stringify(ids));
+ const hasImage=values.some(value=>value.kind==='image');
  if(ui.view==='library'&&!event.altKey){
   libraryDragIDs=ids;libraryRenderDeferred=deferred;
- }else{
+ }else if(hasImage||event.altKey){
   event.preventDefault();
   if(deferred)render();
   if(ui.view==='shelves')document.body.classList.add('dragging-out');
   void command('startDrag',{ids}).then(result=>{if(!result)toast(t('Use Copy or Export to transfer these items.'));}).finally(()=>{document.body.classList.remove('dragging-out');});
+ }else{
+  const links=values.filter(value=>value.kind==='link').map(value=>value.url);
+  if(links.length)try{event.dataTransfer.setData('text/uri-list',links.join('\r\n'));}catch{}
+  if(ui.view==='shelves'){
+   requestAnimationFrame(()=>{
+    document.body.classList.add('dragging-out');
+    void command('dragStartOverlay');
+   });
+  }
  }
 });
 document.addEventListener('dragover',event=>{const folder=libraryDropFolder(event);if(!folder){clearFolderDropTarget();return;}event.preventDefault();event.dataTransfer.dropEffect='copy';if(folderDropTarget!==folder.row){clearFolderDropTarget();folderDropTarget=folder.row;folderDropTarget.classList.add('folder-drop-target');}});
@@ -1007,6 +1021,7 @@ document.addEventListener('drop',async event=>{
 document.addEventListener('dragend',()=>{
  document.body.classList.remove('dragging-out');
  clearLibraryDrag();
+ if(ui.view==='shelves')void command('dragEndOverlay');
 });
 window.addEventListener('blur',clearLibraryDrag);
 window.addEventListener('resize',()=>{if(ui.view==='shelves'&&!dirtyPreview()){const current=item(ui.focus);if(current)select(current);render();}});

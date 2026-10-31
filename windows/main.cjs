@@ -407,6 +407,19 @@ async function command(action,payload={}) {
       if(view==='shelves')void hide(false);
     }
   }
+  else if(action==='dragStartOverlay'){
+    if(window&&view==='shelves'){
+      try{window.setIgnoreMouseEvents(true);}catch{}
+    }
+    result=true;
+  }
+  else if(action==='dragEndOverlay'){
+    if(window&&!window.isDestroyed()){
+      try{window.setIgnoreMouseEvents(false);}catch{}
+    }
+    if(view==='shelves')void hide(false);
+    result=true;
+  }
   else if(action==='setSettings'){
     if(payload.recordingToken!==undefined){if(typeof payload.recordingToken!=='string')throw new Error('Invalid shortcut recorder.');finishShortcutRecording(payload.recordingToken);}
     const patch={...payload.patch};
