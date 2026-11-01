@@ -130,7 +130,9 @@ async function clipboardSignature(clipboard,{images=false}={}){
  for(const entry of entries){
   hash.update(JSON.stringify(entry.types));
   const timestamp=entry.types.find(type=>/^TIMESTAMP$|format="TIMESTAMP"/.test(type));
-  if(timestamp){const bytes=Buffer.from(await(await entry.getType(timestamp)).arrayBuffer());if(bytes.length&&bytes.some(Boolean)){hash.update(bytes);stamped=true;}}
+  // Mutter's Xwayland bridge lists TIMESTAMP for Wayland copies but cannot serve
+  // it; the failure must fall through to content or no copy is ever noticed.
+  if(timestamp){let bytes=null;try{bytes=Buffer.from(await(await entry.getType(timestamp)).arrayBuffer());}catch{}if(bytes?.length&&bytes.some(Boolean)){hash.update(bytes);stamped=true;}}
   if(!stamped&&entry.types.includes('text/plain')){const blob=await entry.getType('text/plain');hash.update(blob.size<=TEXT_LIMIT?Buffer.from(await blob.arrayBuffer()):Buffer.from(String(blob.size)));}
   if(images&&!stamped&&entry.types.includes('image/png')){const blob=await entry.getType('image/png');hash.update(blob.size<=IMAGE_LIMIT?Buffer.from(await blob.arrayBuffer()):Buffer.from(String(blob.size)));}
  }

@@ -145,6 +145,22 @@ test('Wayland writes are verified and replaced by wl-copy when the compositor ig
   const unavailable=electronClipboard();
   assert.deepEqual(await writeClipboard({...unavailable,marker,text:'x',wayland:true,focused:true,wlCopy:'wl-copy',wlPaste:'wl-paste',delay,run:async()=>{throw new Error('no data-control');},copy:async()=>{throw new Error('no data-control');}}),{method:'electron'},'a focused Electron write is kept when wl-copy cannot help');
 });
+test('a TIMESTAMP the selection owner cannot serve falls back to the copied content',async()=>{
+  let offer={UTF8_STRING:'first copy'};
+  const run=async(_file,args)=>{
+    const type=args[4];
+    if(type==='TARGETS')return Buffer.from(['TARGETS','TIMESTAMP',...Object.keys(offer)].join('\n'));
+    if(type==='TIMESTAMP')throw Object.assign(new Error('target TIMESTAMP not available'),{empty:true});
+    return Buffer.from(offer[type]);
+  };
+  const clipboard=new X11Clipboard({xclip:'xclip',run});
+  const first=await clipboardSignature(clipboard);
+  assert.equal(await clipboardSignature(clipboard),first,'an unchanged Wayland copy is not a new copy');
+  offer={UTF8_STRING:'second copy'};
+  assert.notEqual(await clipboardSignature(clipboard),first,'a new Wayland copy is noticed');
+  offer={'image/png':'png bytes'};
+  assert.notEqual(await clipboardSignature(clipboard,{images:true}),first,'a new Wayland image is noticed');
+});
 test('the X11 change signature never reads a private copy and skips payloads a timestamp already identifies',async()=>{
   const reads=[];const clipboard=(types,payload)=>({read:async()=>[{types,getType:async type=>{reads.push(type);return new Blob([payload[type]||'']);}}]});
   const concealed=['text/plain','electron application/osclipboard;format="org.nspasteboard.ConcealedType"'];
