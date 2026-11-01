@@ -173,8 +173,10 @@ test('a TIMESTAMP the selection owner cannot serve falls back to the copied cont
   assert.equal(await clipboardSignature(clipboard),first,'an unchanged Wayland copy is not a new copy');
   offer={UTF8_STRING:'second copy'};
   assert.notEqual(await clipboardSignature(clipboard),first,'a new Wayland copy is noticed');
-  offer={'image/png':'png bytes'};
-  assert.notEqual(await clipboardSignature(clipboard,{images:true}),first,'a new Wayland image is noticed');
+  offer={'image/png':'first png'};
+  const image=await clipboardSignature(clipboard,{images:true});
+  offer={'image/png':'second png'};
+  assert.notEqual(await clipboardSignature(clipboard,{images:true}),image,'a new Wayland image is noticed');
 });
 test('the X11 change signature never reads a private copy and skips payloads a timestamp already identifies',async()=>{
   const reads=[];const clipboard=(types,payload)=>({read:async()=>[{types,getType:async type=>{reads.push(type);return new Blob([payload[type]||'']);}}]});
