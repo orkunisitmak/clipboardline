@@ -141,14 +141,20 @@ function strippedTags(value, limit = 8192) {
     output += value.slice(at, Math.min(next, at + limit - output.length));
     if (output.length >= limit) break;
     const end = value.indexOf('>', next + 1);
-    if (end < 0) break;
+    if (end < 0) {
+      output += value.slice(next, next + 1 + limit - output.length);
+      break;
+    }
     at = end + 1;
   }
   return output;
 }
+function asciiLower(value) {
+  return value.replace(/[A-Z]/g, character => character.toLowerCase());
+}
 function titleTag(html) {
   const openingLimit = 4096, titleLimit = 8192;
-  const lower = html.toLowerCase();
+  const lower = asciiLower(html);
   let at = 0;
   while (at < html.length) {
     const opening = lower.indexOf('<title', at);

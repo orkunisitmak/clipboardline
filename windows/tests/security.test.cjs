@@ -70,6 +70,8 @@ test('metadata title parsing is bounded against unmatched and nested markup',asy
  const hostile='<'.repeat(100000)+'<title>Unclosed';
  assert.equal((await linkMetadata('https://example.com',page(hostile))).title,'example.com');
  assert.equal((await linkMetadata('https://example.com',page('<title>Safe <b>nested</b> &amp; text</title><p>'+'.'.repeat(100000)))).title,'Safe nested & text');
+ assert.equal((await linkMetadata('https://example.com',page('<title>Price < $10</title>'))).title,'Price < $10');
+ assert.equal((await linkMetadata('https://example.com',page('<!-- İ --><title>Haber</title>'))).title,'Haber');
 });
 
 test('YouTube Music links use oEmbed through the canonical host',async()=>{
