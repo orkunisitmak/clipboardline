@@ -71,8 +71,14 @@ test('X11 paste re-activates and pastes only into the captured window while it i
   assert.deepEqual(await native.paste(null),{pasted:false});
   const own=createLinuxNative({session:{session:'x11',backend:'x11'},tools:{xdotool:'/usr/bin/xdotool'},ownPID:777,exec:fake.exec});assert.equal(await own.capture(),null,'ClipBoardLine never targets itself');
 });
+test('the Wayland fallback reads the clipboard only while focused, but X11 polling stays in the background',async()=>{
+  const start=backend=>{let focused=false,reads=0;const native=createLinuxNative({session:{session:backend,backend},tools:{},clipboard:{read:async()=>{reads++;return[];}},focused:()=>focused,ownPID:1});const monitor=native.monitor(()=>{});return{native,monitor,reads:()=>reads,focus:value=>{focused=value;}};};
+  const wayland=start('wayland');await wayland.native.clipboardSequence();assert.equal(wayland.reads(),0,'unfocused Wayland polling reads nothing');
+  wayland.focus(true);await wayland.native.clipboardSequence();assert.equal(wayland.reads(),1,'focus enables the fallback');wayland.monitor.kill();
+  const x11=start('x11');await x11.native.clipboardSequence();assert.equal(x11.reads(),1,'X11 keeps polling without focus');x11.monitor.kill();
+});
 test('Wayland never injects input and reports which optional packages are missing',async()=>{
-  const native=createLinuxNative({session:{session:'wayland',backend:'wayland',desktop:'kde'},tools:{'wl-paste':null,'wl-copy':null,xdotool:'/usr/bin/xdotool',ffmpeg:null,ffprobe:null,gdbus:'/usr/bin/gdbus'},clipboard:{read:async()=>[]},ownPID:1});
+  const native=createLinuxNative({session:{session:'wayland',backend:'wayland',desktop:'kde'},tools:{'wl-paste':null,'wl-copy':null,xdotool:'/usr/bin/xdotool',ffmpeg:null,ffprobe:null,gdbus:'/usr/bin/gdbus'},clipboard:{read:async()=>[]},focused:()=>true,ownPID:1});
   assert.equal(await native.capture(),null);assert.deepEqual(await native.paste({handle:'5',processId:5}),{pasted:false});
   const monitor=native.monitor(()=>{});
   const status=native.status();assert.deepEqual(status.missing,['wl-clipboard','ffmpeg']);assert.equal(status.automaticPaste,false);assert.equal(status.clipboardMonitor,'focused-polling');assert.equal(status.screenshot,'portal');assert.match(status.problem,/wl-clipboard/);

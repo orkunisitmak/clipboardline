@@ -34,7 +34,7 @@ function createLinuxNative({session=linuxSession(),tools=linuxTools(),clipboard,
  const bump=()=>{sequence=sequence>=0xffffffff?1:sequence+1;notify(sequence);};
  const startPolling=()=>{
   reader=!wayland&&tools.xclip?new X11Clipboard({xclip:tools.xclip,...(run?{run}:{})}):null;mode=wayland?'focused-polling':'x11-polling';
-  poller=new PollingSequence({signature:()=>clipboardSignature(reader||selection,{images:!!options().images}),enabled:()=>{const value=options();return !!(value.text||value.images);},changed:value=>{sequence=value;notify(value);}}).start();
+  poller=new PollingSequence({signature:()=>clipboardSignature(reader||selection,{images:!!options().images}),enabled:()=>{const value=options();return (!wayland||focused())&&!!(value.text||value.images);},changed:value=>{sequence=value;notify(value);}}).start();
  };
  const native={
   session,tools,
