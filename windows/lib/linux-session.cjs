@@ -28,6 +28,14 @@ function linuxSession(env=process.env,argv=process.argv){
  else{backend='wayland';reason='wayland-session';}
  return Object.freeze({session:wayland?'wayland':'x11',backend,reason,desktop:desktops[0]||'',desktops:Object.freeze(desktops),mutter});
 }
+// Chromium picks its display backend before any application code runs, so a
+// switch appended from main.cjs reaches only child processes. The Wayland browser
+// process would then hand its surfaces to an X11 GPU process, which crashes and
+// presents nothing. Xwayland on a Wayland session therefore needs a real argument.
+function backendRelaunchArguments(session,argv=process.argv.slice(1)){
+ if(session?.session!=='wayland'||session.backend!=='x11'||argv.some(argument=>typeof argument==='string'&&argument.startsWith('--ozone-platform=')))return null;
+ return[...argv,'--ozone-platform=x11'];
+}
 function findExecutable(name,env=process.env){
  if(typeof name!=='string'||!/^[A-Za-z0-9._-]+$/.test(name))return null;
  for(const directory of String(env.PATH||'').split(path.delimiter)){
@@ -52,4 +60,4 @@ function mapAnimationDelay(session,{env=process.env,read=fs.readFileSync}={}){
  }catch{}
  return Number.isFinite(factor)?Math.round(Math.min(600,Math.max(0,200*factor))):200;
 }
-module.exports={linuxSession,linuxTools,findExecutable,desktopNames,mapAnimationDelay,MUTTER_DESKTOPS};
+module.exports={linuxSession,backendRelaunchArguments,linuxTools,findExecutable,desktopNames,mapAnimationDelay,MUTTER_DESKTOPS};

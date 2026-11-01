@@ -523,7 +523,15 @@ function appIcon(){
   }
   return applicationIcon;
 }
+const backendArguments=linuxSession&&!testMode?linuxSupport.backendRelaunchArguments(linuxSession,process.argv.slice(app.isPackaged?1:2)):null;
 if(!app.requestSingleInstanceLock())app.quit();
+else if(backendArguments){
+  // Runs after the lock so shortcut commands reach the live instance directly.
+  app.releaseSingleInstanceLock();
+  const [file,...launch]=linuxLaunchCommand();
+  spawn(file,[...launch,...backendArguments],{detached:true,stdio:'inherit'}).unref();
+  app.exit(0);
+}
 else app.whenReady().then(async()=>{
   store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs'),linuxTools});try{dragFiles=new DragFiles(store.directory);}catch{}
   updates=linuxSession?new ManualUpdates({build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast()}):new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});

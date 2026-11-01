@@ -3,7 +3,7 @@
 const linuxOnly={skip:process.platform==='win32'&&'Linux desktop integration'};
 const test=(name,options,body)=>typeof options==='function'?require('node:test').test(name,linuxOnly,options):require('node:test').test(name,{...options,...linuxOnly},body);
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {linuxSession,linuxTools,findExecutable,desktopNames,mapAnimationDelay}=require('../lib/linux-session.cjs');
+const {linuxSession,backendRelaunchArguments,linuxTools,findExecutable,desktopNames,mapAnimationDelay}=require('../lib/linux-session.cjs');
 
 const kde={XDG_SESSION_TYPE:'wayland',WAYLAND_DISPLAY:'wayland-0',DISPLAY:':0',XDG_CURRENT_DESKTOP:'KDE'};
 test('native Wayland is used where data-control lets wl-clipboard observe the selection',()=>{
@@ -28,6 +28,13 @@ test('X11 sessions stay on X11 and explicit choices are honored only when that d
   assert.equal(linuxSession({...kde,DISPLAY:'',CLIPBOARDLINE_DISPLAY_BACKEND:'x11'},[]).backend,'wayland');
   assert.equal(linuxSession(kde,['--ozone-platform=headless']).backend,'wayland');
   assert.deepEqual(desktopNames({XDG_CURRENT_DESKTOP:' ubuntu : GNOME '}),['ubuntu','gnome']);
+});
+test('Xwayland on a Wayland session restarts once with a real backend argument',()=>{
+  const gnome=linuxSession({...kde,XDG_CURRENT_DESKTOP:'ubuntu:GNOME'},[]);
+  assert.deepEqual(backendRelaunchArguments(gnome,['--toggle']),['--toggle','--ozone-platform=x11']);
+  assert.equal(backendRelaunchArguments(linuxSession({...kde,XDG_CURRENT_DESKTOP:'GNOME'},['--ozone-platform=x11']),['--ozone-platform=x11']),null);
+  assert.equal(backendRelaunchArguments(linuxSession(kde,[]),[]),null);
+  assert.equal(backendRelaunchArguments(linuxSession({XDG_SESSION_TYPE:'x11',DISPLAY:':0',XDG_CURRENT_DESKTOP:'XFCE'},[]),[]),null);
 });
 test('tool discovery accepts only executable regular files on absolute PATH entries',t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-tools-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
