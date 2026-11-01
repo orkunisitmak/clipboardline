@@ -160,7 +160,16 @@ class PollingSequence{
 // KDE's clipboard keeps a copied screenshot alive after its source exits by
 // serving it again, re-encoded. The same pixels must not become a second item,
 // so Linux identifies clipboard images by decoded content, not PNG bytes.
+// A small PNG can declare huge dimensions, so the header limit that storing an
+// image enforces applies here first: decoding would allocate the whole bitmap.
+const PNG_SIGNATURE='89504e470d0a1a0a',MAX_DECODED_PIXELS=80_000_000;
+function decodablePNG(bytes){
+ if(!Buffer.isBuffer(bytes)||bytes.length<24||bytes.subarray(0,8).toString('hex')!==PNG_SIGNATURE||bytes.subarray(12,16).toString('latin1')!=='IHDR')return false;
+ const width=bytes.readUInt32BE(16),height=bytes.readUInt32BE(20);
+ return width>0&&height>0&&width*height<=MAX_DECODED_PIXELS;
+}
 function pixelFingerprint(bytes,decode){
+ if(!decodablePNG(bytes))return null;
  let image;try{image=decode(bytes);}catch{return null;}
  if(!image||!Number.isInteger(image.width)||!Number.isInteger(image.height)||!image.bitmap?.length)return null;
  return 'image:pixels:'+image.width+'x'+image.height+':'+crypto.createHash('sha256').update(image.bitmap).digest('hex');

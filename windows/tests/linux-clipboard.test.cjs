@@ -103,15 +103,30 @@ test('X11 polling counts selection ownership changes and hashes images only when
   const stalled=['never','a','a'];const slow=new PollingSequence({deadline:5,signature:()=>{const value=stalled.shift();return value==='never'?new Promise(()=>{}):Promise.resolve(value);}});
   assert.equal(await slow.poll(),1);assert.equal(slow.busy,false);assert.equal(await slow.poll(),2);assert.equal(await slow.poll(),2);
 });
+function pngBytes(width,height,payload=''){
+  const header=Buffer.alloc(24);Buffer.from('89504e470d0a1a0a','hex').copy(header);header.writeUInt32BE(13,8);header.write('IHDR',12,'latin1');header.writeUInt32BE(width,16);header.writeUInt32BE(height,20);
+  return Buffer.concat([header,Buffer.from(payload)]);
+}
 test('a screenshot re-served with different PNG bytes keeps its identity; other pixels do not',()=>{
   const decoded={'spectacle.png':{width:2,height:1,bitmap:Buffer.from([1,2,3,255,4,5,6,255])},'klipper.png':{width:2,height:1,bitmap:Buffer.from([1,2,3,255,4,5,6,255])},'other.png':{width:2,height:1,bitmap:Buffer.from([1,2,3,255,4,5,7,255])},'tall.png':{width:1,height:2,bitmap:Buffer.from([1,2,3,255,4,5,6,255])}};
-  const decode=bytes=>decoded[bytes.toString()]??null,fingerprint=name=>pixelFingerprint(Buffer.from(name),decode);
+  const decode=bytes=>decoded[bytes.subarray(24).toString()]??null,fingerprint=name=>pixelFingerprint(pngBytes(2,1,name),decode);
   assert.equal(fingerprint('spectacle.png'),fingerprint('klipper.png'));
   assert.notEqual(fingerprint('spectacle.png'),fingerprint('other.png'));
   assert.notEqual(fingerprint('spectacle.png'),fingerprint('tall.png'),'dimensions are part of the identity');
   assert.match(fingerprint('spectacle.png'),/^image:pixels:2x1:[0-9a-f]{64}$/);
   assert.equal(fingerprint('broken.png'),null,'undecodable bytes keep the byte fingerprint');
-  assert.equal(pixelFingerprint(Buffer.from('x'),()=>{throw new Error('decoder failed');}),null);
+  assert.equal(pixelFingerprint(pngBytes(1,1),()=>{throw new Error('decoder failed');}),null);
+});
+test('a PNG declaring more pixels than a stored image may have is never decoded',()=>{
+  let decoded=0;const decode=()=>{decoded++;return{width:1,height:1,bitmap:Buffer.from([1,2,3,255])};};
+  assert.equal(pixelFingerprint(pngBytes(8945,8945),decode),null,'just above the limit');
+  assert.equal(pixelFingerprint(pngBytes(100000,100000),decode),null);
+  assert.equal(pixelFingerprint(pngBytes(0,10),decode),null,'an empty image');
+  assert.equal(pixelFingerprint(Buffer.from('not a png'),decode),null,'a short offer');
+  assert.equal(pixelFingerprint(Buffer.concat([Buffer.alloc(8),pngBytes(1,1).subarray(8)]),decode),null,'another format under the PNG type');
+  assert.equal(decoded,0,'rejected offers never reach the decoder');
+  assert.match(pixelFingerprint(pngBytes(8000,10000),decode),/^image:pixels:/,'the limit itself still decodes');
+  assert.equal(decoded,1);
 });
 function electronClipboard(){const writes=[];return{writes,clipboard:{write:async items=>{writes.push(items);}},ClipboardItem:class{constructor(data){this.data=data;}}};}
 test('X11 writes are atomic Electron writes with file-list formats for several items',async()=>{
