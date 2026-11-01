@@ -111,14 +111,17 @@ test('X11 reads go through xclip when it is installed and its absence is reporte
   const fallback=without.monitor(()=>{});assert.equal(without.clipboardReader('electron'),'electron');assert.ok(without.status().missing.includes('xclip'));fallback.kill();
 });
 test('removing the package unregisters the command, but an rpm or deb upgrade keeps the new one',t=>{
-  const root=temporary(t),bin=path.join(root,'bin'),calls=path.join(root,'calls'),script=path.join(root,'after-remove');fs.mkdirSync(bin);
+  const root=temporary(t),bin=path.join(root,'bin'),calls=path.join(root,'calls'),script=path.join(root,'after-remove'),profile=path.join(root,'apparmor-profile');fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin,'update-alternatives'),'#!/bin/sh\necho "$@" >> "$CALLS"\n',{mode:0o755});
+  // The script must never touch this machine's real AppArmor profile.
+  fs.writeFileSync(path.join(bin,'apparmor_status'),'#!/bin/sh\nexit 1\n',{mode:0o755});
   // electron-builder fills the two macros when it packages the script.
   const values={executable:'clipboardline',sanitizedProductName:'ClipBoardLine'};
-  fs.writeFileSync(script,fs.readFileSync(path.join(__dirname,'../scripts/linux-after-remove.sh'),'utf8').replace(/\$\{([a-zA-Z]+)\}/g,(_match,key)=>values[key]));
+  fs.writeFileSync(script,fs.readFileSync(path.join(__dirname,'../scripts/linux-after-remove.sh'),'utf8').replace(/\$\{([a-zA-Z]+)\}/g,(_match,key)=>values[key]).replace("'/etc/apparmor.d/clipboardline'",()=>`'${profile}'`));
   const run=argument=>{fs.rmSync(calls,{force:true});execFileSync('bash',[script,argument],{env:{...process.env,PATH:bin+path.delimiter+process.env.PATH,CALLS:calls}});return fs.existsSync(calls)?fs.readFileSync(calls,'utf8').trim():'';};
-  for(const upgrade of ['1','2','upgrade','failed-upgrade','abort-upgrade'])assert.equal(run(upgrade),'','an upgrade keeps the command: '+upgrade);
-  for(const removal of ['0','remove','purge'])assert.equal(run(removal),'--remove clipboardline /opt/ClipBoardLine/clipboardline','removal unregisters it: '+removal);
+  fs.writeFileSync(profile,'');
+  for(const upgrade of ['1','2','upgrade','failed-upgrade','abort-upgrade']){assert.equal(run(upgrade),'','an upgrade keeps the command: '+upgrade);assert.equal(fs.existsSync(profile),true,'an upgrade keeps the profile: '+upgrade);}
+  for(const removal of ['0','remove','purge']){fs.writeFileSync(profile,'');assert.equal(run(removal),'--remove clipboardline /opt/ClipBoardLine/clipboardline','removal unregisters it: '+removal);assert.equal(fs.existsSync(profile),false,'removal deletes the profile: '+removal);}
 });
 test('a library saved by an early Linux build with the removed full-screen preference still opens',t=>{
   const {Store,DEFAULTS}=require('../lib/model.cjs'),directory=path.join(temporary(t),'data');fs.mkdirSync(directory,{mode:0o700});
