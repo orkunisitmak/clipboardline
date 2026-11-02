@@ -530,6 +530,7 @@ enum HistoryTestRunner {
             ("testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows", libraryStore.testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows),
             ("testTagRenameSearchTurkishAndLiteralSQLCharacters", libraryStore.testTagRenameSearchTurkishAndLiteralSQLCharacters),
             ("testSearchMatchesTurkishDotlessIAndRefoldsOlderRows", libraryStore.testSearchMatchesTurkishDotlessIAndRefoldsOlderRows),
+            ("testSearchRefoldsLegacyImageOCRAfterReopen", libraryStore.testSearchRefoldsLegacyImageOCRAfterReopen),
             ("testUndoTrashSurvivesASearchRefoldOfTheTrashedRow", libraryStore.testUndoTrashSurvivesASearchRefoldOfTheTrashedRow),
             ("testDotlessITagAndFolderNamesStayDistinct", libraryStore.testDotlessITagAndFolderNamesStayDistinct),
             ("testTrashRestoresContentAndRelationshipsWithoutMovingOriginal", libraryStore.testTrashRestoresContentAndRelationshipsWithoutMovingOriginal),

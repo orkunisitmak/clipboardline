@@ -127,6 +127,20 @@ import XCTest
         XCTAssertEqual(try library.query(LibraryQuery(search: "ışık")).first?.id, record.id)
         XCTAssertEqual(try db.rows("SELECT value FROM metadata WHERE key='search-fold-v2'").count, 1)
     }
+    func testSearchRefoldsLegacyImageOCRAfterReopen() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        var library = try store(f); library.waitForSearchRefold()
+        let image = try library.captureImage(f.image())
+        try library.retain([image.id])
+        let db = try LibraryDatabase(url: library.databaseURL)
+        try db.execute("INSERT INTO image_analysis(item,path,fingerprint,version,content,ocr,vectors) VALUES(?,?,?,?,?,?,?)", [
+            .text(image.id.uuidString), .text(try XCTUnwrap(image.path)), .text("synthetic"), .text("vision-ocr-v1"),
+            .text("isık"), .text("Işık"), .blob(Data())
+        ])
+        try db.execute("DELETE FROM metadata WHERE key='search-fold-v2'")
+        library = try store(f); library.waitForSearchRefold()
+        XCTAssertEqual(try library.query(LibraryQuery(search: "ışık")).first?.id, image.id)
+    }
     func testUndoTrashSurvivesASearchRefoldOfTheTrashedRow() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f); library.waitForSearchRefold()
         let record = try XCTUnwrap(library.captureText("Işık"))

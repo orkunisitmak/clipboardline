@@ -316,7 +316,13 @@ extension String {
         searchRefold.enter()
         DispatchQueue.global(qos: .utility).async { [weak self, searchRefold] in
             defer { searchRefold.leave() }
-            guard (try? Self.refoldSearchIndex(url)) != nil else { return }
+            // A write lock held by a long migration or another app can time this out; every step is repeatable, so try again.
+            var finished = false
+            for attempt in 1...5 where !finished {
+                finished = (try? Self.refoldSearchIndex(url)) != nil
+                if !finished && attempt < 5 { Thread.sleep(forTimeInterval: Double(attempt) * 5) }
+            }
+            guard finished else { return }
             // An open search ran against the old index; run it again.
             Task { @MainActor [weak self] in self?.searchRevision += 1 }
         }
