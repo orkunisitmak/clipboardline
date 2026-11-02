@@ -28,6 +28,17 @@ import XCTest
         XCTAssertEqual(destination.requestTarget, "/articles?q=hello%20world")
     }
 
+    func testInternationalHostsUsePunycodeAndBlockedNamesStayBlockedInOtherSpellings() throws {
+        for value in ["https://münchen.de/a", "https://xn--mnchen-3ya.de/a", "https://XN--MNCHEN-3YA.de/a"] {
+            let destination = try XCTUnwrap(PublicLinkDestination(try XCTUnwrap(URL(string: value))))
+            XCTAssertEqual(destination.hostname, "xn--mnchen-3ya.de", value)
+            XCTAssertEqual(destination.url.absoluteString, "https://xn--mnchen-3ya.de/a", value)
+        }
+        for value in ["https://ｌｏｃａｌｈｏｓｔ/", "https://foo.ｌｏｃａｌ/", "https://foo.loc%61l/"] {
+            XCTAssertNil(URL(string: value).flatMap { PublicLinkDestination($0) }, value)
+        }
+    }
+
     func testPinnedEndpointUsesNumericCaseButTLSAndHostHeaderUseOriginalHostname() throws {
         let destination = try XCTUnwrap(PublicLinkDestination(URL(string: "https://public.example.org/path")!))
         let address = try XCTUnwrap(PublicLinkAddress("93.184.216.34"))

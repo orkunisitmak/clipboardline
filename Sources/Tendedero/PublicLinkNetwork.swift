@@ -63,7 +63,7 @@ struct PublicLinkDestination: Equatable, Sendable {
         guard input.absoluteString.utf8.count <= 8192,
               var c = URLComponents(url: input, resolvingAgainstBaseURL: false),
               c.scheme?.lowercased() == "https", c.user == nil, c.password == nil,
-              c.port == nil || c.port == 443, let host = c.host?.lowercased(),
+              c.port == nil || c.port == 443, let host = c.encodedHost?.lowercased(),
               host.utf8.count <= 253, host.utf8.allSatisfy({ (97...122).contains($0) || (48...57).contains($0) || $0 == 45 || $0 == 46 }),
               host.contains("."), !host.hasSuffix("."),
               !["local", "localhost", "internal", "home", "arpa", "lan", "corp", "localdomain", "onion", "test", "invalid", "example", "alt"].contains(where: { host == $0 || host.hasSuffix("." + $0) }) else { return nil }
