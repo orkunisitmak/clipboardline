@@ -26,6 +26,10 @@ function text(value, maximum = 1024 * 1024, empty = false) {
   if (typeof value !== 'string' || value.length > maximum || (!empty && !value.length) || value.includes('\0')) fail('Invalid text');
   return value;
 }
+function sizedText(value, empty = false) {
+  if (typeof value === 'string' && Buffer.byteLength(value, 'utf8') > 1024 * 1024) fail('Invalid text');
+  return text(value, 1024 * 1024, empty);
+}
 function ids(value) {
   if (!Array.isArray(value) || value.length > 10000 || value.some(id => typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id))) fail('Invalid item selection');
   return [...new Set(value)];
@@ -313,7 +317,7 @@ class Store {
     let textValue = '', url = '', imageFile = '';
     if (kind === 'image') imageFile = this.putPNG(value);
     else if (kind === 'link') { url = plainURL(value) || fail('Invalid URL'); }
-    else textValue = text(value);
+    else textValue = sizedText(value);
     const identity=kind==='text'?textIdentity(textValue):null;
     const matching = this.data.items.filter(i => i.kind === kind && !i.trashedAt &&
       (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? i.url === url : !i.recording&&i.imageFile === imageFile));
@@ -447,11 +451,11 @@ class Store {
     for (const item of items) {
       if (action === 'pin') {item.pinned = targetPin;if(targetPin)item.retainedAt??=now;}
       else if(action==='retain')item.retainedAt??=now;
-      else if(action==='note')item.note=text(payload.note,1024*1024,true);
+      else if(action==='note')item.note=sizedText(payload.note,true);
       else if(action==='details') {
         if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
-        if(payload.note!==undefined)item.note=text(payload.note,1024*1024,true);
-        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=text(payload.text,1024*1024,true);}
+        if(payload.note!==undefined)item.note=sizedText(payload.note,true);
+        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }
       else if(action==='markCopied'){item.lastCopiedAt=now;item.captureRevision=crypto.randomUUID();}
       else if (action === 'name') { item.name = text(payload.name, 200, true).trim(); item.pinned = true; item.retainedAt??=now; }
@@ -475,7 +479,7 @@ class Store {
       } else if (action === 'remove') { if (saved(item)) item.hiddenFromShelf = true; else{item.trashedAt = now;item.trashRevision=crypto.randomUUID();} }
       else if (action === 'trash') item.trashedAt = now;
       else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; }
-      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = text(payload.text, 1024 * 1024, true); }
+      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = sizedText(payload.text, true); }
       else if (action === 'saveImage') {
         if (item.kind !== 'image' || item.recording || typeof payload.dataUrl !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(payload.dataUrl) || payload.dataUrl.length > 90_000_000) fail('Invalid image edit');
         const annotations = payload.annotations ?? []; const crop = payload.crop ?? null;
