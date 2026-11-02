@@ -41,6 +41,17 @@ module.exports=async function privateModeAcceptance({application,check}){
    api.store.modify('setSettings',{patch:{paused:false}});
    out.captureRacedPause=refusal;
 
+   // Private mode that is switched on and off again while the screen read is
+   // still pending: the capture belongs to the pause and must not be saved.
+   const beforeSpanned=count();
+   setTimeout(()=>{void api.command('togglePause');},20);
+   setTimeout(()=>{void api.command('togglePause');},60);
+   const spanned=await api.capture().then(()=>null,error=>error.message);
+   if(count()!==beforeSpanned)throw new Error('A capture that spanned a private mode pause was saved.');
+   if(!/Private mode is on\. New captures are paused\./.test(spanned||''))throw new Error('Private mode did not invalidate the capture it spanned: '+String(spanned));
+   if(api.store.data.settings.paused)api.store.modify('setSettings',{patch:{paused:false}});
+   out.captureSpannedPause=spanned;
+
    // A folder event whose 700 ms debounce is still pending when private mode
    // comes on must not import the file afterwards.
    api.store.modify('setSettings',{patch:{watchFolders:[watchedFolder],openAfterScreenshot:false}});
@@ -76,6 +87,6 @@ module.exports=async function privateModeAcceptance({application,check}){
   }
  },{});
  assert.ok(result.pauseResumeAdoption.after===result.pauseResumeAdoption.beforeResume+1);
- assert.ok(result.captureRacedPause&&result.watchedFolderDebounce);
- check('private mode adopts the paused clipboard generation on resume, drops a capture raced by the pause and cancels pending watched-folder imports',result);
+ assert.ok(result.captureRacedPause&&result.captureSpannedPause&&result.watchedFolderDebounce);
+ check('private mode adopts the paused clipboard generation on resume, drops a capture raced by the pause or spanned by it, and cancels pending watched-folder imports',result);
 };

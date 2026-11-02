@@ -45,6 +45,9 @@ app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
 let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
+// A screenshot that started before private mode came on is invalid even when
+// capture is switched back on before its screen read returns.
+let pauseGeneration=0;
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
@@ -274,7 +277,8 @@ async function importFile(file,{signal}={}) {
   const image=nativeImage.createFromPath(file);if(image.isEmpty())throw new Error('Unsupported image file');const item=store.insert('image',image.toPNG());queueOCR(item.id);refreshImageSearch();return item;
 }
 async function capture() {
-  const pausing=()=>{if(store?.data.settings.paused)throw new Error('Private mode is on. New captures are paused.');};
+  const generation=pauseGeneration;
+  const pausing=()=>{if(generation!==pauseGeneration||store?.data.settings.paused)throw new Error('Private mode is on. New captures are paused.');};
   pausing();
   const wasVisible=window.isVisible();visibilityGeneration++;desiredVisible=false;shelfMotion.cancel();if(wasVisible)window.hide();viewEvent=null;broadcast({surfaceOnly:true});await shelfMotion.request('reset');
   try{
@@ -435,7 +439,7 @@ async function command(action,payload={}) {
     // Adopt the board before capture is allowed again. Adopting afterwards left
     // a window in which the polling fallback could still import the paused copy.
     if(!paused)await adoptClipboardGeneration();
-    store.modify('setSettings',{patch:{paused}});configureWatchers();
+    store.modify('setSettings',{patch:{paused}});if(paused)pauseGeneration++;configureWatchers();
     message=paused?'Private mode is on. New captures are paused.':'Private mode is off. Capture resumed.';result={paused};
   }
   else if(action==='newNote'){const item=store.insert('text',payload.text||'New note');if(payload.title)store.modify('details',{id:item.id,name:payload.title});store.modify('retain',{ids:[item.id]});result={id:item.id};}
@@ -461,13 +465,14 @@ async function command(action,payload={}) {
     const patch={...payload.patch};
     if(Object.hasOwn(patch,'watchFolders'))throw new Error('Choose watched folders with the folder picker.');
     const wasIndexingImages=!!store.data.settings.indexImages;
+    const wasPaused=store.data.settings.paused;
     const previousShortcuts={...store.data.settings.shortcuts};
     // Enabling a source starts from scratch; resuming adopts the board. Both are
     // settled before capture is allowed again, or a poll in between could
     // import the copy that was made while private mode was on.
     if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastGeneration.sequence=0;
-    if(patch.paused===false&&store.data.settings.paused)await adoptClipboardGeneration();
-    store.modify('setSettings',{patch});if(wasIndexingImages&&!store.data.settings.indexImages)ocrQueue.discardPending();if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
+    if(patch.paused===false&&wasPaused)await adoptClipboardGeneration();
+    store.modify('setSettings',{patch});if(patch.paused===true&&!wasPaused)pauseGeneration++;if(wasIndexingImages&&!store.data.settings.indexImages)ocrQueue.discardPending();if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
     if(Object.hasOwn(patch,'paused'))configureWatchers();
     if(Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
