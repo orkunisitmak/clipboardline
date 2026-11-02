@@ -19,13 +19,24 @@ import XCTest
 
     func testDestinationRequiresNamedHTTPSAndStripsFragmentWithoutLeakingSecrets() throws {
         let syntheticUserInfo = "synthetic-user" + ":" + "synthetic-password" + "@"
-        for value in ["http://example.com/a", "https://127.1/a", "https://8.8.8.8/a", "https://[2606:4700::1111]/a", "https://" + syntheticUserInfo + "example.com/a", "https://example.com:8443/a", "https://localhost/a", "https://host.local/a", "https://host.internal/a", "https://host.home.arpa/a", "https://host.onion/a", "https://host.invalid/a", "https://example.com./a", "https://-bad.example.com/a", "https://example.com/?%74oken=secret", "https://example.com/?X-Amz-Signature=secret", "https://example.com/?api_key=secret", "https://example.com/?accessToken=secret", "https://example.com/?sessionId=secret"] {
+        for value in ["http://example.com/a", "https://127.1/a", "https://8.8.8.8/a", "https://[2606:4700::1111]/a", "https://" + syntheticUserInfo + "example.com/a", "https://example.com:8443/a", "https://localhost/a", "https://host.local/a", "https://host.internal/a", "https://host.home.arpa/a", "https://host.onion/a", "https://host.invalid/a", "https://example.com./a", "https://-bad.example.com/a", "https://example.com/?%74oken=secret", "https://example.com/?X-Amz-Signature=secret", "https://example.com/?api_key=secret", "https://example.com/?api.key=secret", "https://example.com/?session.id=secret", "https://example.com/?api%CC%81.key=secret", "https://example.com/?accessToken=secret", "https://example.com/?sessionId=secret"] {
             XCTAssertNil(PublicLinkDestination(try XCTUnwrap(URL(string: value))), value)
         }
         let destination = try XCTUnwrap(PublicLinkDestination(URL(string: "https://Example.com:443/articles?q=hello%20world#private-fragment")!))
         XCTAssertEqual(destination.hostname, "example.com")
         XCTAssertEqual(destination.url.absoluteString, "https://example.com/articles?q=hello%20world")
         XCTAssertEqual(destination.requestTarget, "/articles?q=hello%20world")
+    }
+
+    func testInternationalHostsUsePunycodeAndBlockedNamesStayBlockedInOtherSpellings() throws {
+        for value in ["https://münchen.de/a", "https://xn--mnchen-3ya.de/a", "https://XN--MNCHEN-3YA.de/a"] {
+            let destination = try XCTUnwrap(PublicLinkDestination(try XCTUnwrap(URL(string: value))))
+            XCTAssertEqual(destination.hostname, "xn--mnchen-3ya.de", value)
+            XCTAssertEqual(destination.url.absoluteString, "https://xn--mnchen-3ya.de/a", value)
+        }
+        for value in ["https://ｌｏｃａｌｈｏｓｔ/", "https://foo.ｌｏｃａｌ/", "https://foo.loc%61l/"] {
+            XCTAssertNil(URL(string: value).flatMap { PublicLinkDestination($0) }, value)
+        }
     }
 
     func testPinnedEndpointUsesNumericCaseButTLSAndHostHeaderUseOriginalHostname() throws {
@@ -82,6 +93,8 @@ import XCTest
         let url = URL(string: "https://public.example.org/page")!
         let parsed = try PublicLinkHTMLMetadata(data: Data("<title>G&uuml;nl&uuml;k &mdash; &Ccedil;i&ccedil;ek &unknown;</title>".utf8), url: url)
         XCTAssertEqual(parsed.title, "Günlük — Çiçek &unknown;")
+        let hex = try PublicLinkHTMLMetadata(data: Data("<title>A&#x2014;B &#X2014;C &#8212;D</title>".utf8), url: url)
+        XCTAssertEqual(hex.title, "A—B —C —D")
     }
 
     func testHTMLHonorsDeclaredMetaCharsetAndFallsBackToWindows1252() throws {
@@ -119,6 +132,23 @@ import XCTest
         let long = try PublicLinkHTMLMetadata(data: Data(("<meta property='og:title' content='" + String(repeating: "a", count: 3000) + "'>").utf8), url: url)
         XCTAssertEqual(long.title?.count, 500)
         XCTAssertThrowsError(try PublicLinkHTMLMetadata(data: Data(repeating: 65, count: 512 * 1024 + 1), url: url))
+    }
+
+    func testWhitespaceOnlyOpenGraphImageGivesNoThumbnailAndValidOneIsKept() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        for blank in ["", "   ", "\n\t"] {
+            XCTAssertNil(try PublicLinkHTMLMetadata(data: Data("<meta property='og:image' content='\(blank)'>".utf8), url: url).thumbnailURL)
+        }
+        let valid = try PublicLinkHTMLMetadata(data: Data("<meta property='og:image' content='/a.png'>".utf8), url: url)
+        XCTAssertEqual(valid.thumbnailURL?.absoluteString, "https://public.example.org/a.png")
+    }
+
+    func testEmptyTitleCandidatesFallThroughToTheNextOne() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let twitter = try PublicLinkHTMLMetadata(data: Data("<title>Page</title><meta property='og:title' content='  '><meta name='twitter:title' content='Tweet'>".utf8), url: url)
+        XCTAssertEqual(twitter.title, "Tweet")
+        let page = try PublicLinkHTMLMetadata(data: Data("<title>Page</title><meta property='og:title' content=''><meta name='twitter:title' content=' '>".utf8), url: url)
+        XCTAssertEqual(page.title, "Page")
     }
 }
 

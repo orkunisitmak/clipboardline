@@ -160,6 +160,9 @@ import XCTest
         XCTAssertTrue(differentTime.id != a.id)
         XCTAssertNil(LinkIdentity.standalone("a paragraph https://example.com")); XCTAssertNil(LinkIdentity.standalone("https://one.com https://two.com"))
         XCTAssertNil(LinkIdentity.standalone("file:///private/test")); XCTAssertNil(LinkIdentity.standalone("javascript:alert(1)"))
+        XCTAssertNil(LinkIdentity.standalone("https://example.com:99999/")); XCTAssertNotNil(LinkIdentity.standalone("https://example.com:65535/"))
+        for credentialed in ["https://user:" + "pass@example.com/a", "https://user@example.com/a", "https://:pass@example.com/a"] { XCTAssertNil(LinkIdentity.standalone(credentialed), credentialed) }
+        for plain in ["https://example.com/a", "https://example.com/a@b"] { XCTAssertNotNil(LinkIdentity.standalone(plain), plain) }
         XCTAssertFalse(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "http://192.168.1.2/doc"))))
         XCTAssertFalse(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "https://example.com/?token=private"))))
         XCTAssertTrue(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "https://example.com/articles"))))
@@ -194,5 +197,28 @@ import XCTest
         XCTAssertTrue(first.id != second.id); XCTAssertTrue(link.id != secondLink.id); XCTAssertEqual(try library.item(first.id)?.note, "old note")
         let line = Line(defaults: f.defaults, inbox: f.inbox, breeze: false, library: library)
         line.pinFromUI(first.id); XCTAssertTrue(try library.item(first.id)?.favorite == true); XCTAssertFalse(try library.item(second.id)?.favorite == true)
+    }
+    func testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let first = try library.captureImage(f.image(identicalPixels: true)); f.date.addTimeInterval(1)
+        try library.toggleFavorite([first.id])
+        try library.update(first.id) { $0.title = "Logo" }
+        try library.addTag("brand", to: [first.id])
+        let folder = try library.createCollection("Work"); try library.assign([first.id], to: folder)
+        let other = try library.captureImage(f.image()); f.date.addTimeInterval(1)
+        let duplicate = try f.image(identicalPixels: true)
+        let again = try library.captureImage(duplicate)
+        XCTAssertEqual(again.id, first.id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: duplicate.path))
+        let items = try library.shelfItems(.image)
+        XCTAssertEqual(items.map(\.id), [first.id, other.id])
+        XCTAssertTrue(items[0].favorite)
+        XCTAssertEqual(items[0].title, "Logo")
+        XCTAssertEqual(try library.tags(for: first.id).map(\.name), ["brand"])
+        XCTAssertEqual(try library.collections(for: first.id).map(\.id), [folder])
+        let different = try library.captureImage(f.image())
+        XCTAssertNotEqual(different.id, first.id)
+        XCTAssertEqual(try library.shelfItems(.image).count, 3)
     }
 }
