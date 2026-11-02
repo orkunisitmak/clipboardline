@@ -539,7 +539,7 @@
 /* Private mode. */
 "Private mode" = "비공개 모드";
 "No new copies, screenshots or watched-folder images are collected while this is on. Anything copied during it is skipped, and existing history stays." = "켜져 있는 동안 새 복사본, 스크린샷, 감시 폴더의 이미지는 수집되지 않습니다. 이 기간에 복사한 내용은 건너뛰며 기존 기록은 유지됩니다.";
-"Private mode is on. New captures are paused." = "비공개 모드가 켜져 있습니다. 새 캔처가 일시 중지되었습니다.";
-"Private mode is off. Capture resumed." = "비공개 모드가 꺼져 있습니다. 캔처를 다시 시작했습니다.";
+"Private mode is on. New captures are paused." = "비공개 모드가 켜져 있습니다. 새 캡처가 일시 중지되었습니다.";
+"Private mode is off. Capture resumed." = "비공개 모드가 꺼져 있습니다. 캡처를 다시 시작했습니다.";
 "Use ⌃⌥P" = "⌃⌥P 사용";
 "This shortcut turns private mode on and off from any app." = "이 단축키는 모든 앱에서 비공개 모드를 켜고 끕니다.";

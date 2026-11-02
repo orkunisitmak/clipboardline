@@ -203,6 +203,24 @@ final class ClipboardWatcherTests: ClipboardTestCase {
     }
 
     @MainActor
+    func testResumingAdoptsTheBoardSoACopyMadeJustBeforeResumeIsNotHung() throws {
+        try withWatcher { watcher, source, _, received in
+            watcher.start()
+            // Paused, and the timer has not run yet, so nothing has been adopted.
+            source.copy([.png: try imageData(.png)])
+            // Resuming begins with the next copy, exactly as start() does.
+            watcher.skipCurrent()
+            watcher.check()
+            XCTAssertTrue(received().isEmpty)
+            XCTAssertTrue(source.dataReads.isEmpty)
+
+            source.copy([.png: try imageData(.png)])
+            watcher.check()
+            XCTAssertEqual(received().count, 1)
+        }
+    }
+
+    @MainActor
     func testStartingTwiceDoesNotResetBaselineOrDuplicateTimer() throws {
         try withWatcher { watcher, source, _, received in
             watcher.start()

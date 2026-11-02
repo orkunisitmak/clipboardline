@@ -34,6 +34,26 @@ enum Inbox {
     private static let offeredKey = "inboxOffered"
     private static let savedKey = "inboxSavedSettings"
 
+    /// macOS screenshot preferences go through this seam, so a test can run the
+    /// real apply and restore logic without changing the user's own settings.
+    protocol Preferences {
+        func value(_ key: CFString) -> Any?
+        func set(_ key: CFString, _ value: Any?)
+    }
+
+    struct SystemPreferences: Preferences {
+        func value(_ key: CFString) -> Any? { CFPreferencesCopyAppValue(key, domain) }
+        func set(_ key: CFString, _ value: Any?) {
+            CFPreferencesSetAppValue(key, value as CFPropertyList?, domain)
+            // Writes through cfprefsd, so the screenshot service sees it at once.
+            CFPreferencesAppSynchronize(domain)
+        }
+    }
+
+    static var preferences: Preferences = SystemPreferences()
+    /// The defaults domain holding the user's choice and the saved settings.
+    static var defaults: UserDefaults = .standard
+
     static let folder: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("Tendedero/Screenshots", isDirectory: true)
@@ -41,47 +61,55 @@ enum Inbox {
 
     /// The user's choice, kept across launches.
     static var isEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: enabledKey) }
-        set { UserDefaults.standard.set(newValue, forKey: enabledKey) }
+        get { defaults.bool(forKey: enabledKey) }
+        set { defaults.set(newValue, forKey: enabledKey) }
     }
 
     /// Whether we already asked, so the offer appears only once.
     static var wasOffered: Bool {
-        get { UserDefaults.standard.bool(forKey: offeredKey) }
-        set { UserDefaults.standard.set(newValue, forKey: offeredKey) }
+        get { defaults.bool(forKey: offeredKey) }
+        set { defaults.set(newValue, forKey: offeredKey) }
     }
 
     /// Whether macOS is currently sending screenshots to our folder.
     static var isApplied: Bool {
-        guard let current = CFPreferencesCopyAppValue(locationKey, domain) as? String else { return false }
+        guard let current = preferences.value(locationKey) as? String else { return false }
         return URL(fileURLWithPath: (current as NSString).expandingTildeInPath).standardizedFileURL
             == folder.standardizedFileURL
+    }
+
+    /// Inbox holds the screenshots only while capture is running. Private mode
+    /// hands the user's own destination back, and a relaunch while it is on
+    /// must not quietly take it over: otherwise the screenshots land in the
+    /// app's folder while every watcher skips them, and appear nowhere.
+    static func reconcile(enabled: Bool, paused: Bool) {
+        if enabled && !paused { apply() } else { restore() }
     }
 
     static func apply() {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // Never save our own values as the "previous" ones, for example after
         // a crash left them applied.
-        var saved = UserDefaults.standard.dictionary(forKey: savedKey) ?? [:]
+        var saved = defaults.dictionary(forKey: savedKey) ?? [:]
         if !isApplied {
             saved = [:]
-            saved["location"] = CFPreferencesCopyAppValue(locationKey, domain) as? String
-            saved["locationScreenshot"] = CFPreferencesCopyAppValue(screenshotLocationKey, domain) as? String
-            saved["thumbnail"] = CFPreferencesCopyAppValue(thumbnailKey, domain) as? Bool
+            saved["location"] = preferences.value(locationKey) as? String
+            saved["locationScreenshot"] = preferences.value(screenshotLocationKey) as? String
+            saved["thumbnail"] = preferences.value(thumbnailKey) as? Bool
         }
         // Recordings and the target came later: settings saved by an earlier
         // version lack them, and the value macOS has now is still the user's own.
         if saved["recordingSaved"] == nil {
-            saved["locationRecording"] = CFPreferencesCopyAppValue(recordingLocationKey, domain) as? String
+            saved["locationRecording"] = preferences.value(recordingLocationKey) as? String
             saved["recordingSaved"] = true
         }
         if saved["targetSaved"] == nil {
-            saved["target"] = CFPreferencesCopyAppValue(targetKey, domain) as? String
-            saved["targetScreenshot"] = CFPreferencesCopyAppValue(screenshotTargetKey, domain) as? String
-            saved["targetRecording"] = CFPreferencesCopyAppValue(recordingTargetKey, domain) as? String
+            saved["target"] = preferences.value(targetKey) as? String
+            saved["targetScreenshot"] = preferences.value(screenshotTargetKey) as? String
+            saved["targetRecording"] = preferences.value(recordingTargetKey) as? String
             saved["targetSaved"] = true
         }
-        UserDefaults.standard.set(saved, forKey: savedKey)
+        defaults.set(saved, forKey: savedKey)
         set(locationKey, folder.path)
         set(screenshotLocationKey, folder.path)
         set(recordingLocationKey, folder.path)
@@ -93,7 +121,7 @@ enum Inbox {
 
     static func restore() {
         guard isApplied else { return }
-        let saved = UserDefaults.standard.dictionary(forKey: savedKey) ?? [:]
+        let saved = defaults.dictionary(forKey: savedKey) ?? [:]
         set(locationKey, saved["location"])
         set(screenshotLocationKey, saved["locationScreenshot"])
         set(recordingLocationKey, saved["locationRecording"])
@@ -101,13 +129,11 @@ enum Inbox {
         set(screenshotTargetKey, saved["targetScreenshot"])
         set(recordingTargetKey, saved["targetRecording"])
         set(thumbnailKey, saved["thumbnail"])
-        UserDefaults.standard.removeObject(forKey: savedKey)
+        defaults.removeObject(forKey: savedKey)
     }
 
-    /// Writes through cfprefsd, so the screenshot service sees it at once.
     /// A nil value removes the key and returns it to the macOS default.
     private static func set(_ key: CFString, _ value: Any?) {
-        CFPreferencesSetAppValue(key, value as CFPropertyList?, domain)
-        CFPreferencesAppSynchronize(domain)
+        preferences.set(key, value)
     }
 }

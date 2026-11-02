@@ -86,6 +86,7 @@ async function main(){
   await application.evaluate(async({clipboard,ClipboardItem})=>{await clipboard.write([new ClipboardItem({'text/plain':new Blob(['SYNTHETIC_PRIVATE_TEST']), 'electron application/osclipboard;format="ExcludeClipboardContentFromMonitorProcessing"':new Blob([Buffer.from([1])])})]);await global.__clipboardLineTest.readClipboard();});
   assert.ok(!(await page.evaluate(()=>window.clipboardLine.state())).items.some(i=>i.text==='SYNTHETIC_PRIVATE_TEST'));check('private clipboard marker is excluded');
   await require('./clipboard-admission-acceptance.cjs')({application,check});
+  await require('./private-mode-acceptance.cjs')({application,check});
   await page.evaluate(()=>window.clipboardLine.command('hide'));await page.evaluate(()=>window.clipboardLine.command('show'));
   await until(()=>page.locator('[data-shelf="text"] .card.focused').getAttribute('data-item-id'),id=>id===textItem.id);await page.keyboard.press('Space');await page.locator('#preview-dialog').waitFor({state:'visible'});assert.equal(await page.locator('#preview-dialog').getAttribute('aria-label'),'Named synthetic key');await page.keyboard.press('Escape');
   check('fresh opening focuses the first nonempty shelf and Space previews text when Images is empty');

@@ -7,9 +7,11 @@ import Foundation
 /// preference means capture is running.
 enum CapturePause {
     private static let key = "capturePaused"
+    /// Kept apart from `UserDefaults.standard` so a test can isolate the choice.
+    static var defaults: UserDefaults = .standard
 
     static var isPaused: Bool {
-        get { UserDefaults.standard.bool(forKey: key) }
-        set { UserDefaults.standard.set(newValue, forKey: key) }
+        get { defaults.bool(forKey: key) }
+        set { defaults.set(newValue, forKey: key) }
     }
 }

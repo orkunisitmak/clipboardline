@@ -531,6 +531,15 @@ test('Settings exposes private mode in Sources and as an optional global shortcu
  assert.match(f.main,/Private mode/);
 });
 
+test('Settings translates the private mode description in the selected language',async()=>{
+ const f=fixture();await f.ready();await f.api.command('settings');
+ await f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.click('settings-tab',{tab:'sources'});
+ assert.match(f.main,/Gizli mod/);
+ assert.match(f.main,/Bu açıkken yeni kopyalar, ekran görüntüleri ve izlenen klasörlerdeki görseller toplanmaz\./);
+ assert.doesNotMatch(f.main,/No new copies, screenshots or watched-folder images are collected/);
+});
+
 for(const [width,height]of[[3840,2160],[7680,4320]])test('retained '+width+'×'+height+' markup coalesces pointer painting without dropping samples or copying the original',async()=>{
  const f=fixture({queuedAnimationFrames:true,imageRaster:{width,height}});await f.ready();await f.key('Space');f.flushAnimationFrames();await f.key('KeyM');f.flushAnimationFrames();await f.click('image-tool',{tool:'pen'});f.flushAnimationFrames();f.paintCalls.length=0;
  await f.pointer('pointerdown',90,44);for(let index=1;index<=96;index++)await f.pointer('pointermove',90+index*6,44+index);await f.pointer('pointerup',666,140);

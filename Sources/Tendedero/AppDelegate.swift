@@ -241,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateCapacity()
 
         if watchesFiles {
-            if Inbox.isEnabled { Inbox.apply() }
+            Inbox.reconcile(enabled: Inbox.isEnabled, paused: CapturePause.isPaused)
             startWatcher()
         }
         restoreSettingsOnTermination()
@@ -414,7 +414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setInbox(_ on: Bool) {
         guard watchesFiles else { return }
         Inbox.isEnabled = on
-        if on { Inbox.apply() } else { Inbox.restore() }
+        Inbox.reconcile(enabled: on, paused: CapturePause.isPaused)
         startWatcher()
     }
 
@@ -1932,10 +1932,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard CapturePause.isPaused != on else { return }
         CapturePause.isPaused = on
         if watchesFiles {
-            if on { if Inbox.isApplied { Inbox.restore() } }
-            else if Inbox.isEnabled { Inbox.apply() }
+            Inbox.reconcile(enabled: Inbox.isEnabled, paused: on)
             startWatcher()
         }
+        // Resuming starts with the next copy. Text is covered by
+        // refreshTextSources(); images are adopted here so a picture copied
+        // just before the pause ended is not hung after all.
+        if !on { clipboardWatcher.skipCurrent() }
         refreshTextSources()
         updateStatusIcon()
         line.notice = on ? L("Private mode is on. New captures are paused.") : L("Private mode is off. Capture resumed.")

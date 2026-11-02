@@ -83,6 +83,11 @@ final class ClipboardWatcher {
         lastCount = nil
     }
 
+    /// Starting or resuming a source begins with the next copy, never the
+    /// board as it stands: a picture copied during the pause, or just before
+    /// it ended, is adopted and never hung.
+    func skipCurrent() { lastCount = source.changeCount }
+
     /// Internal so tests can advance a synthetic clipboard without waiting for a timer.
     func check() {
         guard timer != nil else { return }
