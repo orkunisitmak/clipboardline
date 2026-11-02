@@ -22,13 +22,13 @@ const DEFAULTS = Object.freeze({
 const clone = value => structuredClone(value);
 const fail = message => { throw new Error(message); };
 function incompleteDeletion(message){const error=new Error('Permanent deletion is incomplete. '+message+' Retry cleanup in Settings.');error.committed=true;return error;}
-function text(value, maximum = 1024 * 1024, empty = false) {
-  if (typeof value !== 'string' || value.length > maximum || (!empty && !value.length) || value.includes('\0')) fail('Invalid text');
+function text(value, maximum = 1024 * 1024, empty = false, allowNul = false) {
+  if (typeof value !== 'string' || value.length > maximum || (!empty && !value.length) || (!allowNul && value.includes('\0'))) fail('Invalid text');
   return value;
 }
-function sizedText(value, empty = false) {
+function sizedText(value, empty = false, allowNul = false) {
   if (typeof value === 'string' && Buffer.byteLength(value, 'utf8') > 1024 * 1024) fail('Invalid text');
-  return text(value, 1024 * 1024, empty);
+  return text(value, 1024 * 1024, empty, allowNul);
 }
 function ids(value) {
   if (!Array.isArray(value) || value.length > 10000 || value.some(id => typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id))) fail('Invalid item selection');
@@ -151,7 +151,7 @@ class Store {
   validateStored(item) {
     if(item.captureRevision!=null)ids([item.captureRevision]);if(item.trashRevision!=null)ids([item.trashRevision]);
     ids([item.id]); if (!KINDS.includes(item.kind) || !Array.isArray(item.folderIds) || !Array.isArray(item.tags)) fail('Invalid library record');
-    if (item.text != null) text(item.text, 1024 * 1024, true);
+    if (item.text != null) text(item.text, 1024 * 1024, true, item.kind === 'text');
     if(item.note!=null)text(item.note,1024*1024,true);
     if(item.retainedAt!=null&&(!Number.isFinite(item.retainedAt)||item.retainedAt<0))fail('Invalid saved timestamp');
     if(item.lastCopiedAt!=null&&(!Number.isFinite(item.lastCopiedAt)||item.lastCopiedAt<0))fail('Invalid copy timestamp');
@@ -317,7 +317,7 @@ class Store {
     let textValue = '', url = '', imageFile = '';
     if (kind === 'image') imageFile = this.putPNG(value);
     else if (kind === 'link') { url = plainURL(value) || fail('Invalid URL'); }
-    else textValue = sizedText(value);
+    else textValue = sizedText(value, false, true);
     const identity=kind==='text'?textIdentity(textValue):null;
     const matching = this.data.items.filter(i => i.kind === kind && !i.trashedAt &&
       (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? i.url === url : !i.recording&&i.imageFile === imageFile));
@@ -455,7 +455,7 @@ class Store {
       else if(action==='details') {
         if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
         if(payload.note!==undefined)item.note=sizedText(payload.note,true);
-        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
+        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true,true);}
       }
       else if(action==='markCopied'){item.lastCopiedAt=now;item.captureRevision=crypto.randomUUID();}
       else if (action === 'name') { item.name = text(payload.name, 200, true).trim(); item.pinned = true; item.retainedAt??=now; }
@@ -479,7 +479,7 @@ class Store {
       } else if (action === 'remove') { if (saved(item)) item.hiddenFromShelf = true; else{item.trashedAt = now;item.trashRevision=crypto.randomUUID();} }
       else if (action === 'trash') item.trashedAt = now;
       else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; }
-      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = sizedText(payload.text, true); }
+      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = sizedText(payload.text, true, true); }
       else if (action === 'saveImage') {
         if (item.kind !== 'image' || item.recording || typeof payload.dataUrl !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(payload.dataUrl) || payload.dataUrl.length > 90_000_000) fail('Invalid image edit');
         const annotations = payload.annotations ?? []; const crop = payload.crop ?? null;

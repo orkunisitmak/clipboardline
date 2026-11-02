@@ -10,6 +10,12 @@
     "scope": "Shelf selection and keyboard navigation; native paste, layout and installers retain their separate mandatory acceptance suites.",
     "nativeExceptions": [
       {
+        "id": "windows-clipboard-nul",
+        "macos": "Text copied from another app keeps the text after a NUL.",
+        "windows": "Text copied from another app ends at its first NUL.",
+        "reason": "Electron reads text/plain from the Windows clipboard through CF_UNICODETEXT, which is NUL-terminated, so the part after a NUL never reaches the app."
+      },
+      {
         "id": "modifier-names",
         "macos": "Command/Option",
         "windows": "Control/Alt",
@@ -70,6 +76,12 @@
         "behavior": "Copying the same image again keeps one Library item: the existing item moves to the front and keeps its pin, name, tags and folders. A different image is a new item.",
         "macos": "LibraryStore.captureImage finds a live image with identical original bytes (file size first, then SHA-256), moves it to the front and removes the duplicate clipboard PNG; LibraryStoreTests.testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization covers it.",
         "windows": "Store.insert matches a live image by its managed PNG hash and moves it to the front; model.test.cjs 'exact image recopy moves the image in front of another image and preserves saved organization' covers it."
+        },
+        {
+        "id": "text-with-nul",
+        "behavior": "Text that reaches the Text shelf with a NUL character in it is stored as given and survives a restart; empty text is still ignored. A Windows copy from another app is read through CF_UNICODETEXT, which ends at the first NUL, so only the part before it is available there.",
+        "macos": "TextClipboardWatcher and LibraryStore.captureText check only empty, whitespace-only, UTF-8 and the 1 MiB size, so a NUL is kept.",
+        "windows": "Store.insert and the stored-record check accept a NUL in text items; model.test.cjs 'text containing a NUL is stored and survives a reload like on macOS' and 'a NUL can be kept when text is edited' cover it. The text/plain clipboard read in lib/clipboard-policy.cjs never sees past a NUL in text copied from another app."
       },
       {
         "id": "mixed-selection-pin",
