@@ -314,9 +314,11 @@ extension String {
         guard try db.rows("SELECT value FROM metadata WHERE key='search-fold-v2'").isEmpty else { return }
         let url = databaseURL
         searchRefold.enter()
-        DispatchQueue.global(qos: .utility).async { [searchRefold] in
+        DispatchQueue.global(qos: .utility).async { [weak self, searchRefold] in
             defer { searchRefold.leave() }
-            try? Self.refoldSearchIndex(url)
+            guard (try? Self.refoldSearchIndex(url)) != nil else { return }
+            // An open search ran against the old index; run it again.
+            Task { @MainActor [weak self] in self?.searchRevision += 1 }
         }
     }
     /// Blocks until a started search re-fold finishes. Tests use it; the app does not.
@@ -944,12 +946,14 @@ extension String {
             case .null: field(Data("null".utf8))
             }
         }
-        for key in row.keys.sorted() { field(Data(key.utf8)); value(row[key]!) }
+        // `search` is derived text that a background re-fold may rewrite; it is not part of what Undo must find unchanged.
+        for key in row.keys.sorted() where key != "search" { field(Data(key.utf8)); value(row[key]!) }
         let folders = try db.rows("SELECT c.id,c.name,c.parent FROM collections c JOIN item_collections m ON m.collection=c.id WHERE m.item=? ORDER BY c.id", [.text(id.uuidString)])
         let tags = try db.rows("SELECT t.id,t.name FROM tags t JOIN item_tags m ON m.tag=t.id WHERE m.item=? ORDER BY t.id", [.text(id.uuidString)])
         for (kind, rows) in [("folders", folders), ("tags", tags)] {
             field(Data(kind.utf8))
-            for row in rows { for key in row.keys.sorted() { field(Data(key.utf8)); value(row[key]!) } }
+            for row in rows { // `search` is derived text that a background re-fold may rewrite; it is not part of what Undo must find unchanged.
+        for key in row.keys.sorted() where key != "search" { field(Data(key.utf8)); value(row[key]!) } }
         }
         return Data(digest.finalize())
     }

@@ -114,7 +114,7 @@ import XCTest
         XCTAssertEqual(try library.item(record.id)?.text, "İLK çekim 中文 👋")
     }
     func testSearchMatchesTurkishDotlessIAndRefoldsOlderRows() throws {
-        let f = try SyntheticFixture(); defer { f.cleanup() }; var library = try store(f)
+        let f = try SyntheticFixture(); defer { f.cleanup() }; var library = try store(f); library.waitForSearchRefold()
         let record = try XCTUnwrap(library.captureText("Işık ISPARTA ısı"))
         try library.retain([record.id])
         for query in ["ışık", "ısparta", "ISI", "isik", "ISPARTA"] { XCTAssertEqual(try library.query(LibraryQuery(search: query)).first?.id, record.id, query) }
@@ -126,6 +126,14 @@ import XCTest
         library = try store(f); library.waitForSearchRefold()
         XCTAssertEqual(try library.query(LibraryQuery(search: "ışık")).first?.id, record.id)
         XCTAssertEqual(try db.rows("SELECT value FROM metadata WHERE key='search-fold-v2'").count, 1)
+    }
+    func testUndoTrashSurvivesASearchRefoldOfTheTrashedRow() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f); library.waitForSearchRefold()
+        let record = try XCTUnwrap(library.captureText("Işık"))
+        try library.trashUndoably([record.id])
+        let db = try LibraryDatabase(url: library.databaseURL)
+        try db.execute("UPDATE items SET search=? WHERE id=?", [.text("changed by a re-fold"), .text(record.id.uuidString)])
+        XCTAssertEqual(try library.undoTrash(), [record.id])
     }
     func testDotlessITagAndFolderNamesStayDistinct() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
