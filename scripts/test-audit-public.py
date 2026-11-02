@@ -46,6 +46,14 @@ class PublicationGuardTests(unittest.TestCase):
             self.assertEqual(scanner.audit(self.root)['findings'], [{'file': 'u.txt', 'line': 2, 'rule': 'github-token'}], codec)
             self.assertNotIn(value, json.dumps(scanner.audit(self.root)))
 
+    def test_utf16_file_with_a_byte_order_mark_is_not_read_in_the_other_byte_order(self):
+        (self.root / 'b.txt').write_bytes(b'\xff\xfe' + ('xhttps://user\u013aassword@example.com\n').encode('utf-16-le'))
+        self.assertEqual(scanner.audit(self.root)['findings'], [])
+        value = 'gh' + 'p_' + 'F' * 36
+        for codec in ('utf-16-le', 'utf-16-be'):
+            (self.root / 'b.txt').write_bytes((b'\xff\xfe' if codec.endswith('le') else b'\xfe\xff') + value.encode(codec))
+            self.assertEqual(scanner.audit(self.root)['findings'], [{'file': 'b.txt', 'line': 1, 'rule': 'github-token'}], codec)
+
     def test_secret_in_utf16_text_after_an_odd_byte_is_flagged(self):
         value = 'gh' + 'p_' + 'D' * 36
         for codec in ('utf-16-le', 'utf-16-be'):

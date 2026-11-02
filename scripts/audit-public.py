@@ -54,10 +54,16 @@ def audit(root):
         # An even start comes first; the same text read from a shifted start is skipped, as its line count is unreliable.
         views = [(data, 0, 0)]
         if b'\0' in data:
-            for start in (0, 1):
+            # A byte-order mark names the only byte order the file can have, so no other reading is scanned.
+            if data[:2] == b'\xff\xfe':
+                readings = ((0, 'utf-16-le', 0),)
+            elif data[:2] == b'\xfe\xff':
+                readings = ((0, 'utf-16-be', 1),)
+            else:
+                readings = tuple((start, codec, low) for start in (0, 1) for codec, low in (('utf-16-le', 0), ('utf-16-be', 1)))
+            for start, codec, low in readings:
                 chunk = data[start:len(data) - (len(data) - start) % 2]
-                for codec, low in (('utf-16-le', 0), ('utf-16-be', 1)):
-                    views.append((chunk.decode(codec, 'surrogatepass').encode('ascii', 'replace'), start + low, 2))
+                views.append((chunk.decode(codec, 'surrogatepass').encode('ascii', 'replace'), start + low, 2))
         seen, seen_offsets = set(), set()
         for rule, pattern in PATTERNS.items():
             for view, base, step in views:
