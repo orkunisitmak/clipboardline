@@ -111,6 +111,12 @@ test('permanent deletion keeps rasters referenced by live items or recoverable T
   s.modify('trash',{ids:[second.id]});const third=s.insert('image',png);s.modify('trash',{ids:[third.id]});
   s.modify('delete',{ids:[second.id]});assert.ok(fs.existsSync(file));s.modify('restore',{ids:[third.id]});assert.deepEqual(fs.readFileSync(s.mediaPath(third.id)),png);
 }));
+test('opening the library removes temporary copies a killed process left behind',()=>fixture((_s,_time,dir)=>{
+  const id='12345678-1234-4234-8234-123456789abc',left=['library.json.tmp-'+id,'library.json.backup.tmp-'+id],other='library.json.tmp-notes';
+  for(const name of [...left,other])fs.writeFileSync(path.join(dir,name),'deleted text');
+  new Store(dir,{clock:()=>1000});
+  for(const name of left)assert.equal(fs.existsSync(path.join(dir,name)),false);assert.ok(fs.existsSync(path.join(dir,other)));
+}));
 test('ordinary removal and retention preserve managed images for undo and Trash recovery',()=>fixture((s,time)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('remove',{ids:[item.id]});assert.ok(fs.existsSync(file));s.modify('undo');assert.equal(item.trashedAt,null);
   time(32*86400000);s.expire();assert.ok(item.trashedAt);assert.ok(fs.existsSync(file));s.modify('restore',{ids:[item.id]});assert.ok(fs.existsSync(s.mediaPath(item.id)));
