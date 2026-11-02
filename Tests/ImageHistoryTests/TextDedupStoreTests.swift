@@ -116,6 +116,24 @@ import XCTest
         XCTAssertEqual(try live(library).map(\.id), [original.id])
     }
 
+    func testCopyingANotesTextNeverMergesOrTrashesNotes() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let first = try library.createNote(), second = try library.createNote()
+        try library.update(first.id) { $0.text = "Meeting agenda"; $0.title = "Monday" }
+        try library.update(second.id) { $0.text = "Meeting agenda"; $0.title = "Tuesday" }
+        f.date.addTimeInterval(1)
+        let captured = try XCTUnwrap(library.captureText("Meeting agenda"))
+        XCTAssertFalse([first.id, second.id].contains(captured.id))
+        for note in [first, second] {
+            let kept = try XCTUnwrap(library.item(note.id))
+            XCTAssertNil(kept.deletedAt)
+            XCTAssertEqual(kept.createdAt, note.createdAt)
+        }
+        XCTAssertEqual(try library.item(first.id)?.title, "Monday")
+        XCTAssertEqual(try library.item(second.id)?.title, "Tuesday")
+    }
+
     func testRecaptureNeverResurrectsAnExplicitlyTrashedRecord() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let library = try store(f), original = try XCTUnwrap(library.captureText("Trashed value"))

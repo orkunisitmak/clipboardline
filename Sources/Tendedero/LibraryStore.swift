@@ -23,6 +23,8 @@ struct LibraryRecord: Codable, Equatable, Identifiable {
     /// records need no migration; every new trash transition gets a fresh value.
     var trashRevision: UUID?
     var retainedAt: Date?
+    /// Set on records made by New note; a capture never merges with or drops one, as on Windows.
+    var createdAsNote: Bool?
     var favorite = false
     var onShelf = true
     var deletedAt: Date?
@@ -447,7 +449,7 @@ extension String {
     func imageSearchChanged() { searchRevision += 1 }
     @discardableResult func createNote() throws -> LibraryRecord {
         let date = now(); var record = LibraryRecord(id: UUID(), kind: .text, createdAt: date, updatedAt: date)
-        record.text = ""; record.retainedAt = date; record.title = L("Untitled note")
+        record.text = ""; record.retainedAt = date; record.title = L("Untitled note"); record.createdAsNote = true
         try db.transaction { try put(record) }; changed(); return record
     }
     @discardableResult func captureImage(_ url: URL, capturedAt: Date? = nil) throws -> LibraryRecord {
@@ -508,6 +510,7 @@ extension String {
             var canonical: LibraryRecord?
             for row in rows {
                 guard let id = row["id"]?.string.flatMap(UUID.init(uuidString:)), var duplicate = try item(id) else { throw HistoryFiles.Failure.unsafeFile }
+                guard duplicate.createdAsNote != true else { continue }
                 guard let candidate = duplicate.text, TextIdentity.key(candidate).utf8.elementsEqual(identity.utf8) else { continue }
                 guard var current = canonical else { canonical = duplicate; continue }
                 // Preserve personal organization on the surviving identity.
