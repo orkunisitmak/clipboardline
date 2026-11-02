@@ -296,7 +296,7 @@ final class TextHistory: ObservableObject {
     func exportSources(_ values: [Entry]) throws -> [(url: URL, name: String)] {
         try values.map { entry in
             let url = try materialize(entry)
-            return (url, url.lastPathComponent)
+            return (url, HistoryFiles.exportName(for: url, originalPath: nil, title: entry.title))
         }
     }
     func dragItems(_ id: UUID) -> [ShelfDragItem] {
