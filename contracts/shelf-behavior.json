@@ -60,6 +60,12 @@
         "windows": "linkMetadata in lib/network.cjs treats a whitespace-only og:image as missing; security.test.cjs covers it."
       },
       {
+        "id": "link-shelf-copied-order",
+        "behavior": "The Link shelf lists links by when they were last copied, falling back to when they were captured, so copying an older link moves it to the first slot; Text and Image shelves stay in capture order. Copying a stored link again records the copy time and keeps its date added, so Newest first and Date added do not change, and it still counts as freshly captured for retention.",
+        "macos": "LibraryStore.shelfItems orders the .link kind by COALESCE(copied,created) DESC; LibraryStoreTests.testRecapturedLinkMovesLeftAndRenewsTemporaryCaptureWithoutResettingOriginalDate covers a recaptured link.",
+        "windows": "rowItems in renderer.js sorts the link kind by the newer of lastCopiedAt and createdAt (a link saved by an earlier build had createdAt renewed on a re-copy), and Store.insert keeps createdAt and sets lastCopiedAt and lastCapturedAt when a stored link is captured again, with expire() reading lastCapturedAt before createdAt like macOS prune; shelf-render.test.cjs and media-revision.test.cjs cover it."
+      },
+      {
         "id": "link-tracking-parameters",
         "behavior": "Copying a link again that differs only by tracking query parameters (names starting with utm_, fbclid or gclid, in any letter case) is the same item: it is refreshed and keeps its first stored address, and links whose other parameters or fragment differ stay separate.",
         "macos": "LinkIdentity.normalized drops those parameters before LibraryStore.captureLink matches an existing item; CrossPlatformBehaviorContractTests runs the tracking-parameter-links scenario through LibraryStore.captureLink, and LibraryStoreTests.testLinkIdentityPreservesMeaningfulParametersAndDeduplicatesVideoForms covers it.",

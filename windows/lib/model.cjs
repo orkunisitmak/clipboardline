@@ -78,8 +78,10 @@ function settings(patch, previous = DEFAULTS) {
   }
   return out;
 }
-// Match macOS libraryFolded: sibling folder names ignore case, width and diacritics.
-const foldedName=value=>value.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase();
+// Match macOS libraryFolded: sibling folder and tag names ignore case, width and diacritics.
+// Only the ideographic space, compatibility jamo and the Halfwidth and Fullwidth Forms
+// block get compatibility mapping, so ＡＢＣ matches ABC while m² stays distinct from m2.
+const foldedName=value=>value.replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
 function trashUndoFingerprint(item){return crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex');}
 function trashUndoMatches(item,entry){return !!item&&item.trashedAt!=null&&item.trashedAt===entry.afterTrashedAt&&item.updatedAt===entry.afterUpdatedAt&&(item.captureRevision??null)===entry.captureRevision&&trashUndoFingerprint(item)===entry.fingerprint;}
 function availableTrashUndo(items,journal){if(!journal?.length)return false;const byID=new Map(items.map(item=>[item.id,item]));for(let index=journal.length-1;index>=0;index--)if(journal[index].some(entry=>trashUndoMatches(byID.get(entry.id),entry)))return true;return false;}
@@ -157,6 +159,7 @@ class Store {
     if(item.note!=null)text(item.note,1024*1024,true);
     if(item.retainedAt!=null&&(!Number.isFinite(item.retainedAt)||item.retainedAt<0))fail('Invalid saved timestamp');
     if(item.lastCopiedAt!=null&&(!Number.isFinite(item.lastCopiedAt)||item.lastCopiedAt<0))fail('Invalid copy timestamp');
+    if(item.lastCapturedAt!=null&&(!Number.isFinite(item.lastCapturedAt)||item.lastCapturedAt<0))fail('Invalid capture timestamp');
     if(item.retainedAt==null&&(item.pinned||item.folderIds.length||item.tags.length))item.retainedAt=item.updatedAt||item.createdAt||this.clock();
     for (const key of ['imageFile', 'renderedFile','thumbnailFile']) if (item[key] && !/^[a-f0-9]{64}\.png$/.test(item[key])) fail('Unsafe managed media path');
     if(item.recording!==undefined&&typeof item.recording!=='boolean')fail('Invalid recording record');
@@ -345,7 +348,8 @@ class Store {
     const now = this.clock();
     const item = prior || {id: crypto.randomUUID(), kind, text: textValue, url, title: '', name: '', pinned: false, folderIds: [], tags: [],
       imageFile, renderedFile: '', ocrText: '', annotations: [], crop: null, note:'', retainedAt:null, lastCopiedAt:null, createdAt: now, updatedAt: now, trashedAt: null, hiddenFromShelf: false};
-    item.createdAt = now; item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
+    if(kind==='link'&&prior){item.lastCopiedAt=now;item.lastCapturedAt=now;}else item.createdAt=now;
+    item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
     if(kind==='text')item.text=textValue;
     if (extra.title) item.title = text(extra.title, 500, true);
     if (matching.length > 1) {
@@ -370,7 +374,7 @@ class Store {
     let changed = false;
     for (const item of this.data.items) {
       const days = this.data.settings.retentionDays[item.kind];
-      if (!item.trashedAt && !saved(item) && days > 0 && item.createdAt < this.clock() - days * 86400000) { item.trashedAt = this.clock(); item.trashRevision=crypto.randomUUID(); changed = true; }
+      if (!item.trashedAt && !saved(item) && days > 0 && (item.lastCapturedAt ?? item.createdAt) < this.clock() - days * 86400000) { item.trashedAt = this.clock(); item.trashRevision=crypto.randomUUID(); changed = true; }
     }
     if (persist && changed) this.persist();
   }
@@ -443,8 +447,7 @@ class Store {
       if(action==='renameTag'){
         name=text(payload.name,TAG_INPUT_LIMIT).trim();
         if(!name||!validTagName(name))fail('Invalid tag name');
-        const folded=value=>value.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase();
-        if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&folded(value)===folded(name))))fail('A tag with this name already exists');
+        if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&foldedName(value)===foldedName(name))))fail('A tag with this name already exists');
       }
       for(const item of affected){item.retainedAt??=now;item.tags=action==='renameTag'?[...new Set(item.tags.map(value=>value===tag?name:value))]:item.tags.filter(value=>value!==tag);}
       this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return;
