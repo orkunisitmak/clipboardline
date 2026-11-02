@@ -25,6 +25,8 @@ const {exportCopies}=require('./lib/export-copies.cjs');
 const {decodeTextFile}=require('./lib/text-file.cjs');
 const native = require('./lib/native.cjs');
 const {setLaunchAtLogin}=require('./lib/linux-autostart.cjs');
+const {portalScreenshot}=require('./lib/linux-screenshot.cjs');
+const {which}=require('./lib/linux-clipboard.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
 const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
@@ -281,11 +283,21 @@ async function capture() {
   try{
     // Capture only after the shelf window has left the compositor.
     await new Promise(resolve=>setTimeout(resolve,150));
-    const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
-    const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw new Error('Screen capture is unavailable');
-    const item=store.insert('image',source.thumbnail.toPNG());queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});return{id:item.id};
+    const item=store.insert('image',await screenPNG());queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});return{id:item.id};
   }catch(error){if(wasVisible)await show(view);throw error;}
+}
+async function screenPNG(){
+  if(linux?.desktop.session.type==='wayland'){
+    // Wayland clients cannot read the screen; the desktop portal captures it
+    // into a new file, which is imported and then removed like a native grab.
+    const requested=Date.now(),file=await portalScreenshot({gdbus:which('gdbus')});
+    try{const image=nativeImage.createFromPath(file);if(image.isEmpty())throw new Error('Screen capture is unavailable');return image.toPNG();}
+    finally{try{if(fs.lstatSync(file).mtimeMs>=requested-2000)fs.unlinkSync(file);}catch{}}
+  }
+  const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
+  const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw new Error('Screen capture is unavailable');
+  return source.thumbnail.toPNG();
 }
 async function ocr(id,quiet=false){if(ocrJobs.has(id))return ocrJobs.get(id);const promise=recognize(id,quiet);ocrJobs.set(id,promise);try{return await promise;}finally{ocrJobs.delete(id);}}
 async function recognize(id,quiet=false) {
@@ -326,13 +338,14 @@ function startShortcutRecording(token){
   const resume=shortcutRegistry.suspend(),previous=shortcutRecording;shortcutRecording={token,resume};previous?.resume();
 }
 
+const globalActions={
+  toggle:()=>desiredVisible?hide():show('shelves'),
+  search:()=>show('shelves',{search:true}),library:()=>show('library'),
+  copyLatest:async()=>{const image=store.data.items.filter(item=>item.kind==='image'&&!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];if(image){await writeClipboard([image]);notify('Copied');if(store.data.settings.sounds)shell.beep();}},
+  screenshot:capture
+};
 function configureShortcuts(previousPreferences=null) {
-  shortcutRegistry??=new GlobalShortcuts(globalShortcut,{
-    toggle:()=>desiredVisible?hide():show('shelves'),
-    search:()=>show('shelves',{search:true}),library:()=>show('library'),
-    copyLatest:async()=>{const image=store.data.items.filter(item=>item.kind==='image'&&!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];if(image){await writeClipboard([image]);notify('Copied');if(store.data.settings.sounds)shell.beep();}},
-    screenshot:capture
-  },{failed:error=>notify(error.message)});
+  shortcutRegistry??=new GlobalShortcuts(globalShortcut,globalActions,{failed:error=>notify(error.message)});
   const rejected=shortcutRegistry.update(store.data.settings.shortcuts);
   if(rejected.length){
     if(previousPreferences)store.modify('setSettings',{patch:{shortcuts:Object.fromEntries(rejected.map(value=>[value.action,previousPreferences[value.action]||'']))}});
@@ -499,9 +512,12 @@ else app.whenReady().then(async()=>{
   if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
 // Wayland desktops without the shortcut portal can bind a custom shortcut to
-// `clipboardline --toggle`, `--search` or `--library`. A first launch honors the
+// `clipboardline --toggle`, `--search`, `--library`, `--copy-latest` or
+// `--screenshot`. A first launch honors the
 // same action; only `--hidden` without an action starts in the background.
 function launch(argv=[],{running=true}={}){
+  const direct=linux&&(argv.includes('--screenshot')?'screenshot':argv.includes('--copy-latest')?'copyLatest':null);
+  if(direct)return Promise.resolve().then(()=>globalActions[direct]()).catch(async error=>{notify(error.message);if(!running)await show('shelves');});
   if(argv.includes('--search'))return show('shelves',{search:true});
   if(argv.includes('--library'))return show('library');
   if(argv.includes('--toggle')&&running&&desiredVisible)return hide();

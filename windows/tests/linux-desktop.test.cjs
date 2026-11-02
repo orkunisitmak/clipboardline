@@ -5,6 +5,35 @@ const {LinuxDesktop,session,handleFor}=require('../lib/linux-desktop.cjs');
 const {LinuxClipboard,ClipboardWatcher}=require('../lib/linux-clipboard.cjs');
 const {setLaunchAtLogin,command}=require('../lib/linux-autostart.cjs');
 const {PasteTargetTracker}=require('../lib/paste-target.cjs');
+const {parseResponse,screenshotPath,portalScreenshot}=require('../lib/linux-screenshot.cjs');
+const {EventEmitter}=require('node:events');
+const linuxOnly={skip:process.platform==='win32'&&'Linux paths'};
+function temporary(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-linux-desktop-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;}
+
+test('only the matching portal request response is accepted and its file URI is decoded',linuxOnly,t=>{
+  const token='clipboardline_0123456789abcdef',line=uri=>`/org/freedesktop/portal/desktop/request/1_42/${token}: org.freedesktop.portal.Request.Response (uint32 0, {'uri': <'${uri}'>})`;
+  assert.deepEqual(parseResponse(line('file:///tmp/Screenshot%20one.png'),token),{code:0,uri:'file:///tmp/Screenshot%20one.png'});
+  assert.equal(parseResponse(line('file:///tmp/a.png'),'clipboardline_other'),null);
+  assert.equal(parseResponse(`/org/freedesktop/portal/desktop/request/1_42/${token}: org.freedesktop.portal.Request.Closed ()`,token),null);
+  assert.deepEqual(parseResponse(`/org/freedesktop/portal/desktop/request/1_42/${token}: org.freedesktop.portal.Request.Response (uint32 1, @a{sv} {})`,token),{code:1,uri:null});
+  assert.throws(()=>screenshotPath({code:1,uri:null}),/canceled/);assert.throws(()=>screenshotPath({code:2,uri:null}),/could not capture/);
+  assert.throws(()=>screenshotPath({code:0,uri:'https://example.com/a.png'}),/unsupported location/);
+  const root=temporary(t),file=path.join(root,'Screenshot one.png');fs.writeFileSync(file,'png');
+  assert.equal(screenshotPath({code:0,uri:'file://'+root.split(path.sep).map(encodeURIComponent).join('/')+'/Screenshot%20one.png'}),file);
+  fs.symlinkSync(file,path.join(root,'link.png'));assert.throws(()=>screenshotPath({code:0,uri:'file://'+path.join(root,'link.png')}),/unavailable/);
+});
+test('the portal is called only after the signal subscription is confirmed',linuxOnly,async t=>{
+  const root=temporary(t),file=path.join(root,'shot.png');fs.writeFileSync(file,'png');
+  const monitor=new EventEmitter();monitor.stdout=new EventEmitter();monitor.kill=()=>{monitor.killed=true;};
+  const calls=[];let token;
+  const pending=portalScreenshot({gdbus:'gdbus',spawner:(_file,args)=>{assert.deepEqual(args,['monitor','--session','--dest','org.freedesktop.portal.Desktop']);return monitor;},caller:(_file,args,_options,done)=>{calls.push(args);token=/'handle_token': <'([a-z0-9_]+)'>/.exec(args.at(-1))[1];setImmediate(()=>done(null));}});
+  assert.equal(calls.length,0);monitor.stdout.emit('data',Buffer.from('Monitoring signals from all objects owned by org.freedesktop.portal.Desktop\n'));
+  assert.equal(calls.length,1);assert.ok(calls[0].includes('org.freedesktop.portal.Screenshot.Screenshot'));assert.match(calls[0].at(-1),/'interactive': <false>/);
+  monitor.stdout.emit('data',Buffer.from(`/org/freedesktop/portal/desktop/request/1_9/other: org.freedesktop.portal.Request.Response (uint32 0, {'uri': <'file:///etc/passwd'>})\n`));
+  monitor.stdout.emit('data',Buffer.from(`/org/freedesktop/portal/desktop/request/1_9/${token}: org.freedesktop.portal.Request.Response (uint32 0, {'uri': <'file://${file}'>})\n`));
+  assert.equal(await pending,file);assert.equal(monitor.killed,true);
+  await assert.rejects(portalScreenshot({gdbus:null}),/requires gdbus/);
+});
 
 function desktop(environment,tools,responses,{ownPID=4242}={}){
   const calls=[];
