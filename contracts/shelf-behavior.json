@@ -116,7 +116,7 @@
       {
         "id": "inspector-title-length",
         "behavior": "A Library inspector title is not cut at 200 characters: a title of any length is saved until it passes the same 1 MiB of UTF-8 bytes as a text or a note. The Name and pin field keeps its own short limit.",
-        "macos": "LibraryModel.flushEdits saves the draft title through LibraryStore.update, which applies no character cap to the title; the Name and pin field keeps its own limit.",
+        "macos": "LibraryModel.flushEdits saves the draft title through LibraryStore.update, which refuses a title over 1 MiB of UTF-8 bytes and applies no character cap below that; LibraryInteractionTests.testInspectorTitleOverTwoHundredCharactersSavesUntilOneMiBOfUTF8 covers it; the Name and pin field keeps its own limit.",
         "windows": "The details command stores the title through sizedText() in model.cjs, so it counts UTF-8 bytes against 1 MiB like a note; model.test.cjs 'a Library inspector title over 200 characters is saved like on the Mac' covers a 249 character title and a title over 1 MiB of UTF-8 bytes."
       },
       {
