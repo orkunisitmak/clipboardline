@@ -14,7 +14,7 @@ import XCTest
         try store.update(image.id) { $0.title = "  Invoice  " }
         let texts = TextHistory(defaults: f.defaults, folder: f.inbox.appendingPathComponent("Texts"), library: store)
         let images = ImageHistory(defaults: f.defaults, inbox: f.inbox, library: store)
-        XCTAssertNil(texts.entries.first { $0.id == text.id }?.title)
-        XCTAssertEqual(images.entries.first { $0.id == image.id }?.title, "Invoice")
+        XCTAssertNil(try XCTUnwrap(texts.entries.first { $0.id == text.id }).title)
+        XCTAssertEqual(try XCTUnwrap(images.entries.first { $0.id == image.id }).title, "Invoice")
     }
 }
