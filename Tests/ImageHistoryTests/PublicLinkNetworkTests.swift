@@ -131,6 +131,14 @@ import XCTest
         let valid = try PublicLinkHTMLMetadata(data: Data("<meta property='og:image' content='/a.png'>".utf8), url: url)
         XCTAssertEqual(valid.thumbnailURL?.absoluteString, "https://public.example.org/a.png")
     }
+
+    func testEmptyTitleCandidatesFallThroughToTheNextOne() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let twitter = try PublicLinkHTMLMetadata(data: Data("<title>Page</title><meta property='og:title' content='  '><meta name='twitter:title' content='Tweet'>".utf8), url: url)
+        XCTAssertEqual(twitter.title, "Tweet")
+        let page = try PublicLinkHTMLMetadata(data: Data("<title>Page</title><meta property='og:title' content=''><meta name='twitter:title' content=' '>".utf8), url: url)
+        XCTAssertEqual(page.title, "Page")
+    }
 }
 
 #if !STANDALONE_TESTS
