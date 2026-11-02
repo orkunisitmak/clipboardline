@@ -245,4 +245,7 @@ test('captured images stop at the macOS 40 MP limit while imported ones keep the
  assert.throws(()=>s.insert('image',header(8000,6000)),/Image is too large/);
  assert.equal(s.insert('image',header(8000,6000),{fullSize:true}).kind,'image');
  assert.throws(()=>s.insert('image',header(10000,8001),{fullSize:true}),/Image is too large/);
+ const padded=Buffer.concat([header(100,100),Buffer.alloc(33*1024*1024)]);
+ assert.throws(()=>s.insert('image',padded),/Invalid PNG image/);
+ assert.equal(s.insert('image',padded,{fullSize:true}).kind,'image');
 }));
