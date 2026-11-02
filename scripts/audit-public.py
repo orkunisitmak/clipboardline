@@ -52,8 +52,10 @@ def audit(root):
         # UTF-16 stores one NUL byte per ASCII character, so also scan both decodings.
         views = [data]
         if b'\0' in data:
-            # Shifting past a whole UTF-16LE line feed (0A 00) would drop that line from the count; keep it.
-            views += [(b'\n' if shift and codec == 'utf-16-be' and data[:2] == b'\n\0' else b'') + data[shift:].decode(codec, 'ignore').encode() for shift in (0, 1) for codec in ('utf-16-le', 'utf-16-be')]
+            # Each byte lane holds the ASCII half of UTF-16 text (low bytes for LE, high for BE, either one after an odd start).
+            # Keep only bytes next to a NUL so the lines count as they do in the source, whatever the alignment.
+            views += [bytes(b if (j > 0 and data[j - 1] == 0) or (j + 1 < len(data) and data[j + 1] == 0) else 1
+                            for j, b in zip(range(lane, len(data), 2), data[lane::2])) for lane in (0, 1)]
         seen = set()
         for rule, pattern in PATTERNS.items():
             for view in views:
