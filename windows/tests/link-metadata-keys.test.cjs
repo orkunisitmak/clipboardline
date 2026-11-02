@@ -13,6 +13,10 @@ test('twitter cards, secure_url and mixed-case meta names supply the preview',as
  for (const host of ['127.0.0.1','10.0.0.5','[::1]','localhost','printer.local','user:pw@example.com','example.com:8443']) assert.deepEqual(await page('<meta property="og:image:secure_url" content="https://'+host+'/a.png"><meta property="og:image" content="https://example.com/b.png"><meta name="twitter:image" content="/t.png">'),{title:'example.com',thumbnail:'https://example.com/b.png'},host);
  assert.equal((await page('<meta property="og:image" content="https://169.254.169.254/a.png">')).thumbnail,'');
 });
+test('a long og:image:secure_url is not cut to a different URL',async()=>{
+ const long='https://example.com/'+'a'.repeat(1100)+'.png';
+ assert.equal((await page('<meta property="og:image:secure_url" content="'+long+'"><meta property="og:image" content="https://example.com/b.png">')).thumbnail,long);
+});
 test('a blank og:title falls through to twitter:title',async()=>{
  assert.equal((await page('<title>Tag</title><meta property="og:title" content="  "><meta name="twitter:title" content="TW">')).title,'TW');
 });
