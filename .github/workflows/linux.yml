@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['windows/**', 'packaging/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-library-keyboard-parity.py', 'scripts/test-library-keyboard-parity.py', '.github/workflows/linux.yml']
+    paths: ['windows/**', 'packaging/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-library-keyboard-parity.py', 'scripts/test-library-keyboard-parity.py', 'scripts/check-release-version.py', 'scripts/sync-windows-locales.py', 'scripts/test-windows-search-models.py', 'scripts/prepare-windows-search-models.py', '.github/workflows/linux.yml']
   pull_request:
-    paths: ['windows/**', 'packaging/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-library-keyboard-parity.py', 'scripts/test-library-keyboard-parity.py', '.github/workflows/linux.yml']
+    paths: ['windows/**', 'packaging/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-library-keyboard-parity.py', 'scripts/test-library-keyboard-parity.py', 'scripts/check-release-version.py', 'scripts/sync-windows-locales.py', 'scripts/test-windows-search-models.py', 'scripts/prepare-windows-search-models.py', '.github/workflows/linux.yml']
 permissions:
   contents: read
 jobs:
@@ -30,6 +30,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xclip xdotool ffmpeg libarchive-tools rpm
       - name: Install pinned dependencies
         run: npm ci --no-fund
+      - name: Prepare pinned offline image search models
+        run: |
+          python3 ../scripts/test-windows-search-models.py
+          python3 ../scripts/prepare-windows-search-models.py
+          python3 ../scripts/prepare-windows-search-models.py --check
       - name: Shared version check
         run: python3 ../scripts/check-release-version.py --require-windows
       - name: Model, renderer and Linux bridge tests
@@ -41,6 +46,7 @@ jobs:
           # npm counts Electron as a dev tool, but it is the runtime in every package.
           audit="$(npm audit --json || true)"
           jq -e '.metadata.vulnerabilities and ((.vulnerabilities.electron.severity // "none") | IN("none", "info", "low"))' <<<"$audit"
+          python3 ../scripts/sync-windows-locales.py --check
           python3 ../scripts/test-cross-platform-parity.py
           python3 ../scripts/test-library-keyboard-parity.py
           npm test

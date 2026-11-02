@@ -50,7 +50,8 @@
       "assets/**/*",
       "search-model-config.json",
       "package.json",
-      "!assets/CLIP/**"
+      "!assets/CLIP/**",
+      "!assets/linux-icons/**"
     ],
     "extraResources": [
       {
@@ -113,7 +114,7 @@
       "runAfterFinish": false
     },
     "linux": {
-      "icon": "assets/clipboardline.png",
+      "icon": "assets/linux-icons",
       "executableName": "clipboardline",
       "category": "Utility",
       "synopsis": "Keyboard-first clipboard shelves",
@@ -150,7 +151,8 @@
           "Name": "ClipBoardLine",
           "StartupWMClass": "clipboardline",
           "Keywords": "clipboard;history;paste;shelf;",
-          "StartupNotify": "false"
+          "StartupNotify": "false",
+          "Actions": "Toggle;Search;Library;"
         },
         "desktopActions": {
           "Toggle": {
@@ -170,6 +172,7 @@
       "syncDesktopName": true
     },
     "deb": {
+      "afterRemove": "scripts/linux-after-remove.sh",
       "depends": [
         "libgtk-3-0",
         "libnss3",
@@ -182,12 +185,28 @@
         "wl-clipboard | xclip"
       ],
       "recommends": [
+        "libappindicator3-1",
+        "wl-clipboard",
+        "xclip",
         "xdotool",
         "ydotool",
         "ffmpeg"
       ]
     },
     "rpm": {
+      "afterRemove": "scripts/linux-after-remove.sh",
+      "fpm": [
+        "--rpm-tag",
+        "Recommends: wl-clipboard",
+        "--rpm-tag",
+        "Recommends: xclip",
+        "--rpm-tag",
+        "Suggests: xdotool",
+        "--rpm-tag",
+        "Suggests: ydotool",
+        "--rpm-tag",
+        "Suggests: ffmpeg-free"
+      ],
       "depends": [
         "gtk3",
         "nss",
