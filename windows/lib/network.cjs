@@ -117,7 +117,7 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   // Comments and script/style bodies never supply the title or image; an unclosed one hides the rest of the page.
   const html = decodeHTML(response.bytes, response.type).replace(/(<meta\b(?:"[^"]*"|'[^']*'|[^<>"']){0,4000}>)|<!--[\s\S]*?(?:-->|$)|<script(?=[\s/>])(?:"[^"]*"|'[^']*'|[^<>"']){0,4096}>[\s\S]*?(?:<\/script\s*>|$)|<style(?=[\s/>])(?:"[^"]*"|'[^']*'|[^<>"']){0,4096}>[\s\S]*?(?:<\/style\s*>|$)/gi, (all, meta) => meta || '');
   // Collapse layout whitespace only in display text; og:image stays a URL.
-  const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities((html.match(/<title(?:"[^"]*"|'[^']*'|[^<>"']){0,4096}>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
+  const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities((html.match(/<title(?=[\s/>])(?:"[^"]*"|'[^']*'|[^<>"']){0,4096}>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
   // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
   let thumbnail = '';
   for (const name of ['og:image:secure_url', 'og:image', 'twitter:image']) {

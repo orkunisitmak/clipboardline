@@ -53,3 +53,9 @@ test('a script or comment marker inside a meta attribute does not hide the real 
   assert.deepEqual(await page('<meta name="keywords" content="a '+marker+' b">'+real+'<script>x</script>'),{title:'Real',thumbnail:'https://example.com/real.png'},marker);
  }
 });
+
+test('a custom element that starts with title is not the page title',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.deepEqual(await page('<title-widget>'+'W'.repeat(600)+'</title-widget><title>Real</title>'),{title:'Real',thumbnail:''});
+ assert.deepEqual(await page('<title lang="en">Real</title>'),{title:'Real',thumbnail:''});
+});
