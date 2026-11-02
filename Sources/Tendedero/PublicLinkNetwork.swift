@@ -327,7 +327,16 @@ struct PublicLinkNetwork: Sendable {
          exchange: @escaping Exchange = { plan, limit in try await PublicLinkExchange(limit: limit).run(plan) }) {
         self.resolve = resolve; self.exchange = exchange
     }
-    func fetch(_ url: URL, limit: Int, allowed: @Sendable (URL) -> Bool = { _ in true }) async throws -> PublicLinkResponse {
+    /// `deadline` bounds the whole call, redirects and DNS included, like Windows' 20 s metadata fetch.
+    func fetch(_ url: URL, limit: Int, deadline: Duration = .seconds(20), allowed: @escaping @Sendable (URL) -> Bool = { _ in true }) async throws -> PublicLinkResponse {
+        return try await withThrowingTaskGroup(of: PublicLinkResponse.self) { group in
+            group.addTask { try await follow(url, limit: limit, allowed: allowed) }
+            group.addTask { try await Task.sleep(for: deadline); throw PublicLinkError.timeout }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
+    }
+    private func follow(_ url: URL, limit: Int, allowed: @Sendable (URL) -> Bool) async throws -> PublicLinkResponse {
         guard (1...5 * 1024 * 1024).contains(limit) else { throw PublicLinkError.tooLarge }
         var current = url
         for hop in 0...3 {
