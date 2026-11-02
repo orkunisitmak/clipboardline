@@ -73,3 +73,4 @@ test('YouTube Music links use oEmbed through the canonical host',async()=>{
  assert.equal(result.title,'Song');
  assert.equal(new URL(requested).searchParams.get('url'),'https://www.youtube.com/watch?v=abc123');
 });
+test('control characters are dropped from a link title like on macOS',async()=>{const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/p',type:'text/html'});assert.equal((await linkMetadata('https://example.com/p',page('<title>Invoice\u0007\u0000 due\u0085 now</title>'))).title,'Invoice due now');assert.equal((await linkMetadata('https://example.com/p',page('<meta property="og:title" content="a\u0007b">'))).title,'ab');});

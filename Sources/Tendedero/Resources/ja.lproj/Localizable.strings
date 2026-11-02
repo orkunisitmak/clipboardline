@@ -455,6 +455,7 @@
 "Library unavailable" = "ライブラリを利用できません";
 "Library views" = "ライブラリの表示";
 "No annotations to clear" = "消去する注釈がありません";
+"No filters to clear" = "消去するフィルターがありません";
 "No images on the line" = "シェルフに画像がありません";
 "No items in this view" = "この表示に項目がありません";
 "No items to the left" = "左側に項目がありません";

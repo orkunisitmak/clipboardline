@@ -63,7 +63,7 @@ struct PublicLinkDestination: Equatable, Sendable {
         guard input.absoluteString.utf8.count <= 8192,
               var c = URLComponents(url: input, resolvingAgainstBaseURL: false),
               c.scheme?.lowercased() == "https", c.user == nil, c.password == nil,
-              c.port == nil || c.port == 443, let host = c.host?.lowercased(),
+              c.port == nil || c.port == 443, let host = c.encodedHost?.lowercased(),
               host.utf8.count <= 253, host.utf8.allSatisfy({ (97...122).contains($0) || (48...57).contains($0) || $0 == 45 || $0 == 46 }),
               host.contains("."), !host.hasSuffix("."),
               !["local", "localhost", "internal", "home", "arpa", "lan", "corp", "localdomain", "onion", "test", "invalid", "example", "alt"].contains(where: { host == $0 || host.hasSuffix("." + $0) }) else { return nil }
@@ -375,7 +375,9 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         let titleTag = try NSRegularExpression(pattern: #"(?is)<title\b[^>]*>(.{0,8192}?)</title\s*>"#)
         let titleMatch = titleTag.firstMatch(in: html, range: NSRange(html.startIndex..., in: html))
             .flatMap { Range($0.range(at: 1), in: html) }.map { Self.entities(Self.replacing(#"<[^>]*>"#, in: String(html[$0]), with: "")) }
-        title = Self.clean(metadata["og:title"] ?? metadata["twitter:title"] ?? titleMatch, limit: 500)
+        title = Self.clean(metadata["og:title"], limit: 500)
+            ?? Self.clean(metadata["twitter:title"], limit: 500)
+            ?? Self.clean(titleMatch, limit: 500)
         author = Self.clean(metadata["author"] ?? metadata["og:site_name"], limit: 200)
         let image = (metadata["og:image:secure_url"] ?? metadata["og:image"] ?? metadata["twitter:image"]).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
         thumbnailURL = image.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }.flatMap { PublicLinkDestination($0)?.url }
