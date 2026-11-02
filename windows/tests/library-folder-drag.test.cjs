@@ -91,3 +91,8 @@ test('A plain shelf text or link drag says to hold Alt for the Desktop and folde
  f.clearToast();await f.drag(f.ids[0]);assert.equal(toast(),'');
  f.api.emit({view:'library'});await f.ready();f.clearToast();await f.drag(f.ids[1]);assert.equal(toast(),'');
 });
+
+test('Turkish Desktop drag hint says to keep Alt held',()=>{
+ const source=fs.readFileSync(path.join(__dirname,'../renderer.js'),'utf8');
+ assert.match(source,/'Hold Alt while dragging to drop on the Desktop or a folder as a file':'[^']*Alt tuşunu basılı tut'/);
+});
