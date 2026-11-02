@@ -111,6 +111,11 @@ test('permanent deletion keeps rasters referenced by live items or recoverable T
   s.modify('trash',{ids:[second.id]});const third=s.insert('image',png);s.modify('trash',{ids:[third.id]});
   s.modify('delete',{ids:[second.id]});assert.ok(fs.existsSync(file));s.modify('restore',{ids:[third.id]});assert.deepEqual(fs.readFileSync(s.mediaPath(third.id)),png);
 }));
+test('a restored item gets a full retention period before it expires again',()=>fixture((s,time)=>{
+  const item=s.insert('text','old text');time(32*86400000);s.expire();assert.ok(item.trashedAt);
+  s.modify('restore',{ids:[item.id]});s.expire();assert.equal(item.trashedAt,null);
+  time(64*86400000);s.expire();assert.ok(item.trashedAt);
+}));
 test('ordinary removal and retention preserve managed images for undo and Trash recovery',()=>fixture((s,time)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('remove',{ids:[item.id]});assert.ok(fs.existsSync(file));s.modify('undo');assert.equal(item.trashedAt,null);
   time(32*86400000);s.expire();assert.ok(item.trashedAt);assert.ok(fs.existsSync(file));s.modify('restore',{ids:[item.id]});assert.ok(fs.existsSync(s.mediaPath(item.id)));
