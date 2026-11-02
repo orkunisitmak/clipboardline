@@ -798,8 +798,8 @@ test('a Linux global shortcut records the Windows key as Super; local shortcuts 
 });
 test('Linux settings follow the selected language',async()=>{
  const f=fixture({platform:'linux'});await f.ready();await f.api.command('settings');
- f.api.emit({settings:{...f.state.settings,language:'tr'},linux:{session:'wayland',backend:'wayland',clipboardMonitor:'focused-polling',automaticPaste:false,missing:['wl-clipboard'],problem:'Install wl-clipboard for background clipboard capture on Wayland.'},update:{...f.state.update,status:'manual',message:'Install newer Linux releases as an AppImage, .deb, .rpm or pacman package.'}});await f.ready();
- await f.click('settings-tab',{tab:'sources'});for(const text of ['Linux entegrasyonu','Kopyalar yalnızca ClipBoardLine odaktayken yakalanır.','wl-clipboard’u kur','Ctrl+V’ye bas','İsteğe bağlı paketler','dağıtımının paketlerinden kur'])assert.ok(f.main.includes(text),text);
+ f.api.emit({settings:{...f.state.settings,language:'tr'},linux:{session:'wayland',backend:'wayland',clipboardMonitor:'focused-polling',automaticPaste:false,missing:['wl-clipboard'],problem:'The wl-paste clipboard monitor stopped. Clipboard capture now works only while ClipBoardLine is focused.'},update:{...f.state.update,status:'manual',message:'Install newer Linux releases as an AppImage, .deb, .rpm or pacman package.'}});await f.ready();
+ await f.click('settings-tab',{tab:'sources'});for(const text of ['Linux entegrasyonu','Kopyalar yalnızca ClipBoardLine odaktayken yakalanır.','wl-paste pano izleyicisi durdu. Pano yakalama artık yalnızca ClipBoardLine odaktayken çalışıyor.','Ctrl+V’ye bas','İsteğe bağlı paketler','dağıtımının paketlerinden kur'])assert.ok(f.main.includes(text),text);
  await f.click('settings-tab',{tab:'shortcuts'});for(const text of ['Linux kopyalama, yapıştırma','bir sistem kısayolu atayabilirsin','<code>clipboardline --toggle</code>'])assert.ok(f.main.includes(text),text);
  await f.click('settings-tab',{tab:'updates'});for(const text of ['Sürümler sayfasını aç','Yeni Linux sürümlerini','Linux sürümleri kendini güncellemez'])assert.ok(f.main.includes(text),text);
 });
