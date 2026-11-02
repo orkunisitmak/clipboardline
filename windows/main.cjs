@@ -85,7 +85,10 @@ async function readSemanticImage(id){
  if(!width||!height||width*height>80_000_000||Math.min(width,height)*scale<120||Math.max(width,height)/Math.min(width,height)>4)return null;
  // Electron delegates thumbnail decoding to the OS asynchronously. Inference
  // and pixel conversion stay in the worker, keeping large PNGs off the UI loop.
- let image=await nativeImage.createThumbnailFromPath(file,{width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))});if(image.isEmpty())return null;
+ const thumbnail={width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))};
+ // Electron has no thumbnail decoder on Linux.
+ let image=linux?nativeImage.createFromPath(file):await nativeImage.createThumbnailFromPath(file,thumbnail);if(image.isEmpty())return null;
+ if(linux&&scale<1)image=image.resize({...thumbnail,quality:'best'});
  const size=image.getSize(),fit=Math.min(1,1024/Math.max(size.width,size.height));if(fit<1)image=image.resize({width:Math.max(1,Math.round(size.width*fit)),height:Math.max(1,Math.round(size.height*fit)),quality:'best'});
  const resized=image.getSize();return{bitmap:image.toBitmap(),width:resized.width,height:resized.height};
 }
