@@ -175,7 +175,7 @@ test('XDG autostart is written, quoted and removed without touching an entry it 
   }finally{fs.rmSync(home,{recursive:true,force:true});}
 });
 
-test('a relaunch and autostart use this AppImage only while the app runs from its mount, and relaunch once',()=>{
+test('a relaunch and autostart use this AppImage only while the app runs from its mount, and relaunch once',linuxOnly,()=>{
   const own={APPIMAGE:'/home/u/ClipBoardLine.AppImage',APPDIR:'/tmp/.mount_Clip1'};
   assert.deepEqual(launchCommand({environment:own,execPath:'/tmp/.mount_Clip1/clipboardline',packaged:true}),[own.APPIMAGE]);
   assert.deepEqual(launchCommand({environment:own,execPath:'/opt/ClipBoardLine/clipboardline',packaged:true}),['/opt/ClipBoardLine/clipboardline']);
@@ -281,6 +281,9 @@ test('writes carry the marker and every format; a hidden Wayland write falls bac
   tool.writes.length=0;tool.read=async()=>[{types:[MARKER_TYPE],getType:async()=>({arrayBuffer:async()=>marker})}];
   assert.equal(await writeClipboard({electron,ClipboardItem:Item,tool,marker,text:'t',focused:true,delay:async()=>{}}),'electron');assert.deepEqual(tool.writes,[]);
   tool.read=async()=>[];assert.equal(await writeClipboard({electron,ClipboardItem:Item,tool,marker,text:'t',focused:true,delay:async()=>{}}),'wl-copy');assert.deepEqual(tool.writes,[['text','t']]);
+});
+
+test('a file batch is offered as encoded file URIs',linuxOnly,()=>{
   assert.deepEqual(fileClipboard(['/tmp/a b.png']),{uriList:'file:///tmp/a%20b.png\r\n',gnome:'copy\nfile:///tmp/a%20b.png'});
 });
 
