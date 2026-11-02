@@ -44,7 +44,7 @@
       {
         "id": "width-insensitive-search",
         "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I.",
-        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift).",
+        "macos": "Search compares searchFolded strings: libraryFolded (folding with .diacriticInsensitive and .widthInsensitive, then lowercased) with ı folded to i (LibraryStore.swift).",
         "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac; shelf-render.test.cjs checks both through the shipped renderer."
       },
       {

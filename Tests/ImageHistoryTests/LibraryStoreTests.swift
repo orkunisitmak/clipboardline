@@ -127,6 +127,14 @@ import XCTest
         XCTAssertEqual(try library.query(LibraryQuery(search: "ışık")).first?.id, record.id)
         XCTAssertEqual(try db.rows("SELECT value FROM metadata WHERE key='search-fold-v2'").count, 1)
     }
+    func testSearchKeepsLigaturesAndEszettLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f); library.waitForSearchRefold()
+        let record = try XCTUnwrap(library.captureText("ﬁnance Straße"))
+        try library.retain([record.id])
+        XCTAssertEqual(try library.query(LibraryQuery(search: "ﬁnance")).first?.id, record.id)
+        XCTAssertTrue(try library.query(LibraryQuery(search: "finance")).isEmpty)
+        XCTAssertTrue(try library.query(LibraryQuery(search: "strasse")).isEmpty)
+    }
     func testSearchRefoldsLegacyImageOCRAfterReopen() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         var library = try store(f); library.waitForSearchRefold()

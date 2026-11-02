@@ -157,7 +157,7 @@ extension String {
     /// Identity of tags and folders: `kır` and `kir` stay different names.
     var libraryFolded: String { folding(options: [.diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "tr_TR")).lowercased() }
     /// Search text: Turkish ı, I, İ and i all fold to i, so text typed with dotted or dotless letters matches.
-    var searchFolded: String { folding(options: [.diacriticInsensitive, .widthInsensitive, .caseInsensitive], locale: nil).replacingOccurrences(of: "ı", with: "i") }
+    var searchFolded: String { libraryFolded.replacingOccurrences(of: "ı", with: "i") }
 }
 
 /// The production source of truth. Existing history classes are adapters to
@@ -314,17 +314,20 @@ extension String {
         guard try db.rows("SELECT value FROM metadata WHERE key='search-fold-v2'").isEmpty else { return }
         let url = databaseURL
         searchRefold.enter()
-        DispatchQueue.global(qos: .utility).async { [weak self, searchRefold] in
-            defer { searchRefold.leave() }
-            // A write lock held by a long migration or another app can time this out; every step is repeatable, so try again.
-            var finished = false
-            for attempt in 1...5 where !finished {
-                finished = (try? Self.refoldSearchIndex(url)) != nil
-                if !finished && attempt < 5 { Thread.sleep(forTimeInterval: Double(attempt) * 5) }
-            }
-            guard finished else { return }
-            // An open search ran against the old index; run it again.
+        // An open search ran against the old index; run it again once the re-fold is done.
+        Self.runSearchRefold(url, attempt: 1, group: searchRefold) { [weak self] in
             Task { @MainActor [weak self] in self?.searchRevision += 1 }
+        }
+    }
+    /// A write lock held by a long migration or another app can time an attempt out; every step is
+    /// repeatable, so the next attempt is scheduled later instead of sleeping on a pool thread.
+    nonisolated private static func runSearchRefold(_ url: URL, attempt: Int, group: DispatchGroup, completed: @escaping @Sendable () -> Void) {
+        DispatchQueue.global(qos: .utility).async {
+            if (try? refoldSearchIndex(url)) != nil { completed(); group.leave(); return }
+            guard attempt < 5 else { group.leave(); return }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Double(attempt) * 5) {
+                runSearchRefold(url, attempt: attempt + 1, group: group, completed: completed)
+            }
         }
     }
     /// Blocks until a started search re-fold finishes. Tests use it; the app does not.
@@ -958,8 +961,7 @@ extension String {
         let tags = try db.rows("SELECT t.id,t.name FROM tags t JOIN item_tags m ON m.tag=t.id WHERE m.item=? ORDER BY t.id", [.text(id.uuidString)])
         for (kind, rows) in [("folders", folders), ("tags", tags)] {
             field(Data(kind.utf8))
-            for row in rows { // `search` is derived text that a background re-fold may rewrite; it is not part of what Undo must find unchanged.
-        for key in row.keys.sorted() where key != "search" { field(Data(key.utf8)); value(row[key]!) } }
+            for row in rows { for key in row.keys.sorted() { field(Data(key.utf8)); value(row[key]!) } }
         }
         return Data(digest.finalize())
     }
