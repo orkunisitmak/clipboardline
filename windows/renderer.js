@@ -743,7 +743,7 @@ default:
  else if(action.startsWith('tag.rename.'))openTagAction('rename-tag',decodeURIComponent(action.slice(11)));
  else if(action.startsWith('tag.delete.'))openTagAction('remove-global-tag',decodeURIComponent(action.slice(11)));
  else if(action.startsWith('folder.open.')){if(!await flushPreview())break;ui.preview=null;ui.scope='folder';ui.folder=action.slice(12);ui.search='';await command('library');focusFirst();render();}
- else if(action.startsWith('folder.assign.')){if(ids.length)await command('folder',{ids,folderId:action.slice(14)});}
+ else if(action.startsWith('folder.assign.')){if(ids.length)await command('folder',{ids,folderId:action.slice(14),pinning:false});}
  else if(action.startsWith('folder.remove.')){if(ids.length)await command('unassign',{ids,folderId:action.slice(14)});}
  else if(action.startsWith('tag.open.')){if(!await flushPreview())break;ui.preview=null;ui.scope='tag';ui.tag=decodeURIComponent(action.slice(9));ui.search='';await command('library');focusFirst();render();}
  break;
