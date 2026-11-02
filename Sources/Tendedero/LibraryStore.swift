@@ -464,7 +464,7 @@ extension String {
                 try put(existing); moved = existing
             }
             if let moved {
-                if files.isClipboardCopy(url) { try? FileManager.default.removeItem(at: url) }
+                if files.isClipboardCopy(url) { _ = try? files.trashAppCopy(url) }
                 invalidateShelfUndo([moved.id]); changed([moved.id]); return moved
             }
         }
