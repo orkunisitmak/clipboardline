@@ -69,7 +69,7 @@
         "id": "image-recopy-dedupe",
         "behavior": "Copying the same image again keeps one Library item: the existing item moves to the front and keeps its pin, name, tags and folders. A different image is a new item.",
         "macos": "LibraryStore.captureImage finds a live image with identical original bytes (file size first, then SHA-256), moves it to the front and removes the duplicate clipboard PNG; LibraryStoreTests.testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization covers it.",
-        "windows": "Store.insert matches a live image by its managed PNG hash and moves it to the front; model.test.cjs 'exact image recopy moves the image to front and preserves saved organization' covers it."
+        "windows": "Store.insert matches a live image by its managed PNG hash and moves it to the front; model.test.cjs 'exact image recopy moves the image in front of another image and preserves saved organization' covers it."
       },
       {
         "id": "mixed-selection-pin",
