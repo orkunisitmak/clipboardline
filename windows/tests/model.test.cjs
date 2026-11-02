@@ -211,3 +211,4 @@ test('pin on a mixed selection pins every item and only a fully pinned selection
  s.modify('pin',{ids:[a.id]});s.modify('pin',{ids:[a.id,b.id]});assert.deepEqual(pinned(),[true,true]);
  s.modify('pin',{ids:[a.id,b.id]});assert.deepEqual(pinned(),[false,false]);
 }));
+test('a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS',()=>fixture(s=>{const item=s.insert('text','x');const big='ş'.repeat(600000);assert.throws(()=>s.modify('note',{ids:[item.id],note:big}),/Invalid text/);assert.throws(()=>s.modify('editText',{ids:[item.id],text:big}),/Invalid text/);assert.throws(()=>s.insert('text',big),/Invalid text/);s.modify('note',{ids:[item.id],note:'ş'.repeat(500000)});assert.equal(s.data.items[0].note.length,500000);}));

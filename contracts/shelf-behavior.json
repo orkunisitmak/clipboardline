@@ -108,6 +108,12 @@
         "windows": "title() in renderer.js applies the same rule (t('Untitled note') and t('Link') as fallbacks) to cards, title sorting and best-match ranking; library-ui.test.cjs runs the unnamed item titles scenario."
       },
       {
+        "id": "text-and-note-size-limit",
+        "behavior": "A text or a note is saved only while it is at most 1 MiB of UTF-8 bytes, so 600,000 Turkish or CJK characters are refused on both platforms and the edit reports an error.",
+        "macos": "LibraryStore.update checks text.utf8.count and note.utf8.count against TextClipboardWatcher.maximumDataBytes and LibraryModel.flushEdits shows Changes could not be saved.",
+        "windows": "Store.insert and Store.modify (note, editText, details) count Buffer.byteLength against 1 MiB through sizedText() in model.cjs; model.test.cjs 'a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS' covers it."
+      },
+      {
         "id": "clear-filters-needs-a-filter",
         "behavior": "Clear filters is available in the action list only while the Library has a filter to clear (favorites only, a search, a type, a date range, a domain, a tag or a search mode other than all); with no filter it is disabled with the reason \"No filters to clear\", and with the Library closed it keeps the Library reason.",
         "macos": "ActionBarMenuAction.clearFilters requires libraryAvailable and hasLibraryFilters and otherwise names \"No filters to clear\"; ActionBarCatalogTests covers it.",
