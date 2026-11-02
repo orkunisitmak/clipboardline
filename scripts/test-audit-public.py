@@ -52,6 +52,12 @@ class PublicationGuardTests(unittest.TestCase):
             (self.root / 'o.bin').write_bytes(b'\x01' + value.encode(codec))
             self.assertEqual(scanner.audit(self.root)['findings'], [{'file': 'o.bin', 'line': 1, 'rule': 'github-token'}], codec)
 
+    def test_secret_in_utf16_text_after_a_leading_newline_is_flagged_once_on_its_line(self):
+        value = 'gh' + 'p_' + 'E' * 36
+        for codec in ('utf-16-le', 'utf-16-be'):
+            (self.root / 'n.txt').write_bytes(('\n' + value).encode(codec))
+            self.assertEqual(scanner.audit(self.root)['findings'], [{'file': 'n.txt', 'line': 2, 'rule': 'github-token'}], codec)
+
     def test_private_artifact_and_symlink_are_rejected(self):
         (self.root / 'credential.p12').write_bytes(b'not a real key')
         (self.root / 'source.txt').write_text('ordinary source')

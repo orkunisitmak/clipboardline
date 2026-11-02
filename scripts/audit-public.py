@@ -52,7 +52,8 @@ def audit(root):
         # UTF-16 stores one NUL byte per ASCII character, so also scan both decodings.
         views = [data]
         if b'\0' in data:
-            views += [data[shift:].decode(codec, 'ignore').encode() for shift in (0, 1) for codec in ('utf-16-le', 'utf-16-be')]
+            # The byte skipped by the shifted views can itself be a line feed; keep it so line numbers stay right.
+            views += [(b'\n' if shift and data[0] == 10 else b'') + data[shift:].decode(codec, 'ignore').encode() for shift in (0, 1) for codec in ('utf-16-le', 'utf-16-be')]
         seen = set()
         for rule, pattern in PATTERNS.items():
             for view in views:
