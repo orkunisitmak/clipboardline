@@ -36,6 +36,9 @@ module.exports=async function clipboardAdmissionAcceptance({application,check}){
     return entries.map(entry=>({types:entry.types,getType:async type=>{payloadReads++;return entry.getType(type);}}));
    };
    const remaining=await snapshot();
+   // Drop the counting wrapper here: the sections below read real public copies,
+   // and their payload reads are not part of the raced-replacement check.
+   clipboard.read=originalRead;
    if(remaining!==baseline||readCalls<2||payloadReads!==0)throw new Error('Raced native private replacement was not discarded/retried.');
    // Private mode adopts the paused generation: the copy made while paused is
    // skipped on resume, while a later copy is admitted normally.
