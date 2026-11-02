@@ -92,7 +92,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       # Last, so a dependency advisory fails the job without hiding the test
-      # and package evidence above.
+      # and package evidence above. Shipped dependencies stay at moderate.
+      # Packaging tools stay at high: electron-builder pins minimatch below the
+      # GHSA-g3hv-75wg-m249 fix.
       - name: Audit dependencies
         if: ${{ !cancelled() }}
-        run: npm audit --audit-level=moderate
+        run: |
+          npm audit --omit=dev --audit-level=moderate
+          npm audit --audit-level=high
