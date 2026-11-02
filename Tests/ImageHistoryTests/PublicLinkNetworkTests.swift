@@ -174,9 +174,9 @@ import XCTest
     func testUnclosedStyleOgTitleIsNotThePreviewTitle() throws {
         let url = URL(string: "https://public.example.org/page")!
         let unclosed = try PublicLinkHTMLMetadata(data: Data(#"<html><title>Real</title><style><meta property='og:title' content='Sahte'>"#.utf8), url: url)
-        XCTAssertNotEqual(unclosed.title, "Sahte")
+        XCTAssertEqual(unclosed.title, "Real")
         let afterTitle = try PublicLinkHTMLMetadata(data: Data(#"<style>h1{color:red}<title></title><meta property='og:title' content='Sahte'>"#.utf8), url: url)
-        XCTAssertNotEqual(afterTitle.title, "Sahte")
+        XCTAssertNil(afterTitle.title)
     }
 }
 
