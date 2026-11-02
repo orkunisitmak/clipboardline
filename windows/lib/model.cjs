@@ -142,6 +142,8 @@ class Store {
       for (const item of this.data.items) this.validateStored(item);
       if(this.data.pendingDeletionFiles&&(!Array.isArray(this.data.pendingDeletionFiles)||this.data.pendingDeletionFiles.length>200000||this.data.pendingDeletionFiles.some(name=>typeof name!=='string'||!MANAGED_MEDIA.test(name))))fail('Invalid pending deletion state.');
     }
+    // A killed process can leave a full copy of the library here, with text deleted since; exact names, regular files only.
+    for(const name of fs.readdirSync(this.directory))if(/^library\.json(?:\.backup)?\.tmp-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(name))try{const file=path.join(this.directory,name);if(fs.lstatSync(file).isFile())fs.unlinkSync(file);}catch{}
     this.pruneRecentFolders();
     this.privacyWarning='';
     if(this.data.pendingBackupRefresh||this.data.pendingDeletionFiles?.length)try{this.finishPermanentDeletion();}catch(error){this.privacyWarning=error.message;}
