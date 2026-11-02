@@ -129,7 +129,8 @@ npm run dist:linux        # dist/ClipBoardLine-<version>-x86_64.AppImage, .deb a
 lists, Ctrl+Enter, recordings, shortcut commands, the Linux settings pages and
 offline image search (always for a packaged app, which must bundle the model). It
 replaces the clipboard, so run it only in a disposable session such as
-`xvfb-run`, headless Sway or a nested compositor. Set `CLIPBOARDLINE_EXECUTABLE`
+`xvfb-run`, headless Sway or a nested compositor. Outside GitHub Actions it refuses
+to start unless `CLIPBOARDLINE_DISPOSABLE_SESSION=1` is set. Set `CLIPBOARDLINE_EXECUTABLE`
 to test `dist/linux-unpacked/clipboardline` or the AppImage.
 
 The [Linux workflow](../.github/workflows/linux.yml) runs the unit and renderer
@@ -256,7 +257,8 @@ npm run dist:linux        # AppImage, .deb ve .rpm
 dosya listeleri, Ctrl+Enter, kayıtlar, kısayol komutları, Linux ayar sayfalarını ve
 çevrimdışı görsel aramayı (paketlenmiş uygulamada her zaman; paket modeli içermelidir)
 denetler. Panoyu değiştirdiği için yalnızca `xvfb-run`, başsız Sway veya iç içe bir
-compositor gibi geçici bir oturumda çalıştırın. [Linux iş akışı](../.github/workflows/linux.yml)
+compositor gibi geçici bir oturumda çalıştırın. GitHub Actions dışında
+`CLIPBOARDLINE_DISPOSABLE_SESSION=1` ayarlanmadıkça başlamaz. [Linux iş akışı](../.github/workflows/linux.yml)
 X11 ve Wayland’de kabul testlerini çalıştırır, üç paketi derler ve paketlenmiş
 uygulamayla testi tekrarlar. Linux’ta `npm test`, eşlik raporlarını
 `linux.json` ve `library-linux.json` olarak yazar; denetleyiciler bunları

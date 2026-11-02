@@ -70,3 +70,13 @@ test('tool failures, missing binaries, cancellation and deadlines are reported a
   const canceled=runTool('ffmpeg',[],{spawner:hanging,signal:controller.signal});controller.abort();await assert.rejects(canceled,error=>error.name==='AbortError');
   await assert.rejects(runTool('ffmpeg',[],{spawner:(()=>{const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>setImmediate(()=>child.emit('close',null));return()=>child;})(),timeout:5}),/timed out/);
 });
+test('the deadline covers the whole job, not each FFmpeg call',async t=>{
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-linux-media-'));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  // Each call answers after 30 ms, so the probe and the poster each fit 50 ms but not both.
+  const spawner=(file,args)=>{const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();
+    const timer=setTimeout(()=>{if(file==='ffprobe')child.stdout.emit('data',Buffer.from(JSON.stringify({format:{duration:'6'},streams:[stream({})]})));else fs.writeFileSync(args.at(-1),'synthetic');child.emit('close',0);},30);
+    child.kill=()=>{clearTimeout(timer);setImmediate(()=>child.emit('close',null));};return child;};
+  const media=new LinuxMedia({ffmpeg:'ffmpeg',ffprobe:'ffprobe',spawner});
+  await assert.rejects(media.run('Inspect',{source:'/videos/a.mov',outputDirectory:directory},{timeout:50}),/timed out/);
+  assert.equal((await media.run('Inspect',{source:'/videos/a.mov',outputDirectory:directory},{timeout:1000})).ok,true);
+});

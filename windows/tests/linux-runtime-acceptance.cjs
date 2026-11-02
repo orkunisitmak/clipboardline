@@ -10,6 +10,7 @@ const {_electron:electron}=require('playwright');
 const {linuxTools}=require('../lib/linux-session.cjs');
 if(process.platform!=='linux')throw new Error('Run Linux runtime acceptance on a Linux desktop session.');
 if(!process.env.WAYLAND_DISPLAY&&!process.env.DISPLAY)throw new Error('Linux runtime acceptance needs a Wayland or X11 display.');
+if(process.env.GITHUB_ACTIONS!=='true'&&process.env.CLIPBOARDLINE_DISPOSABLE_SESSION!=='1')throw new Error('Linux runtime acceptance replaces the clipboard. Run it on the GitHub runner, or set CLIPBOARDLINE_DISPOSABLE_SESSION=1 inside a disposable session.');
 const output=path.resolve(process.env.CLIPBOARDLINE_VALIDATION||'validation/linux');fs.mkdirSync(output,{recursive:true});
 const data=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-linux-runtime-'));
 // mkdtemp already creates 0700; open it so the check below proves the app restricts it.
@@ -166,7 +167,8 @@ async function main(){
     const video=path.join(data,'synthetic.mp4');
     if(tools.ffmpeg&&tools.ffprobe){
       // Synthetic test pattern and tone; distribution builds differ in encoders.
-      const made=[['libx264','aac'],['libopenh264','aac'],['libvpx-vp9','libopus']].map(([videoCodec,audioCodec])=>spawnSync(tools.ffmpeg,['-v','error','-f','lavfi','-i','testsrc=size=320x240:rate=25:duration=2','-f','lavfi','-i','sine=frequency=440:duration=2','-shortest','-c:v',videoCodec,'-pix_fmt','yuv420p','-c:a',audioCodec,'-y',video],{timeout:60000})).find(result=>result.status===0);
+      // Stop at the first encoder that works: a later attempt would overwrite the file.
+      const made=[['libx264','aac'],['libopenh264','aac'],['libvpx-vp9','libopus']].some(([videoCodec,audioCodec])=>spawnSync(tools.ffmpeg,['-v','error','-f','lavfi','-i','testsrc=size=320x240:rate=25:duration=2','-f','lavfi','-i','sine=frequency=440:duration=2','-shortest','-c:v',videoCodec,'-pix_fmt','yuv420p','-c:a',audioCodec,'-y',video],{timeout:60000}).status===0);
       if(!made)skip('recording import and trim','the installed FFmpeg cannot encode a synthetic H.264 or VP9 fixture');
       else{
         const imported=await test(async(_electron,file)=>{const hooks=global.__clipboardLineTest,item=await hooks.importFile(file);return{id:item.id,durationMs:item.durationMs,width:item.width,height:item.height};},video);

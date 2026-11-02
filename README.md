@@ -360,5 +360,5 @@ npm run dist:linux     # AppImage, .deb and .rpm in dist/
 ```
 
 Run `npm run test:linux` only inside a disposable X11 or Wayland session, because it
-replaces the clipboard. See the [Linux guide](docs/linux.md) for installation,
+replaces the clipboard. Outside GitHub Actions it needs `CLIPBOARDLINE_DISPOSABLE_SESSION=1`. See the [Linux guide](docs/linux.md) for installation,
 desktop support, shortcut commands and validation.

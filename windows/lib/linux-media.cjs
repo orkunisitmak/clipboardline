@@ -6,13 +6,16 @@ const {spawn}=require('node:child_process');
 // decodes and encodes; ClipBoardLine downloads no codec binaries.
 function failure(message,stage,extra={}){const error=new Error(message);error.code='MEDIA_UNSUPPORTED_OR_FAILED';if(stage)error.stage=stage;return Object.assign(error,extra);}
 function aborted(){const error=new Error('Video operation canceled.');error.name='AbortError';return error;}
+// The same message as the Windows helper, whose job limit is also ten minutes.
+function expired(stage){return failure('Video operation timed out after ten minutes.',stage);}
 function runTool(file,args,{signal,timeout=600000,track=()=>{},spawner=spawn,limit=4*1024*1024,stage='Run'}={}){
  return new Promise((resolve,reject)=>{
   if(signal?.aborted){reject(aborted());return;}
+  if(timeout<=0){reject(expired(stage));return;}
   let child;try{child=spawner(file,args,{stdio:['ignore','pipe','pipe']});}catch(error){reject(failure('FFmpeg could not start: '+error.message,stage));return;}
   track(child);let stdout='',stderr='',problem=null,finished=false;
   const stop=error=>{problem??=error;child.kill('SIGKILL');};const cancel=()=>stop(aborted());
-  const timer=setTimeout(()=>stop(failure('Video operation timed out after ten minutes.',stage)),timeout);
+  const timer=setTimeout(()=>stop(expired(stage)),timeout);
   signal?.addEventListener('abort',cancel,{once:true});
   child.stdout.on('data',chunk=>{stdout+=chunk.toString('utf8');if(stdout.length>limit)stop(failure('Invalid FFmpeg response.',stage));});
   child.stderr.on('data',chunk=>{if(stderr.length<8000)stderr+=chunk.toString('utf8');});
@@ -70,8 +73,11 @@ class LinuxMedia{
   const output=await this.tool('ffprobe',['-v','error',...INPUT,'-print_format','json','-show_format','-show_streams',file],{...options,stage:'Decode'});
   let value;try{value=JSON.parse(output);}catch{throw failure('Invalid FFmpeg response.','Decode');}return describe(value);
  }
- async run(mode,{source,outputDirectory,startMs,endMs,verifyAudio=false},{signal,timeout,track}={}){
-  const options={signal,timeout,track};let details=await this.probe(source,options),posterSource=source,result;
+ async run(mode,{source,outputDirectory,startMs,endMs,verifyAudio=false},{signal,timeout=600000,track}={}){
+  // One deadline for the whole job, like the single helper process on Windows:
+  // each FFmpeg call gets only the time that is left.
+  const deadline=Date.now()+timeout,options={signal,track,get timeout(){return Math.max(0,deadline-Date.now());}};
+  let details=await this.probe(source,options),posterSource=source,result;
   if(mode==='Trim'){
    if(!Number.isFinite(startMs)||!Number.isFinite(endMs)||startMs<0||endMs>details.durationMs+1||endMs-startMs<50)throw failure('Choose a nonempty interval within this recording.','Trim');
    this.encoders??=chooseEncoders(await this.tool('ffmpeg',['-hide_banner','-encoders'],{...options,stage:'Trim'}));
