@@ -220,9 +220,9 @@ test('Title sort does not fold ligatures or circled digits, like the Mac',async(
 test('disabled undo rows name the surface before saying there is nothing to undo',async()=>{
  const f=fixture();await f.ready();
  const detail=id=>f.overlay.match(new RegExp('<button[^>]*data-command="'+id+'"[^>]*>[\\s\\S]*?</button>'))[0].match(/<small>([^<]*)<\/small>/)[1];
- await f.key('KeyK',{ctrl:true});assert.equal(detail('undoTrash'),'Available in Library.');assert.equal(detail('undo'),'Nothing to undo.');
+ await f.key('KeyK',{ctrl:true});assert.equal(detail('undoTrash'),'Available in Library');assert.equal(detail('undo'),'Nothing to undo.');
  await f.key('Escape');await savedLibrary(f);await f.key('KeyK',{ctrl:true});
- assert.equal(detail('undo'),'Available on the shelves.');assert.equal(detail('undoTrash'),'Nothing to undo.');
+ assert.equal(detail('undo'),'Available on the shelves');assert.equal(detail('undoTrash'),'Nothing to undo.');
 });
 test('restoring from Trash moves focus and selection to the first remaining item',async()=>{
  const f=fixture();await f.ready();for(const value of f.state.items.slice(0,3))value.trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);
