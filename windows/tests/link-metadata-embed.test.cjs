@@ -24,7 +24,7 @@ test('meta tags with unquoted attribute values are read like macOS',async()=>{
 
 test('unclosed tags at the 512 KiB fetch ceiling parse in linear time',async()=>{
  const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'}),size=512*1024;
- for(const html of ['<title'.repeat(size/6),'<meta'.repeat(size/5),('<meta '+'a'.repeat(4000)+'>').repeat(size/4007|0),('<title>'+'a'.repeat(2001)).repeat(size/2008|0)]){
+ for(const html of ['<title'.repeat(size/6),'<meta'.repeat(size/5),('<meta '+'a'.repeat(4000)+'>').repeat(size/4007|0),('<title>'+'a'.repeat(2001)).repeat(size/2008|0),'<title>'.repeat((size-8)/7|0)+'</title>']){
   const started=Date.now();assert.equal((await linkMetadata('https://example.com/',page(html))).title,'example.com');
   assert.ok(Date.now()-started<2000,`parse took ${Date.now()-started} ms`);
  }
