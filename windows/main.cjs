@@ -26,7 +26,7 @@ const {decodeTextFile}=require('./lib/text-file.cjs');
 const native = require('./lib/native.cjs');
 const {setAutostart}=require('./lib/linux-autostart.cjs');
 const {portalScreenshot}=require('./lib/linux-screenshot.cjs');
-const {which,keptImage}=require('./lib/linux-clipboard.cjs');
+const {which,keptImage,pixelFingerprint,writeClipboard:writeLinuxClipboard}=require('./lib/linux-clipboard.cjs');
 const {backendRelaunchArguments,launchCommand,RELAUNCHED}=require('./lib/linux-desktop.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
@@ -51,7 +51,7 @@ const linux=process.platform==='linux'?native.linux:null;
 if(linux?.desktop.session.backend==='wayland')app.commandLine.appendSwitch('enable-features','GlobalShortcutsPortal');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
-let lastGeneration={sequence:0},ownFingerprint='',keptId=null,capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
+let lastGeneration={sequence:0},ownFingerprint='',keptId=null,lastFingerprint='',lastIds=[],ownWrites=0,capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
@@ -185,20 +185,35 @@ async function hide(restore=true) {
   try{await operation;}finally{if(hidePromise===operation)hidePromise=null;}
 }
 async function clipboardContent() {
-  return readClipboardContent({clipboard:linux?.clipboard||clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL,captureLinks:store?.data.settings.captureLinks!==false});
+  const content=await readClipboardContent({clipboard:linux?.clipboard||clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL,captureLinks:store?.data.settings.captureLinks!==false});
+  if(linux&&content?.kind==='image')content.fingerprint=imagePixels(content.value)||content.fingerprint;
+  return content;
 }
+function imagePixels(bytes){return pixelFingerprint(bytes,value=>{const image=nativeImage.createFromBuffer(value);if(image.isEmpty())return null;return{...image.getSize(),bitmap:image.toBitmap()};});}
+function onShelf(ids){return ids.some(id=>store.data.items.some(item=>item.id===id&&!item.trashedAt&&!item.hiddenFromShelf));}
+// A watcher can report a copy before its fingerprint is known; capture waits
+// until then so the copy is never taken in as a new item.
+async function ownWrite(operation){
+  ownWrites++;
+  try{return await operation();}
+  finally{ownWrites--;if(!ownWrites&&pendingClipboard&&!capturing){pendingClipboard=false;queueMicrotask(()=>void readClipboard());}}
+}
+function linuxWrite(content){return writeLinuxClipboard({electron:clipboard,ClipboardItem,tool:linux.clipboard,marker:copyMarker,focused:!!window&&!window.isDestroyed()&&window.isFocused(),...content});}
 async function readClipboard() {
-  if(capturing){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;capturing=true;
+  if(capturing||ownWrites){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;capturing=true;
   try{
     const content=await clipboardContent();if(!content){if(linux)await keepClipboard();return;}
-    if(content.raced){pendingClipboard=true;return;}
+    if(content.raced||ownWrites){pendingClipboard=true;return;}
     if(repeatedGeneration(lastGeneration,content))return;
+    // A Linux clipboard manager serves an image again, re-encoded, under a new
+    // generation; it is the same copy while its item is still on the shelf.
+    if(linux){const repeat=content.kind==='image'&&content.fingerprint===lastFingerprint&&onShelf(lastIds);lastFingerprint=content.fingerprint;if(repeat)return;lastIds=[];}
     keptId=null;
     if(content.fingerprint===ownFingerprint){ownFingerprint='';return;}
     if(content.owned)return;
     const key={image:'captureImages',text:'captureText',link:'captureLinks'}[content.kind];if(!store.data.settings[key])return;
     const item=store.insert(content.kind,content.value);broadcast();
-    if(linux&&item.kind==='image')keptId=item.id;
+    if(linux){lastIds=[item.id];if(item.kind==='image')keptId=item.id;}
     if(item.kind==='link')void enrich(item.id);
     if(item.kind==='image'){queueOCR(item.id);refreshImageSearch();}
     if(item.kind==='image'&&store.data.settings.openAfterScreenshot&&!desiredVisible)await show('shelves',{selectId:item.id,kind:'image'});
@@ -209,7 +224,7 @@ async function keepClipboard(){
   const id=keptId;keptId=null;if(!id)return;
   const item=keptImage(id,store.data.items);if(!item||(await linux.clipboard.types().catch(()=>['unknown'])).length)return;
   const image=nativeImage.createFromPath(store.mediaPath(item.id));if(image.isEmpty())return;
-  await linux.clipboard.writePNG(image.toPNG());ownFingerprint=(await clipboardContent())?.fingerprint||'';
+  await ownWrite(async()=>{await linuxWrite({png:image.toPNG()});ownFingerprint=(await clipboardContent().catch(()=>null))?.fingerprint||'';});
 }
 async function enrich(id,{refresh=false}={}) {
   if(!store.data.settings.fetchLinkMetadata||(!refresh&&pending.has(id)))return;
@@ -232,11 +247,17 @@ async function writeClipboard(selected) {
   const images=selected.filter(item=>item.kind==='image');
   const values=selected.filter(item=>item.kind!=='image').map(item=>item.kind==='link'?item.url:item.text);
   if(linux){
-    // Linux selection tools offer one format per owner: files, an image or text.
-    if(images.length>1||images.some(item=>item.recording))await linux.clipboard.writeFiles(images.map(item=>store.mediaPath(item.id)));
-    else if(images.length){const image=nativeImage.createFromPath(store.mediaPath(images[0].id));if(image.isEmpty())throw new Error('Image unavailable');await linux.clipboard.writePNG(image.toPNG());}
-    else await linux.clipboard.writeText(values.join('\n\n'));
-    ownFingerprint=(await clipboardContent())?.fingerprint||'';store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
+    // Several images or a recording travel as a file list with the first still
+    // image as PNG. A hidden Wayland write falls back to the main format alone.
+    const files=images.length>1||images.some(item=>item.recording)?images.map(item=>store.mediaPath(item.id)):[];
+    const still=images.find(item=>!item.recording);let png=null;
+    if(still){const image=nativeImage.createFromPath(store.mediaPath(still.id));if(image.isEmpty())throw new Error('Image unavailable');png=image.toPNG();}
+    await ownWrite(async()=>{
+      await linuxWrite({text:values.join('\n\n'),png,files});
+      ownFingerprint=(await clipboardContent().catch(()=>null))?.fingerprint||'';
+      lastFingerprint=png&&!files.length?imagePixels(png)||ownFingerprint:ownFingerprint;lastIds=selected.map(item=>item.id);
+    });
+    store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));return;
   }
   if(images.some(item=>item.recording)){
     await copyFiles({files:images.map(item=>store.mediaPath(item.id)),marker:copyMarker.toString('base64'),text:values.join('\n\n')});
@@ -437,7 +458,7 @@ async function command(action,payload={}) {
     // A Linux autostart entry is written first, so a refused one is not saved as enabled.
     if(linux&&typeof patch.launchAtLogin==='boolean'&&!testMode)setAutostart(patch.launchAtLogin,{command:[...linuxLaunchCommand(),'--hidden']});
     store.modify('setSettings',{patch});if(wasIndexingImages&&!store.data.settings.indexImages)ocrQueue.discardPending();if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
-    if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastGeneration.sequence=0;
+    if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key))){lastGeneration.sequence=0;lastFingerprint='';}
     if(!linux&&Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
   }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
@@ -472,7 +493,7 @@ else if(relaunch){
   app.exit(0);
 }
 else app.whenReady().then(async()=>{
-  store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
+  store=new Store(app.getPath('userData'));if(linux)linux.context.values=()=>({images:!!store.data.settings.captureImages,focused:!!window&&!window.isDestroyed()&&window.isFocused()});mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
   // The signed Windows channel never installs on Linux; packages update the app.
   if(linux)Object.assign(updates.state,{status:'development',message:'Linux builds update through your package manager or a new AppImage release.'});
   updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!linux&&!development&&!testMode&&store.data.settings.autoCheckUpdates});
@@ -517,7 +538,7 @@ else app.whenReady().then(async()=>{
   window.webContents.on('did-start-navigation',()=>finishShortcutRecording());
   await window.loadURL(entry);
   if(linux&&!linux.clipboard.available)notify(`Clipboard capture needs ${{x11:'xclip',wayland:'wl-clipboard'}[linux.desktop.session.backend]||'wl-clipboard (Wayland) or xclip (X11)'}. Install it and restart ClipBoardLine.`);
-  monitor=native.monitor(()=>{if(!testMode)void readClipboard();},error=>{monitor?.kill();monitor=null;pasteTargets.clear();if(!closing)notify(error.message+' Falling back to bounded clipboard polling.');},focus=>pasteTargets.observe(focus));
+  monitor=native.monitor(()=>{if(!testMode)void readClipboard();},error=>{if(error.recoverable){if(!closing)notify(error.message);return;}monitor?.kill();monitor=null;pasteTargets.clear();if(!closing)notify(error.message+' Falling back to bounded clipboard polling.');},focus=>pasteTargets.observe(focus));
   if(!testMode||testTray){
     if(process.platform==='win32')app.setAppUserModelId('com.clipboardline.desktop.windows');
     createTray();

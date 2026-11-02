@@ -2,7 +2,8 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {LinuxDesktop,session,handleFor,backendRelaunchArguments,launchCommand,RELAUNCHED}=require('../lib/linux-desktop.cjs');
-const {LinuxClipboard,ClipboardWatcher,backend,keptImage}=require('../lib/linux-clipboard.cjs');
+const {LinuxClipboard,ClipboardWatcher,backend,keptImage,pixelFingerprint,decodableJPEG,clipboardSignature,writeClipboard,fileClipboard,FORMAT_MAP,MARKER_TYPE}=require('../lib/linux-clipboard.cjs');
+const {readClipboardContent}=require('../lib/clipboard-policy.cjs');
 const {setAutostart,autostartEnabled,autostartEntry}=require('../lib/linux-autostart.cjs');
 const {PasteTargetTracker}=require('../lib/paste-target.cjs');
 const {parseResponse,screenshotPath,portalScreenshot}=require('../lib/linux-screenshot.cjs');
@@ -219,4 +220,66 @@ test('a Wayland watcher never reports the clipboard present at launch, so the fi
 test('a failed ydotool paste explains how to enable the service',async()=>{
   const {value}=desktop({WAYLAND_DISPLAY:'w',XDG_CURRENT_DESKTOP:'GNOME'},['ydotool'],key=>key.startsWith('ydotool')?new Error('socket'):'');
   await assert.rejects(value.paste(await value.capture()),/systemctl --user enable --now ydotool/);
+});
+
+const signatureEntry=(types,payloads,reads=[])=>({types,getType:async type=>{reads.push(type);if(payloads[type] instanceof Error)throw payloads[type];const bytes=Buffer.from(payloads[type]);return{size:bytes.length,arrayBuffer:async()=>bytes};}});
+
+test('the change signature skips payloads a timestamp identifies and never reads a private copy',async()=>{
+  const reads=[],stamped=[signatureEntry(['TIMESTAMP','text/plain'],{TIMESTAMP:[1,2,3,4],'text/plain':'secret'},reads)];
+  const first=await clipboardSignature({read:async()=>stamped});assert.deepEqual(reads,['TIMESTAMP']);
+  const moved=[signatureEntry(['TIMESTAMP','text/plain'],{TIMESTAMP:[9,2,3,4],'text/plain':'secret'})];
+  assert.notEqual(await clipboardSignature({read:async()=>moved}),first);
+  reads.length=0;await clipboardSignature({read:async()=>[signatureEntry(['x-kde-passwordManagerHint','text/plain'],{'text/plain':'secret'},reads)]});assert.deepEqual(reads,[]);
+});
+
+test('a TIMESTAMP the owner cannot serve falls back to content, and images are read only when captured',async()=>{
+  const entry=text=>[signatureEntry(['TIMESTAMP','text/plain'],{TIMESTAMP:new Error('unavailable'),'text/plain':text})];
+  assert.notEqual(await clipboardSignature({read:async()=>entry('a')}),await clipboardSignature({read:async()=>entry('b')}));
+  assert.notEqual(await clipboardSignature({read:async()=>[signatureEntry(['TIMESTAMP','text/plain'],{TIMESTAMP:[0,0,0,0],'text/plain':'a'})]}),await clipboardSignature({read:async()=>[signatureEntry(['TIMESTAMP','text/plain'],{TIMESTAMP:[0,0,0,0],'text/plain':'b'})]}));
+  const reads=[],image=[{...signatureEntry(['image/jpeg','image/png'],{'image/png':'converted'},reads),imageBytes:async()=>Buffer.from('raw')}];
+  await clipboardSignature({read:async()=>image});assert.deepEqual(reads,[]);
+  await clipboardSignature({read:async()=>image},{images:true});assert.deepEqual(reads,[]);
+});
+
+test('a Wayland fallback polls only while focused, reports once and backs off after a slow read',async()=>{
+  const {value}=clipboard('wayland',{'text/plain':'a'});let focused=false,now=0,digests=0;const child=new EventEmitter();child.stdout=new EventEmitter();child.kill=()=>{};
+  const failures=[],watcher=new ClipboardWatcher(value,{interval:100000,spawner:()=>child,failed:error=>failures.push(error),now:()=>now,context:()=>({images:false,focused})});
+  watcher.digest=async()=>{digests++;now+=1000;return'x';};watcher.start();child.emit('exit',1);child.emit('error',new Error('late'));
+  assert.equal(failures.length,1);assert.equal(failures[0].recoverable,true);
+  const tick=async()=>{clearInterval(watcher.timer);watcher.timer=null;watcher.poll();await new Promise(resolve=>setImmediate(resolve));};
+  assert.equal(digests,0);focused=true;await tick();assert.equal(digests,1);await tick();assert.equal(digests,1);
+  now+=4000;await tick();assert.equal(digests,2);watcher.kill();
+});
+
+test('own copies are recovered from Chromium custom formats, so they are skipped',async()=>{
+  const marker=Buffer.from('0123456789abcdef'),target='application/web;type="custom/0"';
+  const {value}=clipboard('x11',{'text/plain':'hello',[FORMAT_MAP]:JSON.stringify({'application/x.clipboardline':'custom/0'}),[target]:marker});
+  const [entry]=await value.read();assert.ok(entry.types.includes(MARKER_TYPE));
+  assert.equal(await readClipboardContent({clipboard:value,sequence:async()=>1,marker,plainURL:()=>null}),null);
+  const foreign=await readClipboardContent({clipboard:value,sequence:async()=>1,marker:Buffer.from('fedcba9876543210'),plainURL:()=>null});assert.equal(foreign.owned,false);assert.equal(foreign.value,'hello');
+});
+
+test('a production JPEG conversion refuses a file declaring more pixels than a stored image',()=>{
+  const jpeg=(width,height)=>{const b=Buffer.alloc(40);b.set([0xff,0xd8,0xff,0xe0,0,4,0,0,0xff,0xc0,0,17,8]);b.writeUInt16BE(height,13);b.writeUInt16BE(width,15);return b;};
+  assert.equal(decodableJPEG(jpeg(1920,1080)),true);assert.equal(decodableJPEG(jpeg(65000,65000)),false);assert.equal(decodableJPEG(Buffer.from('not a jpeg')),false);
+});
+
+test('a re-encoded image keeps its identity and an oversized PNG is never decoded',()=>{
+  const png=(width,height,tail)=>{const b=Buffer.alloc(32);b.write('89504e470d0a1a0a','hex');b.write('IHDR',12,'latin1');b.writeUInt32BE(width,16);b.writeUInt32BE(height,20);b.write(tail,24);return b;};
+  let decoded=0;const decode=()=>{decoded++;return{width:2,height:2,bitmap:Buffer.from([1,2,3,4])};};
+  assert.equal(pixelFingerprint(png(2,2,'a'),decode),pixelFingerprint(png(2,2,'b'),decode));assert.equal(decoded,2);
+  assert.equal(pixelFingerprint(png(50000,50000,'a'),decode),null);assert.equal(decoded,2);
+});
+
+test('writes carry the marker and every format; a hidden Wayland write falls back to the tool',async()=>{
+  class Item{constructor(data){this.data=data;}}
+  const written=[],electron={write:async items=>written.push(Object.keys(items[0].data))},marker=Buffer.from('marker'),tool={kind:'x11',writes:[],writeText(value){this.writes.push(['text',value]);},writePNG(){this.writes.push(['png']);},writeFiles(files){this.writes.push(['files',files]);},read:async()=>[]};
+  assert.equal(await writeClipboard({electron,ClipboardItem:Item,tool,marker,text:'t',png:Buffer.from('p'),files:['/tmp/a b.png']}),'electron');
+  assert.equal(written[0].length,5);assert.ok(written[0].includes(MARKER_TYPE));assert.deepEqual(tool.writes,[]);
+  tool.kind='wayland';written.length=0;
+  assert.equal(await writeClipboard({electron,ClipboardItem:Item,tool,marker,text:'t'}),'wl-copy');assert.deepEqual(written,[]);assert.deepEqual(tool.writes,[['text','t']]);
+  tool.writes.length=0;tool.read=async()=>[{types:[MARKER_TYPE],getType:async()=>({arrayBuffer:async()=>marker})}];
+  assert.equal(await writeClipboard({electron,ClipboardItem:Item,tool,marker,text:'t',focused:true,delay:async()=>{}}),'electron');assert.deepEqual(tool.writes,[]);
+  tool.read=async()=>[];assert.equal(await writeClipboard({electron,ClipboardItem:Item,tool,marker,text:'t',focused:true,delay:async()=>{}}),'wl-copy');assert.deepEqual(tool.writes,[['text','t']]);
+  assert.deepEqual(fileClipboard(['/tmp/a b.png']),{uriList:'file:///tmp/a%20b.png\r\n',gnome:'copy\nfile:///tmp/a%20b.png'});
 });
