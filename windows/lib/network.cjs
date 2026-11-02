@@ -65,6 +65,8 @@ async function boundedFetch(input, {maximum = 512 * 1024, redirects = 3, resolve
 }
 function metadataGuard(url){
   if(url.protocol!=='https:')throw new Error('Automatic link metadata requires HTTPS.');
+  // As on macOS, only named hosts are fetched: no IP literals and no trailing-dot hosts.
+  if(net.isIP(url.hostname.replace(/^\[|\]$/g,''))||url.hostname.endsWith('.'))throw new Error('Automatic link metadata needs a named host.');
   const sensitive=new Set(['token','accesstoken','refreshtoken','idtoken','apikey','auth','authorization','authentication','authtoken','code','signature','sig','session','sessionid','state','password','secret','clientsecret','credential','credentials','accesskeyid','key','keypairid','policy','verifier','jwt','bearer']);
   for(const key of url.searchParams.keys()){const normalized=key.toLowerCase().replace(/[^a-z0-9]/g,'');if(/^(xamz|xgoog|oauth)/.test(normalized)||sensitive.has(normalized))throw new Error('Sensitive link parameters are not fetched automatically.');}
 }
