@@ -45,8 +45,9 @@ function describe(probe){
 // whose library is a stub (Fedora's noopenh264), so trimming falls back in
 // order; VP9/Opus in MP4 remains playable by Chromium's media stack.
 // Recordings are MP4 or MOV, as on Windows. FFmpeg would otherwise pick a
-// demuxer by content: FFmpeg 4.4 and 5.1 read an HLS playlist saved as .mp4
-// and open the local videos it lists.
+// demuxer by content, so a text file saved as .mp4 opens the local videos it
+// lists: as an ffconcat list in FFmpeg 4.4 through 8.1, and as an HLS
+// playlist in 4.4 and 5.1.
 const INPUT=['-f','mov','-protocol_whitelist','file'];
 const VIDEO_ENCODERS=['libx264','libopenh264','libvpx-vp9'],AUDIO_ENCODERS=['aac','libfdk_aac','libopus'];
 function chooseEncoders(listing){

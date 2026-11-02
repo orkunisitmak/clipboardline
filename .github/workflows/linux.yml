@@ -92,7 +92,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       # Last, so a dependency advisory fails the job without hiding the test
-      # and package evidence above. Shipped dependencies stay at moderate.
+      # and package evidence above. Shipped dependencies stay at moderate,
+      # including Electron, a devDependency that every package bundles.
       # Packaging tools stay at high: electron-builder pins minimatch below the
       # GHSA-g3hv-75wg-m249 fix.
       - name: Audit dependencies
@@ -100,3 +101,5 @@ jobs:
         run: |
           npm audit --omit=dev --audit-level=moderate
           npm audit --audit-level=high
+          npm audit --json > "$RUNNER_TEMP/audit.json" || true
+          node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).vulnerabilities?.electron;if(v&&["moderate","high","critical"].includes(v.severity)){console.error("Electron has a "+v.severity+" advisory.");process.exit(1);}' "$RUNNER_TEMP/audit.json"

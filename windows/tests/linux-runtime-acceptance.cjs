@@ -175,6 +175,12 @@ async function main(){
         const trimmed=await test((_electron,{id,fingerprint})=>global.__clipboardLineTest.command('trimRecording',{id,sourceFingerprint:fingerprint,startMs:500,endMs:1500}),{id:imported.id,fingerprint});
         assert.equal(trimmed.result?.error,undefined,JSON.stringify(trimmed.result));
         assert.ok(Math.abs(await test((_electron,id)=>global.__clipboardLineTest.store.item(id).durationMs,imported.id)-1000)<150);check('a recording is trimmed into a new managed MP4');
+        // FFmpeg would read this text file as an ffconcat list of the video
+        // beside it, with a duration, so it would pass as that recording.
+        // Recordings are opened only as MP4/MOV.
+        const disguised=path.join(data,'disguised.mp4');fs.writeFileSync(disguised,'ffconcat version 1.0\nfile synthetic.mp4\nduration 2.0\n');
+        const refused=await test(async(_electron,file)=>{try{await global.__clipboardLineTest.importFile(file);return null;}catch(error){return error.message;}},disguised);
+        assert.ok(refused,'a list named .mp4 is not imported as a recording');check('a list named .mp4 is refused instead of reading the video beside it',{error:refused.slice(0,120)});
       }
     }else{
       fs.writeFileSync(video,Buffer.alloc(64));
@@ -188,18 +194,24 @@ async function main(){
     // Started by a desktop shortcut command, the app does that action: --copy-latest
     // copies without opening the line, --screenshot captures the screen (X11 here;
     // Wayland asks the desktop's portal). Another data folder is another instance.
+    const launchApp=args=>electron.launch({...(executable?{executablePath:executable,args}:{args:[path.resolve('.'),...args]}),timeout:60000});
+    const quitApp=async started=>{await Promise.race([started.evaluate(({app})=>{app.quit();}).catch(()=>{}),new Promise(resolve=>setTimeout(resolve,3000))]);await Promise.race([started.close().catch(()=>{}),new Promise(resolve=>setTimeout(resolve,10000))]);};
     for(const action of ['--copy-latest',...(backend==='x11'?['--screenshot']:[])]){
-      const cold=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-linux-cold-')),coldArgs=['--test-mode','--test-data='+cold,action];
-      const started=await electron.launch({...(executable?{executablePath:executable,args:coldArgs}:{args:[path.resolve('.'),...coldArgs]}),timeout:60000});
+      const cold=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-linux-cold-')),latest=syntheticPNG(10,6);
+      // --copy-latest copies the newest image an earlier session left on the shelf.
+      if(action==='--copy-latest'){const seed=await launchApp(['--test-mode','--test-data='+cold]);try{await until(()=>seed.evaluate(()=>!!global.__clipboardLineTest),Boolean,30000);await seed.evaluate((_electron,png)=>{global.__clipboardLineTest.store.insert('image',Buffer.from(png,'base64'));},latest.toString('base64'));}finally{await quitApp(seed);}}
+      const started=await launchApp(['--test-mode','--test-data='+cold,action]);
       try{
         await until(()=>started.evaluate(()=>!!global.__clipboardLineTest),Boolean,30000);
         const after=await started.evaluate(()=>({visible:global.__clipboardLineTest.getWindow().isVisible(),images:global.__clipboardLineTest.store.data.items.filter(item=>item.kind==='image').length}));
-        if(action==='--copy-latest'){assert.equal(after.visible,false,'--copy-latest leaves the line closed');check('a cold start with --copy-latest copies without opening the line');}
+        if(action==='--copy-latest'){
+          assert.equal(after.visible,false,'--copy-latest leaves the line closed');
+          const pasted=await until(()=>{try{return externalPaste('image/png',backend);}catch{return null;}},value=>!!value?.length,10000);
+          assert.ok(await test(({nativeImage},[copied,served])=>{const left=nativeImage.createFromBuffer(Buffer.from(copied,'base64')),right=nativeImage.createFromBuffer(Buffer.from(served,'base64'));return !right.isEmpty()&&left.toBitmap().equals(right.toBitmap());},[latest.toString('base64'),pasted.toString('base64')]),'the newest image is on the clipboard');
+          check('a cold start with --copy-latest copies the newest image without opening the line');
+        }
         else{assert.equal(after.images,1);assert.equal(after.visible,true);check('a cold start with --screenshot captures the screen into the crop preview');}
-      }finally{
-        await Promise.race([started.evaluate(({app})=>{app.quit();}).catch(()=>{}),new Promise(resolve=>setTimeout(resolve,3000))]);
-        await Promise.race([started.close().catch(()=>{}),new Promise(resolve=>setTimeout(resolve,10000))]);fs.rmSync(cold,{recursive:true,force:true});
-      }
+      }finally{await quitApp(started);fs.rmSync(cold,{recursive:true,force:true});}
     }
     await page.evaluate(()=>window.clipboardLine.command('settings'));
     const sources=await until(async()=>{await page.evaluate(()=>document.querySelector('[data-settings-tab="sources"],[data-section="sources"],[data-tab="sources"]')?.click());return page.evaluate(()=>document.body.innerText);},text=>text.includes('Linux integration'));
