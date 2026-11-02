@@ -52,15 +52,16 @@ def audit(root):
         # UTF-16 stores one NUL byte per ASCII character, so also scan both decodings.
         views = [data]
         if b'\0' in data:
-            views += [data.decode(codec, 'ignore').encode() for codec in ('utf-16-le', 'utf-16-be')]
+            views += [data[shift:].decode(codec, 'ignore').encode() for shift in (0, 1) for codec in ('utf-16-le', 'utf-16-be')]
         seen = set()
         for rule, pattern in PATTERNS.items():
             for view in views:
+                line, offset = 1, 0
                 for match in re.finditer(pattern, view):
+                    line += view.count(b'\n', offset, match.start()); offset = match.start()
                     if (rule == 'url-userinfo' and name == 'Tests/ImageHistoryTests/AppUpdateControllerTests.swift' and
                         match.group() == b'https://user' + b':password@'):
                         continue  # Exact synthetic credential-rejection test, never a real credential.
-                    line = view[:match.start()].count(b'\n') + 1
                     if (rule, line) not in seen:
                         seen.add((rule, line))
                         findings.append({'file': name, 'line': line, 'rule': rule})
