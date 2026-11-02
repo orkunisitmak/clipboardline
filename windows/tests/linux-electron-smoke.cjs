@@ -56,7 +56,8 @@ async function main(){
 
     await application.evaluate(()=>global.__clipboardLineTest.command('show'));
     const surface=()=>application.evaluate(()=>{const w=global.__clipboardLineTest.getWindow();return{maximized:w.isMaximized(),visible:w.isVisible()};});
-    if(status.linux.backend==='wayland'){
+    // Tiling compositors such as Sway place the line themselves.
+    if(status.linux.backend==='wayland'&&/kde/i.test(process.env.XDG_CURRENT_DESKTOP||'')){
       await until(surface,value=>value.visible&&value.maximized);check('the Wayland line is maximized by the compositor');
       await application.evaluate(()=>global.__clipboardLineTest.command('library'));
       await until(surface,value=>value.visible&&!value.maximized);check('the Library leaves the maximized line for a normal window');

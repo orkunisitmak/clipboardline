@@ -27,7 +27,7 @@ jobs:
           cache: npm
           cache-dependency-path: windows/package-lock.json
       - name: Install display, clipboard and media tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xclip xdotool ffmpeg libarchive-tools rpm
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb sway wl-clipboard dbus-x11 xclip xdotool ffmpeg libarchive-tools rpm
       - name: Install pinned dependencies
         run: npm ci --no-fund
       - name: Prepare pinned offline image search models
@@ -54,6 +54,16 @@ jobs:
           CLIPBOARDLINE_PARITY_REPORT: validation/parity/linux.json
       - name: Real Linux Electron clipboard acceptance (X11)
         run: xvfb-run -a npm run test:linux
+      - name: Real Linux Electron clipboard acceptance (Wayland, headless Sway)
+        run: |
+          export XDG_RUNTIME_DIR="$(mktemp -d)"; chmod 700 "$XDG_RUNTIME_DIR"
+          WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman sway -c /dev/null > "$RUNNER_TEMP/sway.log" 2>&1 &
+          for attempt in $(seq 50); do socket=$(ls "$XDG_RUNTIME_DIR" | grep -E '^wayland-[0-9]+$' | head -1); [ -n "$socket" ] && break; sleep 0.2; done
+          test -n "$socket" || { cat "$RUNNER_TEMP/sway.log"; exit 1; }
+          WAYLAND_DISPLAY="$socket" dbus-run-session -- npm run test:linux
+        env:
+          XDG_SESSION_TYPE: wayland
+          XDG_CURRENT_DESKTOP: sway
       - name: Build AppImage, deb, rpm and pacman packages
         run: npm run dist:linux
       - name: Upload Linux packages

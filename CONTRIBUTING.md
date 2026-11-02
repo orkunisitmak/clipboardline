@@ -29,6 +29,19 @@ This downloads pinned model assets at build time and retains their licenses. Wit
 
 Running `swift run` directly is not the packaged development workflow: it lacks the application resources, branded icon, permission identity and isolated storage overlay produced by the builder. Use the built Dev bundle for UI tests. Stop one app or assign different global shortcuts before running Dev beside the official application. Development rebuilds may need their own macOS permission refresh; do not modify the official app's permission or signing setup to make a development test pass.
 
+### Linux development
+
+The Electron project in `windows/` also builds for Linux; the desktop integration lives in separate `windows/lib/linux-*.cjs` files. See the [Linux guide](docs/linux.md) for packages and tools.
+
+```sh
+cd windows
+npm ci
+npm test
+npm run dist:linux
+```
+
+`npm run test:linux` launches the real application and replaces the clipboard: run it only inside a disposable session (`xvfb-run`, headless Sway or a nested compositor), never on a desktop that holds personal clipboard data. A Linux run does not certify Windows or macOS behavior. Keep Linux-only behavior behind `process.platform==='linux'` or `state.platform==='linux'` so the Windows build is unchanged.
+
 ### Changes and evidence
 
 - Use synthetic clipboard text, generated images and temporary directories in tests. Do not commit real clipboard contents, screenshots of accounts, library databases, API keys, private URLs, crash logs with personal paths, or signing material.
@@ -48,3 +61,5 @@ macOS geliştirmesi için seçilmiş bir Xcode/Swift araç zinciri ve Python 3 g
 Anlamsal arama modelleri isteğe bağlıdır: `CLIPBOARDLINE_BUNDLE_MODELS=1 bash scripts/build-community.sh`. Model olmadan yerel Vision OCR kullanılabilir. Çıplak `swift run` yerine, kaynakları ve ayrı veri alanı hazırlanan Dev paketini UI testi için kullanın.
 
 Testlerde yapay metin/görsel ve geçici dizin kullanın. Kişisel pano içeriği, hesap ekran görüntüsü, veritabanı, anahtar, özel URL veya imza dosyası commit etmeyin. Yeni kısayolları ve çevirileri güncel tutun. macOS'ta geçen testleri Windows'ta da geçmiş gibi sunmayın; gerçekten denediğiniz platformu ve paketi belirtin.
+
+`windows/` içindeki Electron projesi Linux için de derlenir; Linux entegrasyonu ayrı `windows/lib/linux-*.cjs` dosyalarındadır. Orada `npm ci`, `npm test` ve `npm run dist:linux` çalıştırın. `npm run test:linux` gerçek uygulamayı açar ve panoyu değiştirir; yalnızca geçici bir oturumda (`xvfb-run`, başsız Sway veya iç içe compositor) çalıştırın.

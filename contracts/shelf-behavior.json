@@ -65,8 +65,8 @@
         "id": "linux-wayland-line-focus",
         "macos": "The line panel floats above other windows until it is dismissed",
         "windows": "The always-on-top line stays above other windows until it is dismissed",
-        "linux": "On X11 the line stays above other windows. On KDE Plasma Wayland a KWin script keeps it above. Other Wayland compositors own stacking and placement, so another window can cover the line until it is shown again.",
-        "reason": "Wayland clients cannot place their windows or request keep-above or skip-taskbar; only KWin offers a scripted equivalent."
+        "linux": "On X11 the line stays above other windows. On Wayland the compositor places the line on the monitor in use and it fills that monitor's work area. On KDE Plasma a KWin script keeps it above; on other Wayland compositors it is dismissed when another window takes focus.",
+        "reason": "Wayland clients cannot see the pointer, place their windows or request keep-above or skip-taskbar; only KWin offers a scripted equivalent, and a line left open under another window would look closed."
       },
       {
         "id": "linux-screen-capture",
@@ -79,14 +79,14 @@
         "id": "linux-recordings",
         "macos": "AVFoundation and Quick Look",
         "windows": "WinRT media stack",
-        "linux": "The distribution's FFmpeg (ffprobe and ffmpeg) inspects, posters and trims to a new H.264/AAC MP4; import explains when FFmpeg is missing.",
+        "linux": "The distribution's FFmpeg (ffprobe and ffmpeg) inspects, posters and trims to a new MP4, H.264/AAC where the build has those encoders and VP9/Opus otherwise; import explains when FFmpeg is missing.",
         "reason": "Linux has no system media editing API, and codec licensing keeps FFmpeg a distribution package rather than a bundled binary."
       },
       {
         "id": "linux-updates-and-login",
         "macos": "Signed in-app update channel; login item",
         "windows": "Signed in-app installer channel; Electron login item",
-        "linux": "No in-app installer: a newer AppImage, .deb, .rpm or pacman package replaces the app and keeps data. Launch at login writes an XDG autostart entry.",
+        "linux": "No update check or in-app installer: Settings opens the releases page, and a newer AppImage, .deb, .rpm or pacman package replaces the app and keeps data. Launch at login writes an XDG autostart entry.",
         "reason": "No signed Linux release feed or identity exists yet; distribution package managers own installed files."
       }
     ],
