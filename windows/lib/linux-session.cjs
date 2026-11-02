@@ -32,9 +32,20 @@ function linuxSession(env=process.env,argv=process.argv){
 // switch appended from main.cjs reaches only child processes. The Wayland browser
 // process would then hand its surfaces to an X11 GPU process, which crashes and
 // presents nothing. Xwayland on a Wayland session therefore needs a real argument.
-function backendRelaunchArguments(session,argv=process.argv.slice(1)){
- if(session?.session!=='wayland'||session.backend!=='x11'||argv.some(argument=>typeof argument==='string'&&argument.startsWith('--ozone-platform=')))return null;
+// The relaunched process carries RELAUNCHED, so it can never start another.
+const RELAUNCHED='CLIPBOARDLINE_BACKEND_RELAUNCHED';
+function backendRelaunchArguments(session,argv=process.argv.slice(1),env=process.env){
+ if(session?.session!=='wayland'||session.backend!=='x11'||env[RELAUNCHED]==='1'||argv.some(argument=>typeof argument==='string'&&argument.startsWith('--ozone-platform=')))return null;
  return[...argv,'--ozone-platform=x11'];
+}
+// The AppImage runtime sets APPIMAGE and APPDIR, and a terminal opened from
+// another AppImage passes both on. APPIMAGE names this app only while it runs
+// from that APPDIR; otherwise the relaunch and the autostart entry would start
+// the other program.
+function launchCommand({env=process.env,execPath=process.execPath,packaged,appPath}){
+ const appDir=typeof env.APPDIR==='string'&&path.isAbsolute(env.APPDIR)?path.resolve(env.APPDIR)+path.sep:null;
+ if(typeof env.APPIMAGE==='string'&&path.isAbsolute(env.APPIMAGE)&&appDir&&execPath.startsWith(appDir))return[env.APPIMAGE];
+ return packaged?[execPath]:[execPath,appPath];
 }
 function findExecutable(name,env=process.env){
  if(typeof name!=='string'||!/^[A-Za-z0-9._-]+$/.test(name))return null;
@@ -60,4 +71,4 @@ function mapAnimationDelay(session,{env=process.env,read=fs.readFileSync}={}){
  }catch{}
  return Number.isFinite(factor)?Math.round(Math.min(600,Math.max(0,200*factor))):200;
 }
-module.exports={linuxSession,backendRelaunchArguments,linuxTools,findExecutable,desktopNames,mapAnimationDelay,MUTTER_DESKTOPS};
+module.exports={linuxSession,backendRelaunchArguments,launchCommand,RELAUNCHED,linuxTools,findExecutable,desktopNames,mapAnimationDelay,MUTTER_DESKTOPS};

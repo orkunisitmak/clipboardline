@@ -3,7 +3,7 @@
 const linuxOnly={skip:process.platform==='win32'&&'Linux desktop integration'};
 const test=(name,options,body)=>typeof options==='function'?require('node:test').test(name,linuxOnly,options):require('node:test').test(name,{...options,...linuxOnly},body);
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {linuxSession,backendRelaunchArguments,linuxTools,findExecutable,desktopNames,mapAnimationDelay}=require('../lib/linux-session.cjs');
+const {linuxSession,backendRelaunchArguments,launchCommand,RELAUNCHED,linuxTools,findExecutable,desktopNames,mapAnimationDelay}=require('../lib/linux-session.cjs');
 
 const kde={XDG_SESSION_TYPE:'wayland',WAYLAND_DISPLAY:'wayland-0',DISPLAY:':0',XDG_CURRENT_DESKTOP:'KDE'};
 test('native Wayland is used where data-control lets wl-clipboard observe the selection',()=>{
@@ -35,6 +35,17 @@ test('Xwayland on a Wayland session restarts once with a real backend argument',
   assert.equal(backendRelaunchArguments(linuxSession({...kde,XDG_CURRENT_DESKTOP:'GNOME'},['--ozone-platform=x11']),['--ozone-platform=x11']),null);
   assert.equal(backendRelaunchArguments(linuxSession(kde,[]),[]),null);
   assert.equal(backendRelaunchArguments(linuxSession({XDG_SESSION_TYPE:'x11',DISPLAY:':0',XDG_CURRENT_DESKTOP:'XFCE'},[]),[]),null);
+  assert.equal(backendRelaunchArguments(gnome,['--toggle'],{[RELAUNCHED]:'1'}),null,'a relaunched process never relaunches again');
+});
+test('the relaunch and autostart command is this AppImage only while the app runs from its mount',()=>{
+  const own={APPIMAGE:'/home/user/ClipBoardLine.AppImage',APPDIR:'/tmp/.mount_ClipBo1'};
+  assert.deepEqual(launchCommand({env:own,execPath:'/tmp/.mount_ClipBo1/clipboardline',packaged:true}),['/home/user/ClipBoardLine.AppImage']);
+  // A terminal opened from another AppImage passes its variables on.
+  const other={APPIMAGE:'/home/user/Editor.AppImage',APPDIR:'/tmp/.mount_Editor9'};
+  assert.deepEqual(launchCommand({env:other,execPath:'/opt/ClipBoardLine/clipboardline',packaged:true}),['/opt/ClipBoardLine/clipboardline']);
+  assert.deepEqual(launchCommand({env:{...other,APPDIR:'/tmp/.mount_Editor'},execPath:'/tmp/.mount_Editor9/clipboardline',packaged:true}),['/tmp/.mount_Editor9/clipboardline'],'a mount whose name only starts the same does not count');
+  assert.deepEqual(launchCommand({env:{APPIMAGE:'relative.AppImage',APPDIR:'/tmp/.mount_ClipBo1'},execPath:'/tmp/.mount_ClipBo1/clipboardline',packaged:true}),['/tmp/.mount_ClipBo1/clipboardline']);
+  assert.deepEqual(launchCommand({env:{},execPath:'/usr/bin/electron',packaged:false,appPath:'/src/windows'}),['/usr/bin/electron','/src/windows']);
 });
 test('tool discovery accepts only executable regular files on absolute PATH entries',t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-tools-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));

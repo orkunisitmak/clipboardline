@@ -404,7 +404,7 @@ const globalActions={
 // grabs) can bind their own keyboard shortcuts to these commands instead.
 const LINUX_ACTIONS=Object.freeze({'--toggle':'toggle','--search':'search','--library':'library','--copy-latest':'copyLatest','--screenshot':'screenshot'});
 function linuxAction(argv){if(!linuxSession)return null;for(const value of argv)if(Object.hasOwn(LINUX_ACTIONS,value))return LINUX_ACTIONS[value];return null;}
-function linuxLaunchCommand(){return process.env.APPIMAGE?[process.env.APPIMAGE]:app.isPackaged?[process.execPath]:[process.execPath,app.getAppPath()];}
+function linuxLaunchCommand(){return linuxSupport.launchCommand({packaged:app.isPackaged,appPath:app.getAppPath()});}
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){
   if(!shortcutRecording||(token!==null&&shortcutRecording.token!==token))return;
@@ -524,12 +524,13 @@ function appIcon(){
   return applicationIcon;
 }
 const backendArguments=linuxSession&&!testMode?linuxSupport.backendRelaunchArguments(linuxSession,process.argv.slice(app.isPackaged?1:2)):null;
+if(linuxSession)delete process.env[linuxSupport.RELAUNCHED];
 if(!app.requestSingleInstanceLock())app.quit();
 else if(backendArguments){
   // Runs after the lock so shortcut commands reach the live instance directly.
   app.releaseSingleInstanceLock();
   const [file,...launch]=linuxLaunchCommand();
-  spawn(file,[...launch,...backendArguments],{detached:true,stdio:'inherit'}).unref();
+  spawn(file,[...launch,...backendArguments],{detached:true,stdio:'inherit',env:{...process.env,[linuxSupport.RELAUNCHED]:'1'}}).unref();
   app.exit(0);
 }
 else app.whenReady().then(async()=>{

@@ -25,7 +25,7 @@ test('encoder selection prefers H.264/AAC and keeps Chromium-playable fallbacks'
 });
 test('trim arguments seek precisely, keep one video and one audio track and write a faststart MP4',()=>{
   const args=trimArguments({source:'/in.mov',output:'/out/trimmed.mp4',startMs:1250,endMs:4000,encoders:{video:'libx264',audio:'aac'},details:{audioTracks:1}});
-  assert.deepEqual(args.slice(args.indexOf('-ss'),args.indexOf('-ss')+6),['-ss','1.250','-i','/in.mov','-t','2.750']);
+  assert.deepEqual(args.slice(args.indexOf('-ss'),args.indexOf('-ss')+10),['-ss','1.250','-f','mov','-protocol_whitelist','file','-i','/in.mov','-t','2.750']);
   for(const expected of [['-c:v','libx264'],['-c:a','aac'],['-map','0:a:0'],['-pix_fmt','yuv420p'],['-movflags','+faststart']])assert.ok(args.join(' ').includes(expected.join(' ')),expected.join(' '));
   assert.equal(args.at(-1),'/out/trimmed.mp4');
   const silent=trimArguments({source:'/in.mp4',output:'/o.mp4',startMs:0,endMs:100,encoders:{video:'libopenh264',audio:'aac'},details:{audioTracks:0,bitRate:500}});
@@ -56,6 +56,8 @@ test('inspect and trim produce the helper result files and validate the encoded 
   assert.equal(trimmed.trimmedFile,'trimmed.mp4');assert.equal(trimmed.durationMs,2750);
   assert.equal(fake.calls.filter(call=>call.args.includes('-encoders')).length,1);
   assert.deepEqual(fake.calls.filter(call=>call.args.includes('-t')).map(call=>call.args[call.args.indexOf('-c:v')+1]),['libopenh264','libvpx-vp9'],'a stub H.264 encoder falls back to VP9');
+  // Every recording FFmpeg opens is read as MP4/MOV from a local file only.
+  for(const call of fake.calls.filter(call=>!call.args.includes('-encoders'))){const input=call.file==='ffprobe'?call.args.length-1:call.args.indexOf('-i');assert.deepEqual(call.args.slice(call.args.indexOf('-f'),call.args.indexOf('-f')+4),['-f','mov','-protocol_whitelist','file'],call.args.join(' '));assert.ok(call.args.indexOf('-f')<input,call.args.join(' '));}
   trimmedDuration='5';await assert.rejects(media.run('Trim',{source:'/videos/a.mov',outputDirectory:directory,startMs:1250,endMs:4000}),/did not match/);
   await assert.rejects(media.run('Trim',{source:'/videos/a.mov',outputDirectory:directory,startMs:0,endMs:7000}),/within this recording/);
   await assert.rejects(new LinuxMedia({ffmpeg:null,ffprobe:null}).run('Inspect',{source:'/a.mp4',outputDirectory:directory}),/Install FFmpeg/);

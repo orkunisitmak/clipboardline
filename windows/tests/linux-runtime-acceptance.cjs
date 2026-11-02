@@ -20,13 +20,15 @@ const check=(name,details={})=>{report.checks.push({name,passed:true,...details}
 const skip=(name,reason)=>{report.skipped.push({name,reason});console.log('SKIP '+name+': '+reason);};
 async function until(reader,predicate,timeout=15000){const end=Date.now()+timeout;let value;while(Date.now()<end){try{value=await reader();if(predicate(value))return value;}catch{}await new Promise(resolve=>setTimeout(resolve,100));}throw new Error('Timed out waiting for Linux runtime state: '+JSON.stringify(value)?.slice(0,500));}
 // A generated 8x8 PNG; no personal screenshots are used.
+const chunk=(type,data)=>{const length=Buffer.alloc(4),crc=Buffer.alloc(4),body=Buffer.concat([Buffer.from(type),data]);length.writeUInt32BE(data.length);crc.writeUInt32BE(zlib.crc32(body));return Buffer.concat([length,body,crc]);};
 function syntheticPNG(width=8,height=8,{note}={}){
-  const chunk=(type,data)=>{const length=Buffer.alloc(4),crc=Buffer.alloc(4),body=Buffer.concat([Buffer.from(type),data]);length.writeUInt32BE(data.length);crc.writeUInt32BE(zlib.crc32(body));return Buffer.concat([length,body,crc]);};
   const header=Buffer.alloc(13);header.writeUInt32BE(width,0);header.writeUInt32BE(height,4);header.set([8,6,0,0,0],8);
   const rows=Buffer.concat(Array.from({length:height},(_row,y)=>Buffer.concat([Buffer.from([0]),...Array.from({length:width},(_column,x)=>Buffer.from([x*30,y*30,180,255]))])));
   // A note chunk changes the encoded bytes without changing the pixels.
   return Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'),chunk('IHDR',header),...(note?[chunk('tEXt',Buffer.from('Software\0'+note,'latin1'))]:[]),chunk('IDAT',zlib.deflateSync(rows,{level:note?9:6})),chunk('IEND',Buffer.alloc(0))]);
 }
+// A few bytes whose header declares width × height pixels.
+function declaredPNG(width,height){const header=Buffer.alloc(13);header.writeUInt32BE(width,0);header.writeUInt32BE(height,4);header.set([8,6,0,0,0],8);return Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'),chunk('IHDR',header),chunk('IDAT',zlib.deflateSync(Buffer.alloc(5))),chunk('IEND',Buffer.alloc(0))]);}
 const PNG=syntheticPNG();
 const xclip=spawnSync('sh',['-c','command -v xclip'],{encoding:'utf8'}).stdout.trim()||null;
 // Without xclip, a second Electron X11 client owns the selection instead.
@@ -77,6 +79,11 @@ async function main(){
       {const before=await sequence();await externalCopy('image/png',reencoded,backend);await until(sequence,value=>value!==before,backend==='wayland'?15000:6000);}
       for(let attempt=0;attempt<3;attempt++){await test(()=>global.__clipboardLineTest.readClipboard());await new Promise(resolve=>setTimeout(resolve,200));}
       items=await listed();assert.equal(items.filter(item=>item.kind==='image').length,imageCount);check('the same image served again with other PNG bytes is not captured twice');
+      // A small PNG that declares more pixels than a stored image may have:
+      // the copy is refused, and the app stays up and keeps capturing.
+      {const before=(await listed()).length,changed=await sequence();await externalCopy('image/png',declaredPNG(100000,100000),backend);await until(sequence,value=>value!==changed,backend==='wayland'?15000:6000);
+        await until(async()=>{await test(()=>global.__clipboardLineTest.readClipboard());return state();},value=>/too large/i.test(value.message||''));
+        assert.equal((await listed()).length,before);check('a PNG declaring 10 billion pixels is refused and capture continues');}
       // A screenshot tool copies and quits at once (Spectacle does); its copy
       // must stay pasteable without a second shelf item. Under X11 only xclip
       // can abandon a read the quitting owner never answers.
