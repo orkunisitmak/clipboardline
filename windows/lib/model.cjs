@@ -102,7 +102,7 @@ function saved(item) { return item.retainedAt != null || item.pinned || item.fol
 function plainURL(value) {
   if (typeof value !== 'string') return null;
   value = value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, '');
-  if (!value || /\s/.test(value) || value.length > 8192) return null;
+  if (!value || /\s/.test(value) || value.length > 8192 || !/^https?:\/\/[^/\\]/i.test(value)) return null;
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
 
