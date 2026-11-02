@@ -54,6 +54,24 @@
         "windows": "decodeHTML in lib/network.cjs follows that order with TextDecoder; security.test.cjs covers it."
       },
       {
+        "id": "link-blank-thumbnail",
+        "behavior": "A link preview whose Open Graph image is empty or only whitespace has no thumbnail; a valid relative image URL is resolved against the page address.",
+        "macos": "PublicLinkHTMLMetadata drops a whitespace-only og:image before resolving it; PublicLinkNetworkTests.testWhitespaceOnlyOpenGraphImageGivesNoThumbnailAndValidOneIsKept covers it.",
+        "windows": "linkMetadata in lib/network.cjs treats a whitespace-only og:image as missing; security.test.cjs covers it."
+      },
+      {
+        "id": "link-shelf-copied-order",
+        "behavior": "The Link shelf lists links by when they were last copied, falling back to when they were captured, so copying an older link moves it to the first slot; Text and Image shelves stay in capture order. Copying a stored link again records the copy time and keeps its date added, so Newest first and Date added do not change, and it still counts as freshly captured for retention.",
+        "macos": "LibraryStore.shelfItems orders the .link kind by COALESCE(copied,created) DESC; LibraryStoreTests.testRecapturedLinkMovesLeftAndRenewsTemporaryCaptureWithoutResettingOriginalDate covers a recaptured link.",
+        "windows": "rowItems in renderer.js sorts the link kind by the newer of lastCopiedAt and createdAt (a link saved by an earlier build had createdAt renewed on a re-copy), and Store.insert keeps createdAt and sets lastCopiedAt and lastCapturedAt when a stored link is captured again, with expire() reading lastCapturedAt before createdAt like macOS prune; shelf-render.test.cjs and media-revision.test.cjs cover it."
+        },
+        {
+        "id": "image-recopy-dedupe",
+        "behavior": "Copying the same image again keeps one Library item: the existing item moves to the front and keeps its pin, name, tags and folders. A different image is a new item.",
+        "macos": "LibraryStore.captureImage finds a live image with identical original bytes (file size first, then SHA-256), moves it to the front and removes the duplicate clipboard PNG; LibraryStoreTests.testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization covers it.",
+        "windows": "Store.insert matches a live image by its managed PNG hash and moves it to the front; model.test.cjs 'exact image recopy moves the image in front of another image and preserves saved organization' covers it."
+      },
+      {
         "id": "mixed-selection-pin",
         "behavior": "Pin on a selection that contains both pinned and unpinned items pins every item; only a selection that is already fully pinned unpins.",
         "macos": "LibraryStore.toggleFavorite and Line.pinActiveSelection compute one target for the whole selection, matching the action bar, which offers Unpin only when every selected item is pinned; LibraryKeyboardContractTests runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json.",
@@ -94,6 +112,18 @@
         "behavior": "An item without a name is titled by its content: a text by its first line that is not blank, with surrounding spaces and tabs removed and at most 120 grapheme clusters (lines end at LF or CRLF) and the localized \"Untitled note\" when every line is blank, a link by its fetched page title or else its host name and the localized \"Link\" when the stored URL does not parse, so an indented snippet or a long copied URL reads the same on both platforms.",
         "macos": "LibraryRecord.displayTitle returns the first non-blank line, trimmed and capped at 120 characters (Characters are grapheme clusters), or L(\"Untitled note\") for an all-blank text, and the metadata title, the URL host or L(\"Link\") for a link; LibraryInteractionTests.testUnnamedItemTitlesAreTheTrimmedFirstLineAndLinkHostLikeWindows covers it.",
         "windows": "title() in renderer.js applies the same rule (t('Untitled note') and t('Link') as fallbacks) to cards, title sorting and best-match ranking; library-ui.test.cjs runs the unnamed item titles scenario."
+      },
+      {
+        "id": "text-and-note-size-limit",
+        "behavior": "A text or a note is saved only while it is at most 1 MiB of UTF-8 bytes, so 600,000 Turkish or CJK characters are refused on both platforms and the edit reports an error.",
+        "macos": "LibraryStore.update checks text.utf8.count and note.utf8.count against TextClipboardWatcher.maximumDataBytes and LibraryModel.flushEdits shows Changes could not be saved.",
+        "windows": "Store.insert and Store.modify (note, editText, details) count Buffer.byteLength against 1 MiB through sizedText() in model.cjs; model.test.cjs 'a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS' covers it."
+      },
+      {
+        "id": "clear-filters-needs-a-filter",
+        "behavior": "Clear filters is available in the action list only while the Library has a filter to clear (favorites only, a search, a type, a date range, a domain, a tag or a search mode other than all); with no filter it is disabled with the reason \"No filters to clear\", and with the Library closed it keeps the Library reason.",
+        "macos": "ActionBarMenuAction.clearFilters requires libraryAvailable and hasLibraryFilters and otherwise names \"No filters to clear\"; ActionBarCatalogTests covers it.",
+        "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
       },
       {
         "id": "unavailable-watched-folder",

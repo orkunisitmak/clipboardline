@@ -520,6 +520,7 @@ enum HistoryTestRunner {
             ("testPagedTagSummariesRefreshAfterRenameAndRemovalWithoutChangingSelection", libraryInteraction.testPagedTagSummariesRefreshAfterRenameAndRemovalWithoutChangingSelection),
             ("testTextCopiedWithWindowsLineEndingsIsTitledByItsFirstLine", libraryInteraction.testTextCopiedWithWindowsLineEndingsIsTitledByItsFirstLine),
             ("testMigrationPreservesTextBytesDatesFavoritesIDsAndOriginals", libraryStore.testMigrationPreservesTextBytesDatesFavoritesIDsAndOriginals),
+            ("testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization", libraryStore.testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization),
             ("testCorruptSourceBlocksMigrationAndDoesNotOverwriteArchive", libraryStore.testCorruptSourceBlocksMigrationAndDoesNotOverwriteArchive),
             ("testFolderTagOrFavoriteRetainsAcrossUnassignUnpinAndExpiry", libraryStore.testFolderTagOrFavoriteRetainsAcrossUnassignUnpinAndExpiry),
             ("testCollectionsAreManyToManyNestedAndRemovalDoesNotDeleteContent", libraryStore.testCollectionsAreManyToManyNestedAndRemovalDoesNotDeleteContent),
