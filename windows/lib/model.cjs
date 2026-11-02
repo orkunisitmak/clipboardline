@@ -464,7 +464,7 @@ class Store {
       else if(action==='retain')item.retainedAt??=now;
       else if(action==='note')item.note=sizedText(payload.note,true);
       else if(action==='details') {
-        if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
+        if(payload.name!==undefined)item.name=sizedText(payload.name,true).trim();
         if(payload.note!==undefined)item.note=sizedText(payload.note,true);
         if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }
