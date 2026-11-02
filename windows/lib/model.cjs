@@ -78,8 +78,10 @@ function settings(patch, previous = DEFAULTS) {
   }
   return out;
 }
-// Match macOS libraryFolded: sibling folder names ignore case, width and diacritics.
-const foldedName=value=>value.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase();
+// Match macOS libraryFolded: sibling folder and tag names ignore case, width and diacritics.
+// Only the ideographic space, compatibility jamo and the Halfwidth and Fullwidth Forms
+// block get compatibility mapping, so ＡＢＣ matches ABC while m² stays distinct from m2.
+const foldedName=value=>value.replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
 function trashUndoFingerprint(item){return crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex');}
 function trashUndoMatches(item,entry){return !!item&&item.trashedAt!=null&&item.trashedAt===entry.afterTrashedAt&&item.updatedAt===entry.afterUpdatedAt&&(item.captureRevision??null)===entry.captureRevision&&trashUndoFingerprint(item)===entry.fingerprint;}
 function availableTrashUndo(items,journal){if(!journal?.length)return false;const byID=new Map(items.map(item=>[item.id,item]));for(let index=journal.length-1;index>=0;index--)if(journal[index].some(entry=>trashUndoMatches(byID.get(entry.id),entry)))return true;return false;}
@@ -421,8 +423,7 @@ class Store {
       if(action==='renameTag'){
         name=text(payload.name,TAG_INPUT_LIMIT).trim();
         if(!name||!validTagName(name))fail('Invalid tag name');
-        const folded=value=>value.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase();
-        if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&folded(value)===folded(name))))fail('A tag with this name already exists');
+        if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&foldedName(value)===foldedName(name))))fail('A tag with this name already exists');
       }
       for(const item of affected){item.retainedAt??=now;item.tags=action==='renameTag'?[...new Set(item.tags.map(value=>value===tag?name:value))]:item.tags.filter(value=>value!==tag);}
       this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return;
