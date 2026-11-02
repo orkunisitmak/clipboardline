@@ -126,7 +126,7 @@ function matches(value,query) { const hay=fold([value.name,value.title,value.tex
 let shelfItemsSource=null,shelfItemsQuery=null,shelfRows=new Map();
 function rowItems(kind) {
  if(shelfItemsSource!==state.items||shelfItemsQuery!==ui.search){shelfItemsSource=state.items;shelfItemsQuery=ui.search;shelfRows.clear();}
- const key=kind+':'+!!ui.pinned[kind];if(!shelfRows.has(key))shelfRows.set(key,state.items.filter(value=>value.kind===kind&&!value.trashedAt&&!value.hiddenFromShelf&&(!ui.pinned[kind]||value.pinned)&&(!ui.search||matches(value,ui.search))).sort((a,b)=>b.createdAt-a.createdAt));return shelfRows.get(key);
+ const key=kind+':'+!!ui.pinned[kind];if(!shelfRows.has(key))shelfRows.set(key,state.items.filter(value=>value.kind===kind&&!value.trashedAt&&!value.hiddenFromShelf&&(!ui.pinned[kind]||value.pinned)&&(!ui.search||matches(value,ui.search))).sort((a,b)=>kind==='link'?(b.lastCopiedAt??b.createdAt)-(a.lastCopiedAt??a.createdAt):b.createdAt-a.createdAt));return shelfRows.get(key);
 }
 function folderIncludes(value,id) { const ids=new Set([id]); let changed=true; while(changed){changed=false; for(const folder of state.folders)if(ids.has(folder.parentId)&&!ids.has(folder.id)){ids.add(folder.id);changed=true;}} return value.folderIds?.some(folder=>ids.has(folder)); }
 function libraryBaseItems() { return state.items.filter(value=>{
