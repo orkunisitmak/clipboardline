@@ -63,7 +63,7 @@ struct PublicLinkDestination: Equatable, Sendable {
         guard input.absoluteString.utf8.count <= 8192,
               var c = URLComponents(url: input, resolvingAgainstBaseURL: false),
               c.scheme?.lowercased() == "https", c.user == nil, c.password == nil,
-              c.port == nil || c.port == 443, let host = c.host?.lowercased(),
+              c.port == nil || c.port == 443, let host = c.encodedHost?.lowercased(),
               host.utf8.count <= 253, host.utf8.allSatisfy({ (97...122).contains($0) || (48...57).contains($0) || $0 == 45 || $0 == 46 }),
               host.contains("."), !host.hasSuffix("."),
               !["local", "localhost", "internal", "home", "arpa", "lan", "corp", "localdomain", "onion", "test", "invalid", "example", "alt"].contains(where: { host == $0 || host.hasSuffix("." + $0) }) else { return nil }
@@ -72,7 +72,7 @@ struct PublicLinkDestination: Equatable, Sendable {
               labels.last?.contains(where: { $0.isLetter }) == true else { return nil }
         let secretNames: Set<String> = ["token", "accesstoken", "refreshtoken", "idtoken", "auth", "authorization", "authentication", "authtoken", "password", "secret", "clientsecret", "key", "apikey", "accesskeyid", "signature", "sig", "code", "session", "sessionid", "credential", "credentials", "jwt", "bearer", "state", "policy", "keypairid", "verifier"]
         guard !(c.queryItems ?? []).contains(where: {
-            let name = $0.name.lowercased().replacingOccurrences(of: "-", with: "").replacingOccurrences(of: "_", with: "")
+            let name = String($0.name.lowercased().unicodeScalars.filter { (97...122).contains($0.value) || (48...57).contains($0.value) })
             return secretNames.contains(name) || name.hasPrefix("xamz") || name.hasPrefix("xgoog") || name.hasPrefix("oauth")
         }) else { return nil }
         c.scheme = "https"; c.host = host; c.port = nil; c.fragment = nil
@@ -375,7 +375,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         let titleMatch = Self.title(in: html).map { Self.entities(Self.stripTags($0)) }
         title = Self.clean(metadata["og:title"] ?? metadata["twitter:title"] ?? titleMatch, limit: 500)
         author = Self.clean(metadata["author"] ?? metadata["og:site_name"], limit: 200)
-        let image = metadata["og:image:secure_url"] ?? metadata["og:image"] ?? metadata["twitter:image"]
+        let image = (metadata["og:image:secure_url"] ?? metadata["og:image"] ?? metadata["twitter:image"]).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
         thumbnailURL = image.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }.flatMap { PublicLinkDestination($0)?.url }
     }
     /// Encoding sniffing order, as in windows/lib/network.cjs decodeHTML: UTF-8 BOM, Content-Type charset,
@@ -492,12 +492,12 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
 
     private static func entities(_ value: String) -> String {
         let named = namedEntities, names = named.keys.joined(separator: "|")
-        guard let regex = try? NSRegularExpression(pattern: #"&(#x[0-9A-Fa-f]{1,6}|#[0-9]{1,7}|\#(names));"#) else { return value }
+        guard let regex = try? NSRegularExpression(pattern: #"&(#[xX][0-9A-Fa-f]{1,6}|#[0-9]{1,7}|\#(names));"#) else { return value }
         var result = value
         for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
             guard let whole = Range(match.range, in: result), let nameRange = Range(match.range(at: 1), in: value) else { continue }
             let name = String(value[nameRange]); var replacement = named[name]
-            if name.hasPrefix("#x"), let number = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
+            if name.lowercased().hasPrefix("#x"), let number = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
             else if name.hasPrefix("#"), let number = UInt32(name.dropFirst()), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
             if let replacement { result.replaceSubrange(whole, with: replacement) }
         }

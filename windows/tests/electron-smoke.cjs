@@ -141,7 +141,7 @@ async function main(){
   await application.evaluate(async()=>{const h=global.__clipboardLineTest;h.store.insert('link','https://example.com/reference');await h.command('show');});
   await page.locator(`[data-shelf="text"] [data-item-id="${textItem.id}"]`).click();
   await page.keyboard.press('Space');await page.locator('#preview-dialog').waitFor({state:'visible'});
-  await page.keyboard.press('ArrowDown');await until(()=>page.locator('#preview-dialog').getAttribute('aria-label'),label=>label.includes('example.com/reference'));
+  await page.keyboard.press('ArrowDown');await until(()=>page.locator('#preview-dialog').getAttribute('aria-label'),label=>label==='example.com');
   await page.keyboard.press('ArrowUp');await until(()=>page.locator('#preview-dialog').getAttribute('aria-label'),label=>label==='Named synthetic key');
   await page.keyboard.press('p');await until(()=>page.evaluate(()=>window.clipboardLine.state()),value=>value.items.find(i=>i.id===textItem.id).pinned===false);
   await page.keyboard.press('p');await until(()=>page.evaluate(()=>window.clipboardLine.state()),value=>value.items.find(i=>i.id===textItem.id).pinned===true);

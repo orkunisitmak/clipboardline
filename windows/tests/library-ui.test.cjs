@@ -160,6 +160,13 @@ test('a subfolder scope is titled with its parent like macOS',async()=>{
  await f.click('folder-scope',{folder:parent});assert.match(f.main,/<div class="window-title"><strong>Parent<\/strong>/);await f.click('folder-scope',{folder:child});assert.match(f.main,/<div class="window-title"><strong>Parent \/ Child<\/strong>/);
 });
 
+test('an unnamed item is titled like macOS: trimmed first line capped at 120, link host without a fetched title',async()=>{
+ const f=fixture();await f.ready();const base=(id,kind,extra)=>({id,kind,createdAt:500,updatedAt:500,name:'',title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,retainedAt:500,crop:null,annotations:[],...extra});
+ f.state.items=[base('30000000-0000-4000-8000-000000000001','text',{text:'\t  Indented first line \r\nsecond line'}),base('30000000-0000-4000-8000-000000000002','text',{text:'x'.repeat(130)}),base('30000000-0000-4000-8000-000000000003','link',{url:'https://www.example.com/a/very/long/path?utm_source=news'}),base('30000000-0000-4000-8000-000000000004','link',{url:'https://example.com/ref',title:'Fetched title'}),base('30000000-0000-4000-8000-000000000005','text',{text:'\n \t\r\nSecond line\nthird'}),base('30000000-0000-4000-8000-000000000006','text',{text:' \t\r\n  '}),base('30000000-0000-4000-8000-000000000007','link',{url:'http://[bad'})];
+ f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ assert.deepEqual([...f.main.matchAll(/<article class="[^"]*" [^>]*aria-label="([^"]*)"/g)].map(match=>match[1]),['Indented first line','x'.repeat(120),'www.example.com','Fetched title','Second line','Untitled note','Link']);
+});
+
 test('removing the active folder ancestor returns Library to Saved',async()=>{
  const f=fixture();await f.ready();const parent='20000000-0000-4000-8000-000000000001',child='20000000-0000-4000-8000-000000000002';
  f.state.items[0].retainedAt=1000;f.state.items[0].folderIds=[child];f.state.folders=[{id:parent,name:'Parent',parentId:null},{id:child,name:'Child',parentId:parent}];f.api.emit({items:f.state.items,folders:f.state.folders});await f.ready();
@@ -178,6 +185,37 @@ test('removing a folder that is not open keeps the current Library view',async()
 test('the action list keeps Copy enabled for Trash items while editing actions are disabled',async()=>{
  const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image]);
  await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="copy" >/);assert.match(f.overlay,/data-command="pin" disabled>/);assert.match(f.overlay,/data-command="paste" disabled>/);assert.match(f.overlay,/data-command="preview" disabled>/);
+});
+test('the action list disables Clear filters until a Library filter is set',async()=>{
+ const f=fixture();await f.ready();await savedLibrary(f);
+ const row=()=>f.overlay.match(/<button[^>]*data-command="clear-filters"[^>]*>[\s\S]*?<\/button>/)[0];
+ await f.key('KeyK',{ctrl:true});assert.match(row(),/data-command="clear-filters" disabled>/);assert.match(row(),/<small>No filters to clear<\/small>/);
+ await f.key('Escape');await f.change('type-filter','text');
+ await f.key('KeyK',{ctrl:true});assert.doesNotMatch(row(),/disabled/);assert.match(row(),/<small><\/small>/);
+ await f.key('Escape');await f.change('type-filter','all');
+ await f.key('KeyK',{ctrl:true});assert.match(row(),/data-command="clear-filters" disabled>/);
+});
+test('Titles that fold equal sort newest first in both title directions',async()=>{
+ const f=fixture();await f.ready();const names=[['Alpha',1000],['álpha',3000],['alpha',2000]];
+ f.state.items.splice(0,f.state.items.length,...names.map(([name,createdAt],index)=>({id:'00000000-0000-4000-8000-0000000002'+String(index).padStart(2,'0'),kind:'text',createdAt,updatedAt:createdAt,name,title:'',text:name,url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,crop:null,annotations:[],retainedAt:1})));
+ f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'saved'});
+ const order=()=>cards(f).map(id=>f.state.items.find(item=>item.id===id).createdAt);
+ await f.change('sort-filter','title');assert.deepEqual(order(),[3000,2000,1000]);
+ await f.change('sort-filter','titleDescending');assert.deepEqual(order(),[3000,2000,1000]);
+});
+test('Title sort orders by folded title, not system locale collation',async()=>{
+ const f=fixture();await f.ready();const names=['sut','şeker','çilek','cuma','Çay','ılık','zeytin'];
+ f.state.items.splice(0,f.state.items.length,...names.map((name,index)=>({id:'00000000-0000-4000-8000-0000000001'+String(index).padStart(2,'0'),kind:'text',createdAt:1000-index,updatedAt:1000-index,name,title:'',text:name,url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,crop:null,annotations:[],retainedAt:1})));
+ f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'saved'});await f.change('sort-filter','title');
+ const order=()=>cards(f).map(id=>f.state.items.find(item=>item.id===id).name);
+ assert.deepEqual(order(),['Çay','çilek','cuma','şeker','sut','zeytin','ılık']);
+ await f.change('sort-filter','titleDescending');assert.deepEqual(order(),['ılık','zeytin','sut','şeker','cuma','çilek','Çay']);
+});
+test('Title sort does not fold ligatures or circled digits, like the Mac',async()=>{
+ const f=fixture();await f.ready();const names=['\ufb01sh','fz','2','\u2460','fj','1'];
+ f.state.items.splice(0,f.state.items.length,...names.map((name,index)=>({id:'00000000-0000-4000-8000-0000000002'+String(index).padStart(2,'0'),kind:'text',createdAt:1000-index,updatedAt:1000-index,name,title:'',text:name,url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,crop:null,annotations:[],retainedAt:1})));
+ f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'saved'});await f.change('sort-filter','title');
+ assert.deepEqual(cards(f).map(id=>f.state.items.find(item=>item.id===id).name),['1','2','fj','fz','\u2460','\ufb01sh']);
 });
 test('restoring from Trash moves focus and selection to the first remaining item',async()=>{
  const f=fixture();await f.ready();for(const value of f.state.items.slice(0,3))value.trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);

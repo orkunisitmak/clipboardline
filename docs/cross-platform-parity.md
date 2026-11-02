@@ -55,6 +55,8 @@ Windows folder picker uses the same entry; the macOS folder picker keeps its own
 declared character set (byte-order mark, `Content-Type`, XHTML declaration, early
 `<meta charset>`), falling back to windows-1252, so windows-1254 pages show their
 Turkish letters.
+`image-recopy-dedupe` requires copying the same image again to keep one Library item,
+moved to the front with its pin, name, tags and folders.
 `mixed-selection-pin` requires Pin on a
 selection of pinned and unpinned items to pin all of them, and to unpin only
 when every selected item is already pinned; the Library keyboard contract executes
@@ -72,6 +74,12 @@ Restore.
 whitespace and a whitespace-only name to count as no name.
 `folder-removal-view` requires removing a folder to return the Library to My
 library only when the open view is that folder or one of its subfolders.
+`text-and-note-size-limit` requires a text or a note over 1 MiB of UTF-8 bytes to be refused on both
+platforms, not 1 MiB of UTF-16 units on Windows.
+`item-display-title` requires an unnamed text to be titled by its first non-blank
+line, trimmed and capped at 120 grapheme clusters (Untitled note when every line is
+blank), and a link without a fetched title by its host name (Link when the stored URL
+does not parse).
 
 The adapters execute application behavior:
 
