@@ -261,10 +261,10 @@ extension String {
             try db.execute("ALTER TABLE text_identity ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
         }
         try migrateLegacy()
-        try refoldSearch()
         try backfillTextIdentity()
         try db.execute("PRAGMA user_version=1")
         drainMarkupGarbage()
+        try refoldSearch()
     }
     private func migrateLegacy() throws {
         guard try db.rows("SELECT value FROM metadata WHERE key='migration-v1'").isEmpty else { return }
@@ -337,10 +337,15 @@ extension String {
         var cursor = ""
         while true {
             let done = try db.transaction { () throws -> Bool in
-                let rows = try db.rows("SELECT id,payload FROM items WHERE id>? ORDER BY id LIMIT 256", [.text(cursor)])
+                let rows = try db.rows("SELECT id,payload FROM items WHERE id>? ORDER BY id LIMIT 16", [.text(cursor)])
                 guard !rows.isEmpty else { return true }
+                var bytes = 0
                 for row in rows {
                     guard let key = row["id"]?.string else { continue }
+                    // Each row costs a scan of `search_fts`, so a batch also stops at a size budget to stay far below the busy timeout.
+                    let size = row["payload"]?.string?.utf8.count ?? row["payload"]?.data?.count ?? 0
+                    if bytes > 0, bytes + size > 256 * 1024 { break }
+                    bytes += size
                     cursor = key
                     guard let item = try LibrarySQL.decode([row]).first else { continue }
                     let names = try db.rows("SELECT t.name FROM tags t JOIN item_tags m ON m.tag=t.id WHERE m.item=? ORDER BY t.folded,t.id", [.text(key)]).compactMap { $0["name"]?.string }
@@ -356,7 +361,7 @@ extension String {
         cursor = ""
         while true {
             let done = try db.transaction { () throws -> Bool in
-                let rows = try db.rows("SELECT item,ocr FROM image_analysis WHERE item>? ORDER BY item LIMIT 256", [.text(cursor)])
+                let rows = try db.rows("SELECT item,ocr FROM image_analysis WHERE item>? ORDER BY item LIMIT 64", [.text(cursor)])
                 guard !rows.isEmpty else { return true }
                 for row in rows {
                     guard let key = row["item"]?.string else { continue }

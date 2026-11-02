@@ -51,7 +51,7 @@
         "id": "dotless-i-search",
         "behavior": "Shelf and Library text search treat I, İ, i and ı as the same letter, so Işık is found by typing ışık, isik or ISIK. Only search does this: tag and folder names keep their own identity, so kır and kir stay two names.",
         "macos": "String.searchFolded folds ı to i and is used for the search index and the query; tags and folders keep libraryFolded. LibraryStoreTests.testSearchMatchesTurkishDotlessIAndRefoldsOlderRows and testDotlessITagAndFolderNamesStayDistinct cover it, and an index written the old way is re-folded in the background at launch.",
-        "windows": "The renderer fold maps ı to i after lower-casing; shelf-render.test.cjs covers it, and tag and folder names are compared by the model's own name rules, not this fold."
+        "windows": "The renderer's searchFold maps ı to i after fold and is used only by matches and relevance, so title and tag order keep the plain fold; shelf-render.test.cjs covers both, and tag and folder names are compared by the model's own name rules."
       },
       {
         "id": "link-title-charset",
