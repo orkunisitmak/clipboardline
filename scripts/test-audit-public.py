@@ -39,6 +39,13 @@ class PublicationGuardTests(unittest.TestCase):
             (self.root / 'k.txt').write_text('-----BEGIN ' + kind + 'PRIVATE KEY' + block + '-----\n')
             self.assertEqual([f['rule'] for f in scanner.audit(self.root)['findings']], ['private-key-block'], kind)
 
+    def test_secret_in_utf16_file_is_flagged_on_its_line(self):
+        value = 'gh' + 'p_' + 'C' * 36
+        for codec in ('utf-16', 'utf-16-le', 'utf-16-be'):
+            (self.root / 'u.txt').write_bytes(('ok\n' + value + '\n').encode(codec))
+            self.assertEqual(scanner.audit(self.root)['findings'], [{'file': 'u.txt', 'line': 2, 'rule': 'github-token'}], codec)
+            self.assertNotIn(value, json.dumps(scanner.audit(self.root)))
+
     def test_private_artifact_and_symlink_are_rejected(self):
         (self.root / 'credential.p12').write_bytes(b'not a real key')
         (self.root / 'source.txt').write_text('ordinary source')
