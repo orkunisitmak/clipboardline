@@ -444,5 +444,5 @@ test('typing a search in the Library switches the sort to Best match like macOS,
  assert.deepEqual(cards(f),[f.text1,f.link],'the older item with the better match comes first');
  await f.input('search-input','');
  assert.match(f.main,/<option value="newest" selected>/);
- assert.equal(cards(f).indexOf(f.link)<cards(f).indexOf(f.text1),true,'newest first again');
+ assert.deepEqual(cards(f).filter(id=>id===f.link||id===f.text1),[f.link,f.text1],'newest first again');
 });
