@@ -113,6 +113,18 @@ import XCTest
         try library.removeTag(tag.id); XCTAssertTrue(try library.query(LibraryQuery(search: "DROP TABLE")).isEmpty)
         XCTAssertEqual(try library.item(record.id)?.text, "İLK çekim 中文 👋")
     }
+    func testSearchMatchesTurkishDotlessIAndRefoldsOlderRows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; var library = try store(f)
+        let record = try XCTUnwrap(library.captureText("Işık ISPARTA ısı"))
+        for query in ["ışık", "ısparta", "ISI", "isik", "ISPARTA"] { XCTAssertEqual(try library.query(LibraryQuery(search: query)).first?.id, record.id, query) }
+        let db = try LibraryDatabase(url: library.databaseURL)
+        try db.execute("UPDATE items SET search=? WHERE id=?", [.text("isık ısparta ısı"), .text(record.id.uuidString)])
+        try db.execute("DELETE FROM search_fts WHERE id=?", [.text(record.id.uuidString)])
+        try db.execute("INSERT INTO search_fts(id,content) VALUES(?,?)", [.text(record.id.uuidString), .text("isık ısparta ısı")])
+        try db.execute("DELETE FROM metadata WHERE key='search-fold-v2'")
+        library = try store(f)
+        XCTAssertEqual(try library.query(LibraryQuery(search: "ışık")).first?.id, record.id)
+    }
     func testTrashRestoresContentAndRelationshipsWithoutMovingOriginal() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let original = try f.image(owned: false), record = try library.captureImage(original), folder = try library.createCollection("Folder")

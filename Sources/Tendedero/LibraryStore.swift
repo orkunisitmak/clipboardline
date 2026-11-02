@@ -154,7 +154,8 @@ private enum LibrarySQL {
     }
 }
 extension String {
-    var libraryFolded: String { folding(options: [.diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "tr_TR")).lowercased() }
+    /// Turkish ı, I, İ and i all fold to i, so text typed with either dotted or dotless letters matches.
+    var libraryFolded: String { folding(options: [.diacriticInsensitive, .widthInsensitive, .caseInsensitive], locale: nil).replacingOccurrences(of: "ı", with: "i") }
 }
 
 /// The production source of truth. Existing history classes are adapters to
@@ -257,6 +258,7 @@ extension String {
             try db.execute("ALTER TABLE text_identity ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
         }
         try migrateLegacy()
+        try refoldSearch()
         try backfillTextIdentity()
         try db.execute("PRAGMA user_version=1")
         drainMarkupGarbage()
@@ -300,6 +302,27 @@ extension String {
             try db.execute("INSERT INTO metadata VALUES('migration-v1',?)", [.text(backup.path)])
         }
         try db.backup(to: backup.appendingPathComponent("library-after-migration.sqlite"))
+    }
+    /// The search index stores folded text, so rows written before dotless ı folded to i must be folded again.
+    private func refoldSearch() throws {
+        guard try db.rows("SELECT value FROM metadata WHERE key='search-fold-v2'").isEmpty else { return }
+        try db.transaction {
+            var cursor = ""
+            while true {
+                let rows = try db.rows("SELECT id FROM items WHERE id>? ORDER BY id LIMIT 256", [.text(cursor)])
+                guard !rows.isEmpty else { break }
+                for row in rows {
+                    guard let key = row["id"]?.string, let id = UUID(uuidString: key), let value = try item(id) else { throw HistoryFiles.Failure.unsafeFile }
+                    try put(value)
+                    cursor = key
+                }
+            }
+            for row in try db.rows("SELECT item,ocr FROM image_analysis") {
+                guard let key = row["item"]?.string, let ocr = row["ocr"]?.string else { continue }
+                try db.execute("UPDATE image_analysis SET content=? WHERE item=?", [.text(ocr.libraryFolded), .text(key)])
+            }
+            try db.execute("INSERT INTO metadata VALUES('search-fold-v2','complete')")
+        }
     }
     private static func textDigest(_ text: String) -> Data { Data(SHA256.hash(data: Data(TextIdentity.key(text).utf8))) }
     private func putTextIdentity(_ item: LibraryRecord) throws {
