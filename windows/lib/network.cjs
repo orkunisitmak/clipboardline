@@ -110,8 +110,12 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   const html = decodeHTML(response.bytes, response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
   const title = collapse(meta(html, 'og:title') || meta(html, 'twitter:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
-  let thumbnail = ['og:image:secure_url', 'og:image', 'twitter:image'].map(name => meta(html, name)).find(value => value.trim()) || '';
-  if (thumbnail) try { thumbnail = new URL(thumbnail, response.url).href; } catch { thumbnail = ''; }
+  // Take the first image the thumbnail fetch would accept, so an HTTP secure_url does not hide a valid og:image.
+  let thumbnail = '';
+  for (const name of ['og:image:secure_url', 'og:image', 'twitter:image']) {
+    const value = meta(html, name); if (!value.trim()) continue;
+    try { const image = new URL(value, response.url); metadataGuard(image); thumbnail = image.href; break; } catch {}
+  }
   return {title: title.slice(0, 500), thumbnail};
 }
 module.exports = {publicAddress, publicURL, boundedFetch, metadataGuard,metadataFetch,linkMetadata};

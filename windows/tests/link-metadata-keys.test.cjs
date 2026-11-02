@@ -5,4 +5,9 @@ test('twitter cards, secure_url and mixed-case meta names supply the preview',as
  assert.deepEqual(await page('<meta name="twitter:title" content="TW"><meta name="twitter:image" content="/t.png"><title>Tag</title>'),{title:'TW',thumbnail:'https://example.com/t.png'});
  assert.deepEqual(await page('<meta property="OG:Title" content="UP"><meta NAME="Twitter:Image" content="/n.png">'),{title:'UP',thumbnail:'https://example.com/n.png'});
  assert.deepEqual(await page('<meta property="og:image" content="http://example.com/a.png"><meta property="og:image:secure_url" content="https://example.com/a.png">'),{title:'example.com',thumbnail:'https://example.com/a.png'});
+ assert.deepEqual(await page('<meta property="og:image:secure_url" content="http://example.com/a.png"><meta property="og:image" content="https://example.com/b.png"><meta name="twitter:image" content="/t.png">'),{title:'example.com',thumbnail:'https://example.com/b.png'});
+ assert.deepEqual(await page('<meta property="og:image:secure_url" content="http://example.com/a.png"><meta property="og:image" content="http://example.com/b.png"><meta name="twitter:image" content="/t.png">'),{title:'example.com',thumbnail:'https://example.com/t.png'});
+ assert.deepEqual(await page('<meta property="og:image" content="http://example.com/a.png">'),{title:'example.com',thumbnail:''});
+ for (const html of ['','<meta property="og:image" content="">','<meta property="og:image:secure_url" content="http://"><meta property="og:image" content="http://">','<meta property="og:image" content="https://["><meta><meta property="og:image:secure_url">']) assert.equal((await page(html)).thumbnail,'');
+ assert.equal((await page('<meta property="og:image" content="'+'a'.repeat(200000)+'">')).thumbnail,'');
 });
