@@ -109,15 +109,16 @@ function plainURL(value) {
 // Match macOS LinkIdentity.normalized: tracking parameters and the youtu.be, shorts, embed and live forms of a video
 // do not make a different link.
 const YOUTUBE_HOSTS=['youtube.com','www.youtube.com','m.youtube.com','music.youtube.com'];
-function queryParts(u) { return u.search.slice(1).split('&').filter(Boolean).map(raw => ({raw, name: new URLSearchParams(raw).keys().next().value})); }
+function queryParts(u) { return u.search.slice(1).split('&').filter(Boolean).map(raw => ({raw, name: new URLSearchParams('_' + raw).keys().next().value.slice(1)})); }
 function linkKey(href) {
   const u = new URL(href), pieces = u.pathname.split('/').filter(Boolean);
-  let id = null;
+  let id = null, fromQuery = false;
   if (['youtu.be', 'www.youtu.be'].includes(u.hostname)) id = pieces[0];
-  else if (YOUTUBE_HOSTS.includes(u.hostname)) id = ['shorts', 'embed', 'live'].includes(pieces[0]) && pieces.length > 1 ? pieces[1] : u.pathname === '/watch' ? u.searchParams.get('v') : null;
+  else if (YOUTUBE_HOSTS.includes(u.hostname)) id = ['shorts', 'embed', 'live'].includes(pieces[0]) && pieces.length > 1 ? pieces[1] : u.pathname === '/watch' ? (fromQuery = true, u.searchParams.get('v')) : null;
   const parts = queryParts(u).filter(({name}) => { name = name.toLowerCase(); return !name.startsWith('utm_') && name !== 'fbclid' && name !== 'gclid'; });
   if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) {
-    const rest = parts.filter(({name}) => name !== 'v' && name !== 'si').map(({raw}) => raw);
+    let dropV = fromQuery;
+    const rest = parts.filter(({name}) => { if (name === 'v' && dropV) { dropV = false; return false; } return name !== 'si'; }).map(({raw}) => raw);
     return new URL('https://www.youtube.com/watch?' + ['v=' + id, ...rest].join('&') + u.hash).href;
   }
   u.search = parts.map(({raw}) => raw).join('&');

@@ -253,7 +253,10 @@ test('links that differ only by tracking parameters or a youtu.be form share one
 test('link merging keeps non-tracking query syntax, ignores v outside /watch and keeps every distinct note',()=>fixture(s=>{
  const flag=s.insert('link','https://example.com/a?flag');
  assert.notEqual(s.insert('link','https://example.com/a?flag=').id,flag.id);
- assert.notEqual(s.insert('link','https://example.com/a?q=a+b').id,flag.id);
+ const plus=s.insert('link','https://example.com/a?q=a+b');
+ assert.notEqual(s.insert('link','https://example.com/a?q=a%20b').id,plus.id);
+ assert.doesNotThrow(()=>s.insert('link','https://example.com/??'));assert.doesNotThrow(()=>s.insert('link','https://example.com/??'));
+ assert.notEqual(s.insert('link','https://youtu.be/dQw4w9WgXcQ?v=other').id,s.insert('link','https://youtu.be/dQw4w9WgXcQ').id);
  assert.equal(s.insert('link','https://example.com/a?flag&utm_source=x').id,flag.id);
  const watch=s.insert('link','https://www.youtube.com/watch?v=dQw4w9WgXcQ');
  assert.notEqual(s.insert('link','https://www.youtube.com/@creator?v=dQw4w9WgXcQ').id,watch.id);
