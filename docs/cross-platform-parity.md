@@ -88,6 +88,15 @@ The adapters execute application behavior:
   this adapter on Windows. Running it on a Mac is useful development feedback,
   but is explicitly rejected as Windows acceptance by the release checker.
 
+- Linux: the Electron project in `windows/` also builds for Linux and ships the
+  same `renderer.js`. On a Linux host, `renderer-ui.test.cjs` runs both contracts
+  with the renderer's Linux state and writes `platform: "linux"` reports (`linux.json`,
+  `library-linux.json`). Linux shelves behave as on Windows; only the documented
+  OS-native exceptions differ. Both checkers verify them with the optional
+  `--linux-report`; the contracts list Linux under `additionalPlatforms`, and
+  every OS-native exception documents its Linux behavior. The Mac and Windows
+  reports remain mandatory for publication. See [Linux](linux.md).
+
 These tests compare executed states to a common contract. They do not grep
 source code or maintain a duplicate navigation implementation as the oracle.
 The separate native Windows source, packaged and installed acceptance suites

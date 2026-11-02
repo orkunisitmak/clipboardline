@@ -46,6 +46,8 @@ its packaging. Install `wl-clipboard` (Wayland) or `xclip` (X11).
 | Global shortcuts | XDG desktop portal (`GlobalShortcutsPortal`) | Electron global shortcuts |
 | Launch at login | `~/.config/autostart/clipboardline.desktop` | same |
 | Recordings | FFmpeg | FFmpeg |
+| Screenshots | `xdg-desktop-portal` through `gdbus` (the desktop may ask once) | Electron desktop capture |
+| Link files (Alt-drag, Export Copies) | freedesktop `.desktop` Link entries | same |
 
 A native Wayland client cannot read the selection while it is hidden, so every
 clipboard read and write goes through the selection tools rather than
@@ -64,9 +66,11 @@ start ClipBoardLine in that view when it is not running:
 clipboardline --toggle    # show or hide the shelves
 clipboardline --search    # open shelf search
 clipboardline --library   # open the Library
+clipboardline --copy-latest  # copy the newest image
+clipboardline --screenshot   # capture the screen
 ```
 
-The desktop entry exposes the same three actions. `--hidden` starts without
+The desktop entry exposes the first three actions. `--hidden` starts without
 showing the shelves; the autostart entry uses it.
 
 ## Linux exceptions
@@ -80,7 +84,19 @@ These differences come from the platform and are user-visible:
   (`x-kde-passwordManagerHint` and similar) are still excluded from capture.
 - **GNOME Wayland and other compositors without a window API.** The previous
   window is not identified; paste relies on GNOME returning focus after the
-  shelves hide. GNOME has no data-control protocol, so the clipboard is polled.
+  shelves hide.
+- **Mutter desktops run through Xwayland.** GNOME, Ubuntu, Budgie, Pantheon and
+  Cinnamon have no data-control protocol, so ClipBoardLine relaunches itself
+  with `--ozone-platform=x11` and polls the mirrored selection with `xclip`.
+  Install `xclip` there. Set `CLIPBOARDLINE_DISPLAY_BACKEND=wayland` or pass
+  `--ozone-platform=wayland` to choose the native backend; hidden capture then
+  does not work.
+- **Line stacking on Wayland.** Only KWin can keep the line above other windows.
+  On other compositors another window can cover it until it is shown again.
+- **Images survive the app that copied them.** A Linux selection disappears when
+  its owner quits, as Spectacle does right after copying. ClipBoardLine serves a
+  captured image again while its item is on the shelf. Text, links, recordings
+  and deleted items are never served again.
 - **One clipboard format per copy.** `wl-copy` and `xclip` offer one MIME type.
   A text copy is text, a single image copy is PNG, and several images or a
   recording are copied as a `text/uri-list` of the managed files. A selection
