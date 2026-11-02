@@ -468,8 +468,8 @@ extension String {
                 invalidateShelfUndo([moved.id]); changed([moved.id]); return moved
             }
         }
-        var item = LibraryRecord(id: UUID(), kind: .image, createdAt: date, updatedAt: date); item.path = url.standardizedFileURL.path; item.captureRevision = UUID()
-        try db.transaction { try put(item) }; changed([item.id]); return item
+        var fresh = LibraryRecord(id: UUID(), kind: .image, createdAt: date, updatedAt: date); fresh.path = url.standardizedFileURL.path; fresh.captureRevision = UUID()
+        try db.transaction { try put(fresh) }; changed([fresh.id]); return fresh
     }
     /// The capture time, nudged just past the newest shelf image when the clock has not moved on since it.
     private func frontDate(_ date: Date) throws -> Date {
