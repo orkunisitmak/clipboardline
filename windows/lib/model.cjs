@@ -470,7 +470,7 @@ class Store {
       } else if(action==='removeTag') {
         const tag=text(payload.tag,TAG_INPUT_LIMIT).trim();item.tags=item.tags.filter(value=>value!==tag);
       } else if (action === 'tag') {
-        if (!Array.isArray(payload.tags) || payload.tags.length > 50) fail('Invalid tags');
+        if (!Array.isArray(payload.tags)) fail('Invalid tags');
         const tags = [...new Set(payload.tags.map(tag => { tag = text(tag, TAG_INPUT_LIMIT).trim(); if (item.tags.includes(tag)) return tag; tag = tag.replace(/^#+|#+$/g, '').trim(); const key = foldedName(tag), known = item.tags.find(own => foldedName(own) === key) ?? knownTags.get(key) ?? tag; if (tag) knownTags.set(key, known); return tag && known; }).filter(Boolean))];
         // Existing longer tags stay editable; only newly added names must fit.
         if (tags.some(tag => !item.tags.includes(tag) && !validTagName(tag))) fail('Invalid tag name');
