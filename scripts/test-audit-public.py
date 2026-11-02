@@ -34,7 +34,7 @@ class PublicationGuardTests(unittest.TestCase):
         self.assertEqual([f['rule'] for f in scanner.audit(self.root)['findings']], ['url-userinfo'])
 
     def test_private_key_headers_of_every_type_are_flagged(self):
-        for kind in ('', 'RSA ', 'DSA ', 'EC ', 'OPENSSH ', 'ENCRYPTED ', 'PGP '):
+        for kind in ('', 'RSA ', 'DSA ', 'EC ', 'OPENSSH ', 'ENCRYPTED ', 'PGP ', 'ED25519 ', 'RSA-PSS '):
             block = ' BLOCK' if kind == 'PGP ' else ''
             (self.root / 'k.txt').write_text('-----BEGIN ' + kind + 'PRIVATE KEY' + block + '-----\n')
             self.assertEqual([f['rule'] for f in scanner.audit(self.root)['findings']], ['private-key-block'], kind)
