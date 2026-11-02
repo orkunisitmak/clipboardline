@@ -93,3 +93,9 @@ test('an identical later copy is a new generation, so a deleted or hidden item i
  const a=await read(first),b=await read(second);assert.equal(a.fingerprint,b.fingerprint);assert.notEqual(a.sequence,b.sequence);
  assert.equal(repeatedGeneration(state,a),false);assert.equal(repeatedGeneration(state,a),true);assert.equal(repeatedGeneration(state,b),false);
 });
+function headerPNG(width,height,size=64){const bytes=Buffer.alloc(size);Buffer.from('89504e470d0a1a0a','hex').copy(bytes);bytes.writeUInt32BE(width,16);bytes.writeUInt32BE(height,20);return bytes;}
+test('a clipboard image over the macOS 40 MP or 32 MB limit is skipped without a notice',async()=>{
+ const accepted=await read(board([{'image/png':headerPNG(8000,5000)}]));assert.equal(accepted.kind,'image');
+ assert.equal(await read(board([{'image/png':headerPNG(8000,6000)}])),null);
+ assert.equal(await read(board([{'image/png':headerPNG(100,100,32*1024*1024+1)}])),null);
+});

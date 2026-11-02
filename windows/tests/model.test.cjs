@@ -239,3 +239,10 @@ test('pin on a mixed selection pins every item and only a fully pinned selection
 }));
 test('a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS',()=>fixture(s=>{const item=s.insert('text','x');const big='ş'.repeat(600000);assert.throws(()=>s.modify('note',{ids:[item.id],note:big}),/Invalid text/);assert.throws(()=>s.modify('editText',{ids:[item.id],text:big}),/Invalid text/);assert.throws(()=>s.insert('text',big),/Invalid text/);s.modify('note',{ids:[item.id],note:'ş'.repeat(500000)});assert.equal(s.data.items[0].note.length,500000);}));
 test('an item can get a 51st tag, like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello');for(let i=1;i<=51;i++)s.modify('tag',{ids:[item.id],tags:[...s.item(item.id).tags,'tag'+i]});assert.equal(s.item(item.id).tags.length,51);}));
+test('captured images stop at the macOS 40 MP limit while imported ones keep the larger limit',()=>fixture(s=>{
+ const header=(width,height)=>{const bytes=Buffer.from(png);bytes.writeUInt32BE(width,16);bytes.writeUInt32BE(height,20);return bytes;};
+ assert.equal(s.insert('image',header(8000,5000)).kind,'image');
+ assert.throws(()=>s.insert('image',header(8000,6000)),/Image is too large/);
+ assert.equal(s.insert('image',header(8000,6000),{fullSize:true}).kind,'image');
+ assert.throws(()=>s.insert('image',header(10000,8001),{fullSize:true}),/Image is too large/);
+}));
