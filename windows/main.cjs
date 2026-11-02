@@ -312,35 +312,36 @@ async function recognize(id,quiet=false) {
   try{let image=nativeImage.createFromPath(file);const size=image.getSize(),scale=Math.min(1,2400/Math.max(size.width,size.height));if(scale<1)image=image.resize({width:Math.round(size.width*scale),height:Math.round(size.height*scale)});const result=await worker.recognize(image.toPNG());if(!store.data.items.includes(item)||(item.renderedFile||item.imageFile)!==fingerprint)throw new Error('Image changed during recognition');item.ocrText=String(result.data.text||'').slice(0,1024*1024);store.persist();if(!quiet)notify(item.ocrText?'Image text ready':'No text found');else broadcast();return{text:item.ocrText,id};}
   finally{await worker.terminate();}
 }
-// Pending folder debounces and in-flight recording imports belong to the
-// current watcher generation. Closing a watcher does not clear them, so a file
-// whose event arrived just before private mode came on could still be saved.
-let watcherJobs=null;
-function stopWatcherJobs(){
-  if(!watcherJobs)return;
-  for(const timer of watcherJobs.timers.values())clearTimeout(timer);
-  watcherJobs.timers.clear();
-  for(const controller of watcherJobs.controllers)controller.abort();
-  watcherJobs.controllers.clear();
-  watcherJobs=null;
+// Pending folder debounces and in-flight recording imports outlive a closed
+// watcher, so they are owned here rather than by the generation that scheduled
+// them: a pause aborts them, while merely reloading the watchers keeps a running
+// import alive.
+const watcherTimers=new Map(),watcherImports=new Set();
+function stopWatcherJobs(cancel=false){
+  for(const timer of watcherTimers.values())clearTimeout(timer);
+  watcherTimers.clear();
+  // An import that already started has to be aborted: importFile saves the item
+  // before it returns, so dropping the result afterwards cannot undo it.
+  if(cancel){for(const controller of watcherImports)controller.abort();watcherImports.clear();}
 }
 function configureWatchers() {
-  stopWatcherJobs();
+  stopWatcherJobs(store?.data.settings.paused===true);
   for(const watcher of watchers)watcher.close();watchers=[];
   // Private mode skips new files from watched folders; existing files stay.
   if(store?.data.settings.paused)return;
-  const timers=new Map(),controllers=new Set();watcherJobs={timers,controllers};
   for(const folder of store.data.settings.watchFolders){
     try{
       if(!fs.statSync(folder).isDirectory())continue;
       const watcher=fs.watch(folder,(_event,name)=>{
         if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;
-        clearTimeout(timers.get(name));
-        timers.set(name,setTimeout(async()=>{
-          timers.delete(name);
+        // The same file name can appear in two watched folders at once.
+        const key=folder+'\0'+name;
+        clearTimeout(watcherTimers.get(key));
+        watcherTimers.set(key,setTimeout(async()=>{
+          watcherTimers.delete(key);
           // The debounce can outlive the watcher that scheduled it.
           if(store?.data.settings.paused)return;
-          const controller=new AbortController();controllers.add(controller);
+          const controller=new AbortController();watcherImports.add(controller);
           try{
             const item=await importFile(path.join(folder,path.basename(name)),{signal:controller.signal});
             if(controller.signal.aborted||store?.data.settings.paused)return;
@@ -349,7 +350,7 @@ function configureWatchers() {
           }catch(err){
             // Private mode cancels an import that was already running.
             if(!controller.signal.aborted&&!store?.data.settings.paused)console.warn('Watch folder import error:',err?.message||err);
-          }finally{controllers.delete(controller);}
+          }finally{watcherImports.delete(controller);}
         },700));
       });
       watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});
@@ -431,9 +432,10 @@ async function command(action,payload={}) {
   else if(action==='capture')result=await capture();
   else if(action==='togglePause'){
     const paused=!store.data.settings.paused;
-    store.modify('setSettings',{patch:{paused}});configureWatchers();
-    // The bounded polling fallback may not have seen the last copy yet.
+    // Adopt the board before capture is allowed again. Adopting afterwards left
+    // a window in which the polling fallback could still import the paused copy.
     if(!paused)await adoptClipboardGeneration();
+    store.modify('setSettings',{patch:{paused}});configureWatchers();
     message=paused?'Private mode is on. New captures are paused.':'Private mode is off. Capture resumed.';result={paused};
   }
   else if(action==='newNote'){const item=store.insert('text',payload.text||'New note');if(payload.title)store.modify('details',{id:item.id,name:payload.title});store.modify('retain',{ids:[item.id]});result={id:item.id};}
@@ -460,13 +462,13 @@ async function command(action,payload={}) {
     if(Object.hasOwn(patch,'watchFolders'))throw new Error('Choose watched folders with the folder picker.');
     const wasIndexingImages=!!store.data.settings.indexImages;
     const previousShortcuts={...store.data.settings.shortcuts};
-    store.modify('setSettings',{patch});if(wasIndexingImages&&!store.data.settings.indexImages)ocrQueue.discardPending();if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
+    // Enabling a source starts from scratch; resuming adopts the board. Both are
+    // settled before capture is allowed again, or a poll in between could
+    // import the copy that was made while private mode was on.
     if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastGeneration.sequence=0;
-    if(Object.hasOwn(patch,'paused')){
-      configureWatchers();
-      // The bounded polling fallback may not have seen the last copy yet.
-      if(!store.data.settings.paused)await adoptClipboardGeneration();
-    }
+    if(patch.paused===false&&store.data.settings.paused)await adoptClipboardGeneration();
+    store.modify('setSettings',{patch});if(wasIndexingImages&&!store.data.settings.indexImages)ocrQueue.discardPending();if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
+    if(Object.hasOwn(patch,'paused'))configureWatchers();
     if(Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
   }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
@@ -554,4 +556,4 @@ else app.whenReady().then(async()=>{
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
 app.on('second-instance',()=>{if(window)void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});
-app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();stopWatcherJobs();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
+app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();stopWatcherJobs(true);watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});

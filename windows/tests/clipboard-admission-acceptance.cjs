@@ -4,6 +4,10 @@ const contract=JSON.parse(fs.readFileSync(path.join(__dirname,'../../contracts/c
 module.exports=async function clipboardAdmissionAcceptance({application,check}){
  const result=await application.evaluate(async({clipboard,ClipboardItem,nativeImage},{contract})=>{
   const api=global.__clipboardLineTest,baseline=api.store.data.items.length,originalRead=clipboard.read.bind(clipboard);
+  // The private mode section below captures real copies. Remember what the line
+  // held so they can be removed again: the checks that follow open the shelf and
+  // expect the suite's own items to be the newest.
+  const baselineIds=new Set(api.store.data.items.map(item=>item.id));
   const idle=async()=>{const end=Date.now()+5000;while(Date.now()<end){const value=api.getCaptureAdmissionState();if(!value.capturing&&!value.pendingClipboard)return;await new Promise(resolve=>setTimeout(resolve,25));}throw new Error('Clipboard admission did not settle.');};
   const snapshot=async()=>{await api.readClipboard();await idle();return api.store.data.items.length;};
   let privateCases=0,textCases=0,markerReads=0;
@@ -62,7 +66,14 @@ module.exports=async function clipboardAdmissionAcceptance({application,check}){
    await clipboard.writeText('synthetic copy after the pause race');
    if(await snapshot()!==beforePauseRace+1)throw new Error('Private mode blocked a copy after the pause race.');
    return{privateCases,textCases,nativeQueries:true,fallback:true,racedReadCalls:readCalls,payloadReads,historyUnchanged:remaining===baseline,privateMode:true,pauseRace:true};
-  }finally{clipboard.read=originalRead;await idle();}
+  }finally{
+   clipboard.read=originalRead;await idle();
+   // Leave the line as it was found, so later shelf checks see their own items.
+   try{
+    const extra=api.store.data.items.filter(item=>!baselineIds.has(item.id)).map(item=>item.id);
+    if(extra.length){api.store.modify('trash',{ids:extra});api.store.modify('delete',{ids:extra});}
+   }catch(error){console.warn('Clipboard admission acceptance cleanup:',error?.message||error);}
+  }
  },{contract});
  assert.equal(result.privateCases,contract.privateMarkers.length*2);assert.equal(result.textCases,contract.textCases.length);
  assert.ok(result.nativeQueries&&result.fallback&&result.historyUnchanged&&result.privateMode&&result.pauseRace);assert.ok(result.racedReadCalls>=2);assert.equal(result.payloadReads,0);
