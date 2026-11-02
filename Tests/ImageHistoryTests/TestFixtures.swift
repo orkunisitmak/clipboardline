@@ -32,11 +32,14 @@ final class SyntheticFixture {
         try? FileManager.default.removeItem(at: folder)
     }
     var inbox: URL { folder.appendingPathComponent("Screenshots") }
-    func image(owned: Bool = true, name: String? = nil) throws -> URL {
+    private var imageCount: UInt16 = 0
+    /// Each call draws different pixels unless `identicalPixels` is set, because identical copies are one Library item.
+    func image(owned: Bool = true, name: String? = nil, identicalPixels: Bool = false) throws -> URL {
+        imageCount &+= 1
         let dir = owned ? inbox : folder.appendingPathComponent("Originals")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent(name ?? (owned ? "Clipboard \(UUID()).png" : "Screenshot \(UUID()).png"))
-        let pixels: [UInt8] = [40, 160, 210, 255]
+        let pixels: [UInt8] = identicalPixels ? [40, 160, 210, 255] : [UInt8(imageCount & 255), UInt8(imageCount >> 8), 210, 255]
         let provider = try XCTUnwrap(CGDataProvider(data: Data(pixels) as CFData))
         let image = try XCTUnwrap(CGImage(width: 1, height: 1, bitsPerComponent: 8, bitsPerPixel: 32,
             bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: 1),

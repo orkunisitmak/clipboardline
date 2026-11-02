@@ -26,6 +26,10 @@ function text(value, maximum = 1024 * 1024, empty = false) {
   if (typeof value !== 'string' || value.length > maximum || (!empty && !value.length) || value.includes('\0')) fail('Invalid text');
   return value;
 }
+function sizedText(value, empty = false) {
+  if (typeof value === 'string' && Buffer.byteLength(value, 'utf8') > 1024 * 1024) fail('Invalid text');
+  return text(value, 1024 * 1024, empty);
+}
 function ids(value) {
   if (!Array.isArray(value) || value.length > 10000 || value.some(id => typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id))) fail('Invalid item selection');
   return [...new Set(value)];
@@ -98,7 +102,7 @@ function saved(item) { return item.retainedAt != null || item.pinned || item.fol
 function plainURL(value) {
   if (typeof value !== 'string') return null;
   value = value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, '');
-  if (!value || /\s/.test(value) || value.length > 8192) return null;
+  if (!value || /\s/.test(value) || value.length > 8192 || !/^https?:\/\/[^/\\]/i.test(value)) return null;
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
 
@@ -157,6 +161,7 @@ class Store {
     ids([item.id]); if (!KINDS.includes(item.kind) || !Array.isArray(item.folderIds) || !Array.isArray(item.tags)) fail('Invalid library record');
     if (item.text != null) text(item.text, 1024 * 1024, true);
     if(item.note!=null)text(item.note,1024*1024,true);
+    if(item.createdAsNote!=null&&typeof item.createdAsNote!=='boolean')fail('Invalid note marker');
     if(item.retainedAt!=null&&(!Number.isFinite(item.retainedAt)||item.retainedAt<0))fail('Invalid saved timestamp');
     if(item.lastCopiedAt!=null&&(!Number.isFinite(item.lastCopiedAt)||item.lastCopiedAt<0))fail('Invalid copy timestamp');
     if(item.lastCapturedAt!=null&&(!Number.isFinite(item.lastCapturedAt)||item.lastCapturedAt<0))fail('Invalid capture timestamp');
@@ -321,9 +326,11 @@ class Store {
     let textValue = '', url = '', imageFile = '';
     if (kind === 'image') imageFile = this.putPNG(value);
     else if (kind === 'link') { url = plainURL(value) || fail('Invalid URL'); }
-    else textValue = text(value);
+    else textValue = sizedText(value);
     const identity=kind==='text'?textIdentity(textValue):null;
-    const matching = this.data.items.filter(i => i.kind === kind && !i.trashedAt &&
+    // A new note is always its own record, like macOS createNote; only captures deduplicate,
+    // and they never match a note (createdAsNote), so a capture or import cannot merge or drop one.
+    const matching = extra.fresh ? [] : this.data.items.filter(i => i.kind === kind && !i.trashedAt && !i.createdAsNote &&
       (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? linkIdentity(i.url) === linkIdentity(url) : !i.recording&&i.imageFile === imageFile));
     const prior = matching.sort((a, b) => b.updatedAt - a.updatedAt)[0];
     if (kind === 'link' && matching.length > 1) {
@@ -352,6 +359,7 @@ class Store {
     item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
     if(kind==='text')item.text=textValue;
     if (extra.title) item.title = text(extra.title, 500, true);
+    if (extra.createdAsNote) item.createdAsNote = true; // part of the first write, so a stop before retain cannot leave an unmarked note
     if (matching.length > 1) {
       item.pinned ||= matching.some(i => i.pinned);
       item.folderIds = [...new Set(matching.flatMap(i => i.folderIds))]; item.tags = [...new Set(matching.flatMap(i => i.tags))];
@@ -363,6 +371,13 @@ class Store {
     }
     this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
     this.expire(false); this.persist(); return item;
+  }
+  /** A new, retained note record, like macOS createNote. It never reuses a matching capture. */
+  createNote({text: value = '', title = ''} = {}) {
+    const item = this.insert('text', value || 'New note', {fresh: true, createdAsNote: true});
+    if (title) this.modify('details', {id: item.id, name: title});
+    this.modify('retain', {ids: [item.id]});
+    return item;
   }
   textIdentity(item) {
     if(typeof item.text!=='string')return null;
@@ -469,11 +484,11 @@ class Store {
     for (const item of items) {
       if (action === 'pin') {item.pinned = targetPin;if(targetPin)item.retainedAt??=now;}
       else if(action==='retain')item.retainedAt??=now;
-      else if(action==='note')item.note=text(payload.note,1024*1024,true);
+      else if(action==='note')item.note=sizedText(payload.note,true);
       else if(action==='details') {
         if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
-        if(payload.note!==undefined)item.note=text(payload.note,1024*1024,true);
-        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=text(payload.text,1024*1024,true);}
+        if(payload.note!==undefined)item.note=sizedText(payload.note,true);
+        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }
       else if(action==='markCopied'){item.lastCopiedAt=now;item.captureRevision=crypto.randomUUID();}
       else if (action === 'name') { item.name = text(payload.name, 200, true).trim(); item.pinned = true; item.retainedAt??=now; }
@@ -497,7 +512,7 @@ class Store {
       } else if (action === 'remove') { if (saved(item)) item.hiddenFromShelf = true; else{item.trashedAt = now;item.trashRevision=crypto.randomUUID();} }
       else if (action === 'trash') item.trashedAt = now;
       else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; }
-      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = text(payload.text, 1024 * 1024, true); }
+      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = sizedText(payload.text, true); }
       else if (action === 'saveImage') {
         if (item.kind !== 'image' || item.recording || typeof payload.dataUrl !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(payload.dataUrl) || payload.dataUrl.length > 90_000_000) fail('Invalid image edit');
         const annotations = payload.annotations ?? []; const crop = payload.crop ?? null;

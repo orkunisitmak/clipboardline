@@ -370,10 +370,11 @@ enum ActionBarMenuAction: String, CaseIterable {
         func require(_ enabled: Bool, _ reason: String) -> (Bool, String) { (enabled, enabled ? "" : reason) }
         switch action {
         case .newNote, .newFolder, .scopeSaved, .scopeFavorites, .scopeUnorganized, .scopeRecent, .scopeTrash,
-             .grid, .list, .toggleSidebar, .toggleInspector, .toggleFullscreen, .filters, .clearFilters,
+             .grid, .list, .toggleSidebar, .toggleInspector, .toggleFullscreen, .filters,
              .sortNewest, .sortOldest, .sortTitle, .sortTitleDescending, .sortCopied, .sortRelevance,
              .searchAll, .searchText, .searchVisual, .daysAny, .days7, .days30:
             return require(c.libraryAvailable, L("Library unavailable"))
+        case .clearFilters: return require(c.libraryAvailable && c.hasLibraryFilters, c.libraryAvailable ? L("No filters to clear") : L("Library unavailable"))
         case .newSubfolder:
             let isRootFolder: Bool
             if case let .collection(id) = c.libraryScope { isRootFolder = c.collections.contains { $0.id == id && $0.parentID == nil } } else { isRootFolder = false }
