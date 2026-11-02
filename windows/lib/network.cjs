@@ -69,6 +69,7 @@ function metadataGuard(url){
   for(const key of url.searchParams.keys()){const normalized=key.toLowerCase().replace(/[^a-z0-9]/g,'');if(/^(xamz|xgoog|oauth)/.test(normalized)||sensitive.has(normalized))throw new Error('Sensitive link parameters are not fetched automatically.');}
 }
 function metadataFetch(input,options={}){return boundedFetch(input,{deadline:20000,...options,guard:metadataGuard});}
+function thumbnailFetch(input,options={}){return metadataFetch(input,{maximum:5*1024*1024,...options});}
 const NAMED_ENTITIES = {amp:'&',quot:'"',lt:'<',gt:'>',apos:'\'',nbsp:' ',ccedil:'ç',Ccedil:'Ç',ouml:'ö',Ouml:'Ö',uuml:'ü',Uuml:'Ü',gbreve:'ğ',Gbreve:'Ğ',scedil:'ş',Scedil:'Ş',inodot:'ı',Idot:'İ',acirc:'â',icirc:'î',ucirc:'û',auml:'ä',Auml:'Ä',szlig:'ß',eacute:'é',Eacute:'É',egrave:'è',agrave:'à',aacute:'á',iacute:'í',oacute:'ó',uacute:'ú',ntilde:'ñ',ndash:'–',mdash:'—',hellip:'…',lsquo:'‘',rsquo:'’',ldquo:'“',rdquo:'”',laquo:'«',raquo:'»',bull:'•',middot:'·',copy:'©',reg:'®',trade:'™',euro:'€',pound:'£'};
 const ENTITY = new RegExp(`&(?:#(\\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|(${Object.keys(NAMED_ENTITIES).join('|')}));`, 'g');
 // Titles such as "It&#8217;s" or "A&#x2F;B" must not show raw references.
@@ -125,4 +126,4 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   }
   return {title: title.slice(0, 500), thumbnail};
 }
-module.exports = {publicAddress, publicURL, boundedFetch, metadataGuard,metadataFetch,linkMetadata};
+module.exports = {publicAddress, publicURL, boundedFetch, metadataGuard,metadataFetch,thumbnailFetch,linkMetadata};
