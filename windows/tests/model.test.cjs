@@ -117,6 +117,12 @@ test('opening the library removes temporary copies a killed process left behind'
   new Store(dir,{clock:()=>1000});
   for(const name of left)assert.equal(fs.existsSync(path.join(dir,name)),false);assert.ok(fs.existsSync(path.join(dir,other)));
 }));
+test('a temporary library copy that cannot be removed is reported',()=>fixture((_s,_time,dir)=>{
+  const file=path.join(dir,'library.json.tmp-12345678-1234-4234-8234-123456789abc'),unlink=fs.unlinkSync;fs.writeFileSync(file,'deleted text');
+  fs.unlinkSync=target=>{if(target===file)throw Object.assign(new Error('Synthetic lock'),{code:'EPERM'});return unlink(target);};
+  try{assert.match(new Store(dir,{clock:()=>1000}).privacyWarning,/temporary copy of the library/);}finally{fs.unlinkSync=unlink;}
+  assert.ok(fs.existsSync(file));
+}));
 test('ordinary removal and retention preserve managed images for undo and Trash recovery',()=>fixture((s,time)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('remove',{ids:[item.id]});assert.ok(fs.existsSync(file));s.modify('undo');assert.equal(item.trashedAt,null);
   time(32*86400000);s.expire();assert.ok(item.trashedAt);assert.ok(fs.existsSync(file));s.modify('restore',{ids:[item.id]});assert.ok(fs.existsSync(s.mediaPath(item.id)));
