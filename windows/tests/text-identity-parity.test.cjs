@@ -38,7 +38,8 @@ test('normalized recapture repairs old duplicate groups without dropping names, 
   store.modify('folder',{ids:[first.id],folderId:folder.id});store.modify('tag',{ids:[second.id],tags:['keep']});
   store.modify('details',{id:second.id,note:'Preserve this note'});store.modify('editText',{id:second.id,text:'cafe\u0301\r\nline\n'});
   now=2000;const latest=store.insert('text','\ncafé\nline\r\n');
-  assert.equal(store.data.items.length,1);assert.equal(latest.name,'Named synthetic reference');assert.equal(latest.pinned,true);
+  // Like macOS, the merged duplicate stays recoverable in Trash.
+  assert.deepEqual(store.data.items.filter(item=>!item.trashedAt).map(item=>item.id),[latest.id]);assert.equal(store.data.items.filter(item=>item.trashedAt).length,1);assert.equal(latest.name,'Named synthetic reference');assert.equal(latest.pinned,true);
   assert.deepEqual(latest.folderIds,[folder.id]);assert.deepEqual(latest.tags,['keep']);assert.equal(latest.note,'Preserve this note');
   assert.equal(latest.text,'\ncafé\nline\r\n');
  }finally{fs.rmSync(directory,{recursive:true,force:true});}
