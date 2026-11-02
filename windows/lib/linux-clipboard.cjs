@@ -47,6 +47,11 @@ function markerTarget(map,types){
   }
   return null;
 }
+// wl-copy and xclip outlive the app as selection owners, and Node leaves Chromium's
+// open descriptors to its children. Without this they would keep the app's caches,
+// sockets and pipes open after it quits. POSIX sh cannot close descriptors above 9.
+const CLOSE_INHERITED='for fd in /proc/self/fd/*; do fd=${fd##*/}; if ((fd>2)); then eval "exec $fd>&-" 2>/dev/null; fi; done; exec "$@"';
+function ownerCommand(file,args,find=which){return find('bash')?['bash',['-c',CLOSE_INHERITED,'bash',file,...args]]:[file,args];}
 function blob(bytes,type){return{type,size:bytes.length,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.length)};}
 
 class LinuxClipboard{
@@ -86,7 +91,7 @@ class LinuxClipboard{
   // wl-copy and xclip stay alive as the selection owner; never wait for exit.
   write(type,bytes){
     if(!this.available)return Promise.reject(new Error('No Linux clipboard tool is available. Install wl-clipboard or xclip.'));
-    const[file,args]=this.writeCommand(type);
+    const[file,args]=ownerCommand(...this.writeCommand(type));
     return new Promise((resolve,reject)=>{
       const child=spawn(file,args,{stdio:['pipe','ignore','ignore'],detached:true});
       let settled=false;const done=error=>{if(settled)return;settled=true;error?reject(error):resolve();};
@@ -191,6 +196,7 @@ class ClipboardWatcher{
     void tick();this.timer=setInterval(()=>void tick(),this.interval);
   }
   read(){return this.sequence;}
+  mode(){return this.timer?this.clipboard.kind==='wayland'?'focused-polling':'x11-polling':this.child?'wl-clipboard':'none';}
   kill(){this.stopped=true;clearInterval(this.timer);this.timer=null;this.child?.kill();this.child=null;}
 }
 // A Linux selection disappears when the app that copied it quits. Only a captured
@@ -223,4 +229,4 @@ function pixelFingerprint(bytes,decode){
   return 'image:pixels:'+image.width+'x'+image.height+':'+crypto.createHash('sha256').update(image.bitmap).digest('hex');
 }
 function keptImage(id,items){return items.find(item=>item.id===id&&item.kind==='image'&&!item.recording&&!item.trashedAt&&!item.hiddenFromShelf)||null;}
-module.exports={keptImage,pixelFingerprint,decodableJPEG,LinuxClipboard,ClipboardWatcher,clipboardSignature,writeClipboard,fileClipboard,backend,which,run,TEXT_TYPES,IMAGE_TYPES,FORMAT_MAP,MARKER_TYPE};
+module.exports={keptImage,pixelFingerprint,decodableJPEG,ownerCommand,LinuxClipboard,ClipboardWatcher,clipboardSignature,writeClipboard,fileClipboard,backend,which,run,TEXT_TYPES,IMAGE_TYPES,FORMAT_MAP,MARKER_TYPE};

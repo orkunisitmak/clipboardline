@@ -48,16 +48,18 @@ function monitor(changed, failed, focused = () => {}, ready = () => {}) {
   child.on('error',error=>{stopped();failed(error);}); child.on('exit',code => { stopped();if(code) failed(new Error('Native clipboard monitor stopped.')); }); return child;
 }
 function linuxBridge(){
-  const {LinuxDesktop}=require('./linux-desktop.cjs'),{LinuxClipboard,ClipboardWatcher,backend,decodableJPEG}=require('./linux-clipboard.cjs');
+  const {LinuxDesktop}=require('./linux-desktop.cjs'),{LinuxClipboard,ClipboardWatcher,backend,which,decodableJPEG}=require('./linux-clipboard.cjs');
   const desktop=new LinuxDesktop(),clipboard=new LinuxClipboard({kind:backend({display:desktop.session.backend}),convertImage:bytes=>{
     if(!decodableJPEG(bytes))throw new Error('Clipboard image format is unsupported.');
     const image=require('electron').nativeImage.createFromBuffer(bytes);if(image.isEmpty())throw new Error('Clipboard image format is unsupported.');return image.toPNG();
   }});let watcher=null;
-  const context={values:()=>({images:true,focused:true})};
-  return {linux:{desktop,clipboard,context},clipboardSequence:async()=>watcher?watcher.read():null,cancelPaste:()=>desktop.cancel(),capture:()=>desktop.capture(),captureDiagnostics:async()=>desktop.diagnostics(),selfTestFocusPolicy:async()=>desktop.diagnostics(),
+  const context={values:()=>({images:true,focused:true})},display=desktop.session.backend;
+  let optional=null,problem='';
+  const packages=()=>optional??=[...(clipboard.available?[]:[display==='x11'?'xclip':'wl-clipboard']),...(which('ffmpeg')&&which('ffprobe')?[]:['ffmpeg']),...(desktop.session.type==='wayland'&&!which('gdbus')?['gdbus']:[]),...(desktop.keyBackend()?[]:[display==='x11'?'xdotool':'ydotool'])];
+  return {linux:{desktop,clipboard,context},status:()=>({session:desktop.session.type,backend:display,clipboardMonitor:watcher?.mode()||'none',automaticPaste:!!desktop.keyBackend(),missing:packages(),problem}),clipboardSequence:async()=>watcher?watcher.read():null,cancelPaste:()=>desktop.cancel(),capture:()=>desktop.capture(),captureDiagnostics:async()=>desktop.diagnostics(),selfTestFocusPolicy:async()=>desktop.diagnostics(),
     restore:target=>desktop.restore(target),preparePaste:target=>desktop.preparePaste(target),validatePaste:target=>desktop.validatePaste(target),paste:target=>desktop.paste(target),
     copyImages:payload=>clipboard.writeFiles(payload?.files),
-    monitor(changed,failed=()=>{}){if(!clipboard.available)return null;watcher=new ClipboardWatcher(clipboard,{changed,failed,context:()=>context.values()}).start();const active=watcher;return{kill:()=>{active.kill();if(watcher===active)watcher=null;}};}};
+    monitor(changed,failed=()=>{}){if(!clipboard.available)return null;watcher=new ClipboardWatcher(clipboard,{changed,failed:error=>{problem=error.message;failed(error);},context:()=>context.values()}).start();const active=watcher;return{kill:()=>{active.kill();if(watcher===active)watcher=null;}};}};
 }
 if(process.platform==='linux')module.exports=linuxBridge();
 else module.exports = {clipboardSequence:async({standalone=false}={})=>{if(!standalone&&sequenceQueries)return sequenceQueries.read();if(process.platform!=='win32')return null;const value=await run('ClipboardSequence');return value.sequence;},cancelPaste:()=>{for(const child of pasteChildren)child.kill();pasteChildren.clear();},capture:()=>run('Capture'),captureDiagnostics:async()=>{const trace=lastCaptureTrace,details=await run('CaptureDiagnostics');return trace?{...details,captureTrace:trace}:details;},selfTestFocusPolicy:()=>run('FocusPolicySelfTest'), restore:target=>run('Restore',target),preparePaste:target=>run('PreparePaste',target),validatePaste:target=>run('ValidatePaste',{...target,prepared:true}),paste:target=>run('Paste',target),copyImages:payload=>run('CopyImages',payload),monitor};

@@ -27,7 +27,9 @@ const native = require('./lib/native.cjs');
 const {setAutostart}=require('./lib/linux-autostart.cjs');
 const {portalScreenshot}=require('./lib/linux-screenshot.cjs');
 const {which,keptImage,pixelFingerprint,writeClipboard:writeLinuxClipboard}=require('./lib/linux-clipboard.cjs');
-const {backendRelaunchArguments,launchCommand,RELAUNCHED}=require('./lib/linux-desktop.cjs');
+const {backendRelaunchArguments,launchCommand,mapAnimationDelay,RELAUNCHED}=require('./lib/linux-desktop.cjs');
+const {OverlayFocus}=require('./lib/linux-overlay.cjs');
+const {ManualUpdates,RELEASES}=require('./lib/linux-updates.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
 const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
@@ -38,7 +40,9 @@ const {createOcrQueue}=require('./lib/ocr-queue.cjs');
 const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
-const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
+const packageInfo=require('./package.json');
+// Platform build counters are independent updater identifiers.
+const BUILD_NUMBER=process.platform==='linux'?Number(packageInfo.clipboardLineLinuxBuild)||1:Number(packageInfo.clipboardLineBuild)||63;
 const testMode = process.argv.includes('--test-mode');
 const testFolder = process.argv.find(value=>value.startsWith('--test-data='))?.slice('--test-data='.length);
 const testTray=testMode&&!!testFolder&&process.argv.includes('--test-tray');
@@ -47,6 +51,13 @@ const development=!app.isPackaged&&!testMode;
 if(development){const directory=path.join(app.getPath('appData'),'ClipBoardLine Dev');fs.mkdirSync(directory,{recursive:true,mode:0o700});app.setPath('userData',directory);}
 app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
 const linux=process.platform==='linux'?native.linux:null;
+// Wayland clients see neither the pointer position nor their own placement: the
+// compositor puts the line on the active output and maximizing fits it to that
+// output's work area, which a guessed display cannot do with two screens.
+const waylandLine=linux?.desktop.session.backend==='wayland';
+// KWin keeps the line above. Elsewhere a window that takes focus buries it.
+const overlayFocus=waylandLine&&linux.desktop.windowBackend()!=='kwin'?new OverlayFocus():null;
+const revealDelay=linux?Math.max(80,mapAnimationDelay()):0;
 // Wayland compositors deliver global shortcuts only through the desktop portal.
 if(linux?.desktop.session.backend==='wayland')app.commandLine.appendSwitch('enable-features','GlobalShortcutsPortal');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
@@ -93,7 +104,7 @@ async function readSemanticImage(id){
  const resized=image.getSize();return{bitmap:image.toBitmap(),width:resized.width,height:resized.height};
 }
 
-function state(result,{surfaceOnly=false}={}) { const light=surfaceOnly&&lastBroadcastLibraryRevision===store.revision;return {...(light?{surfaceOnly:true}:store.publicState()),libraryRevision:store.revision,version:app.getVersion(),build:BUILD_NUMBER,platform:process.platform,development,view,windowMode:view==='shelves'?'overlay':'normal',windowMaximized:window?.isMaximized()||false,windowVisible:desiredVisible&&(window?.isVisible()||false),shortcutRecordingToken:shortcutRecording?.token||null,message:message||store.privacyWarning||'',viewEvent,imageSearch:{...(imageSearch?.state||{available:false,indexing:false,pending:0,revision:0})},update:{...updates.state},...(result===undefined?{}:{result})}; }
+function state(result,{surfaceOnly=false}={}) { const light=surfaceOnly&&lastBroadcastLibraryRevision===store.revision;return {...(light?{surfaceOnly:true}:store.publicState()),libraryRevision:store.revision,version:app.getVersion(),build:BUILD_NUMBER,platform:process.platform,...(linux?{linux:native.status()}:{}),development,view,windowMode:view==='shelves'?'overlay':'normal',windowMaximized:window?.isMaximized()||false,windowVisible:desiredVisible&&(window?.isVisible()||false),shortcutRecordingToken:shortcutRecording?.token||null,message:message||store.privacyWarning||'',viewEvent,imageSearch:{...(imageSearch?.state||{available:false,indexing:false,pending:0,revision:0})},update:{...updates.state},...(result===undefined?{}:{result})}; }
 function broadcast({surfaceOnly=false}={}) {
   // Visibility and native bounds do not change library content. Retain the
   // renderer's existing rows instead of cloning and sending the full history
@@ -144,23 +155,31 @@ async function show(next='shelves',event=null) {
       if(generation!==visibilityGeneration)return;
       previous=pasteTargets.capture(target);
     }
+    // A Wayland line under another window reappears from the top.
+    const buried=!!overlayFocus&&view==='shelves'&&next==='shelves'&&window.isVisible()&&!window.isFocused();
     rememberNormalBounds();view=next;viewEvent=event?{...event,serial:crypto.randomUUID()}:null;message='';
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     applyingBounds=true;
     try{
       const surface=next==='shelves'?'overlay':'normal';
-      if(windowSurface!==surface){window.setMinimumSize(next==='shelves'?1:640,next==='shelves'?1:360);window.setResizable(next!=='shelves');window.setMaximizable(next!=='shelves');window.setSkipTaskbar(next==='shelves');window.setBackgroundColor(next==='shelves'?'#00000000':'#18191d');window.setHasShadow(next!=='shelves');window.setAlwaysOnTop(next==='shelves');windowSurface=surface;}
-      const bounds=next==='shelves'?display.workArea:fitNormalBounds(display.workArea);windowBounds.apply(window,bounds,{overlay:next==='shelves'});if(next!=='shelves'&&normalMaximized)window.maximize();
+      // The compositor answers an unmaximize with its own restore size; size
+      // the library only after that answer so the remembered size wins.
+      if(waylandLine&&next!=='shelves'&&windowSurface==='overlay'&&window.isMaximized())await new Promise(resolve=>{const done=()=>{clearTimeout(timer);window.removeListener('resize',done);resolve();},timer=setTimeout(done,500);window.once('resize',done);window.unmaximize();});
+      if(generation!==visibilityGeneration)return;
+      if(windowSurface!==surface){window.setMinimumSize(next==='shelves'?1:640,next==='shelves'?1:360);window.setResizable(next!=='shelves'||waylandLine);window.setMaximizable(next!=='shelves'||waylandLine);window.setSkipTaskbar(next==='shelves');window.setBackgroundColor(next==='shelves'?'#00000000':'#18191d');window.setHasShadow(next!=='shelves');window.setAlwaysOnTop(next==='shelves');windowSurface=surface;}
+      const bounds=next==='shelves'?display.workArea:fitNormalBounds(display.workArea);if(waylandLine&&next==='shelves'){if(window.isMinimized())window.restore();}else windowBounds.apply(window,bounds,{overlay:next==='shelves'});if(next!=='shelves'&&normalMaximized)window.maximize();
     }finally{applyingBounds=false;}
-    const animate=next==='shelves'&&(!window.isVisible()||wasClosing);
-    if(animate)await shelfMotion.request('prepare',{hidden:!window.isVisible()});else await shelfMotion.request('reset');
+    const mapping=!window.isVisible(),animate=next==='shelves'&&(mapping||wasClosing||buried),warm=animate&&mapping&&revealDelay>0;
+    if(animate)await shelfMotion.request('prepare',{hidden:!window.isVisible()||buried,...(warm?{warm:true}:{})});else await shelfMotion.request('reset');
     if(generation!==visibilityGeneration)return;
+    if(waylandLine&&next==='shelves')window.maximize();
     window.show();window.focus();
     if(linux){await linux.desktop.present(next==='shelves').catch(()=>{});if(generation!==visibilityGeneration)return;}
     windowBounds.shown(window);broadcast({surfaceOnly:true});
     // Commands can await the settled pixels, but the window and keyboard are
     // available immediately. A concurrent toggle can cancel this animation.
-    if(animate)await shelfMotion.request('open');
+    // A newly mapped line waits out the desktop's own fade-in while its tiles raster.
+    if(animate)await shelfMotion.request('open',warm?{after:revealDelay}:{});
   }finally{showing--;}
 }
 async function hide(restore=true) {
@@ -184,6 +203,7 @@ async function hide(restore=true) {
   hidePromise=operation;
   try{await operation;}finally{if(hidePromise===operation)hidePromise=null;}
 }
+async function openDialog(options){const release=overlayFocus?.hold();try{return await dialog.showOpenDialog(window,options);}finally{release?.();}}
 async function clipboardContent() {
   const content=await readClipboardContent({clipboard:linux?.clipboard||clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL,captureLinks:store?.data.settings.captureLinks!==false});
   if(linux&&content?.kind==='image')content.fingerprint=imagePixels(content.value)||content.fingerprint;
@@ -432,13 +452,13 @@ async function command(action,payload={}) {
   }
   else if(action==='capture')result=await capture();
   else if(action==='newNote'){const item=store.insert('text',payload.text||'New note');if(payload.title)store.modify('details',{id:item.id,name:payload.title});store.modify('retain',{ids:[item.id]});result={id:item.id};}
-  else if(action==='import'){const response=await dialog.showOpenDialog(window,{properties:['openFile','multiSelections'],filters:[{name:'Images, recordings and text',extensions:['png','jpg','jpeg','webp','bmp','mov','mp4','txt','md']}]});const imported=[],failures=[];for(const file of response.filePaths){try{const item=await importFile(file);imported.push(item.id);if(item.kind==='link')void enrich(item.id);}catch(error){failures.push(path.basename(file)+': '+error.message);}}result={ids:imported,failed:failures.length};if(failures.length)message=(imported.length?`Imported ${imported.length} · failed ${failures.length}. `:'')+failures[0];}
+  else if(action==='import'){const response=await openDialog({properties:['openFile','multiSelections'],filters:[{name:'Images, recordings and text',extensions:['png','jpg','jpeg','webp','bmp','mov','mp4','txt','md']}]});const imported=[],failures=[];for(const file of response.filePaths){try{const item=await importFile(file);imported.push(item.id);if(item.kind==='link')void enrich(item.id);}catch(error){failures.push(path.basename(file)+': '+error.message);}}result={ids:imported,failed:failures.length};if(failures.length)message=(imported.length?`Imported ${imported.length} · failed ${failures.length}. `:'')+failures[0];}
   else if(action==='searchImages'){if(!imageSearch)throw new Error('Offline image search is unavailable.');result=await imageSearch.search(payload.query,payload.eligibleIds);}
   else if(action==='ocr')result=await ocr(payload.id);
   else if(action==='copyOCR'){const recognized=await ocr(payload.id);if(!recognized.text.trim())throw new Error('No text found in this image.');await writeClipboard([{kind:'text',text:recognized.text}]);result=recognized;notify('Recognized text copied');}
   else if(action==='export'){
     const selected=store.selected(ids(payload.ids));if(!selected.length)throw new Error('Select an item first');
-    const response=await dialog.showOpenDialog(window,{properties:['openDirectory','createDirectory']});if(response.filePaths[0]){
+    const response=await openDialog({properties:['openDirectory','createDirectory']});if(response.filePaths[0]){
       const exported=await exportCopies(selected,response.filePaths[0],{mediaPath:id=>store.mediaPath(id)});
       result={count:exported.count,failed:exported.failed};message=exported.message;
     }
@@ -447,7 +467,8 @@ async function command(action,payload={}) {
     const selected=store.selected(ids(payload.ids));if(!selected.length||selected.length>1000)throw new Error('Select up to 1000 items to drag.');
     dragFiles??=new DragFiles(store.directory);const batch=dragFiles.prepare(selected,id=>store.mediaPath(id));
     const image=selected.find(item=>item.kind==='image'),icon=image?nativeImage.createFromPath(store.posterPath(image.id)).resize({width:64}):appIcon();
-    try{window.webContents.startDrag({files:batch.files,icon});}catch(error){if(batch.batch)dragFiles.remove(batch.batch);throw error;}
+    const release=overlayFocus?.hold();
+    try{window.webContents.startDrag({files:batch.files,icon});}catch(error){if(batch.batch)dragFiles.remove(batch.batch);throw error;}finally{if(release)setTimeout(release,500);}
   }
   else if(action==='setSettings'){
     if(payload.recordingToken!==undefined){if(typeof payload.recordingToken!=='string')throw new Error('Invalid shortcut recorder.');finishShortcutRecording(payload.recordingToken);}
@@ -461,9 +482,10 @@ async function command(action,payload={}) {
     if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key))){lastGeneration.sequence=0;lastFingerprint='';}
     if(!linux&&Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
-  }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
+  }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await openDialog({properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
   else if(action==='unwatchFolder'){const index=payload.index;if(!Number.isInteger(index)||index<0||index>=store.data.settings.watchFolders.length)throw new Error('Invalid watched folder');store.modify('setSettings',{patch:{watchFolders:store.data.settings.watchFolders.filter((_v,i)=>i!==index)}});configureWatchers();}
-  else if(action==='checkUpdates'||action==='refreshUpdates'){if(linux)updates.set({status:'development',message:'Linux builds update through your package manager or a new AppImage release.'});else if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
+  else if(action==='checkUpdates'||action==='refreshUpdates'){if(linux)await updates.check();else if(development)updates.set({status:'development',message:'Development builds use a separate library. Install an official release to use its signed update channel.'});else await updates.check({force:action==='checkUpdates'});}
+  else if(action==='openReleases')await shell.openExternal(RELEASES);
   else if(action==='installUpdate'){
     if(development)throw new Error('Development builds cannot install official updates.');
     if(process.platform!=='win32')throw new Error('Windows installer can run only on Windows.');
@@ -493,9 +515,7 @@ else if(relaunch){
   app.exit(0);
 }
 else app.whenReady().then(async()=>{
-  store=new Store(app.getPath('userData'));if(linux)linux.context.values=()=>({images:!!store.data.settings.captureImages,focused:!!window&&!window.isDestroyed()&&window.isFocused()});mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
-  // The signed Windows channel never installs on Linux; packages update the app.
-  if(linux)Object.assign(updates.state,{status:'development',message:'Linux builds update through your package manager or a new AppImage release.'});
+  store=new Store(app.getPath('userData'));if(linux)linux.context.values=()=>({images:!!store.data.settings.captureImages,focused:!!window&&!window.isDestroyed()&&window.isFocused()});mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=linux?new ManualUpdates({build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast()}):new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
   updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!linux&&!development&&!testMode&&store.data.settings.autoCheckUpdates});
   const searchPaths=modelPaths({packaged:app.isPackaged,resourcesPath:process.resourcesPath,sourceDirectory:__dirname});
   let ortModule=null,runtimeDirectory=null;try{ortModule=require.resolve('onnxruntime-web/wasm').replace(/app[.]asar([\\/])/,'app.asar.unpacked$1');runtimeDirectory=path.dirname(ortModule);}catch{}
@@ -525,14 +545,17 @@ else app.whenReady().then(async()=>{
   window.webContents.on('will-frame-navigate',event=>{if(!event.isMainFrame||event.url!==entry)event.preventDefault();});
   window.webContents.on('will-attach-webview',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
-  window.on('focus',()=>{if(!showing&&!pastePromise)previous=pasteTargets.reenter();});
+  window.on('focus',()=>{overlayFocus?.focused();if(!showing&&!pastePromise)previous=pasteTargets.reenter();});
   window.on('close',event=>{finishShortcutRecording();if(!closing){event.preventDefault();void hide();}});
   window.on('resize',()=>{if(applyingBounds)return;rememberNormalBounds();broadcast({surfaceOnly:true});});window.on('move',rememberNormalBounds);window.on('maximize',()=>{if(applyingBounds)return;rememberNormalBounds();broadcast({surfaceOnly:true});});window.on('unmaximize',()=>{if(applyingBounds)return;rememberNormalBounds();broadcast({surfaceOnly:true});});
   window.webContents.on('did-finish-load',()=>{lastBroadcastLibraryRevision=-1;});
   ipcMain.handle('clipboardline:state',event=>{trusted(event);return state();});
   ipcMain.on('clipboardline:shelf-motion-finished',(event,value)=>{trusted(event);shelfMotion.acknowledge(value);});
   ipcMain.handle('clipboardline:command',async(event,action,payload)=>{trusted(event);try{return await command(action,payload);}catch(error){notify(error.message);return state({error:error.message});}});
-  window.on('blur',()=>{if(shortcutRecording){finishShortcutRecording();broadcast({surfaceOnly:true});}});
+  window.on('blur',()=>{
+    if(shortcutRecording){finishShortcutRecording();broadcast({surfaceOnly:true});}
+    if(overlayFocus&&view==='shelves'&&desiredVisible&&!pastePromise){const generation=visibilityGeneration;overlayFocus.blurred(()=>generation===visibilityGeneration&&desiredVisible&&view==='shelves'&&window.isVisible()&&!window.isFocused(),()=>void hide(false));}
+  });
   window.on('hide',()=>finishShortcutRecording());
   window.webContents.on('render-process-gone',()=>finishShortcutRecording());
   window.webContents.on('did-start-navigation',()=>finishShortcutRecording());

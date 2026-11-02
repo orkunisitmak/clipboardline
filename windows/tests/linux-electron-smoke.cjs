@@ -44,6 +44,24 @@ async function main(){
     await until(async()=>{await application.evaluate(()=>global.__clipboardLineTest.readClipboard());return(await page.evaluate(()=>window.clipboardLine.state())).items;},items=>items.some(item=>item.kind==='image'));
     check('system PNG copy becomes an image item');
 
+    const images=async()=>(await page.evaluate(()=>window.clipboardLine.state())).items.filter(item=>item.kind==='image');
+    const before=await images();
+    await application.evaluate(async(_electron,id)=>{const t=global.__clipboardLineTest;await t.writeClipboard(t.store.selected([id]));},before[0].id);
+    await application.evaluate(()=>global.__clipboardLineTest.readClipboard());
+    assert.equal((await images()).length,before.length);check('an application image copy is not re-admitted');
+
+    const status=await page.evaluate(()=>window.clipboardLine.state());
+    assert.equal(status.update.status,'manual');assert.ok(status.linux.clipboardMonitor!=='none',status.linux.clipboardMonitor);
+    check(`Settings report manual updates and ${status.linux.backend} capture through ${status.linux.clipboardMonitor}`);
+
+    await application.evaluate(()=>global.__clipboardLineTest.command('show'));
+    const surface=()=>application.evaluate(()=>{const w=global.__clipboardLineTest.getWindow();return{maximized:w.isMaximized(),visible:w.isVisible()};});
+    if(status.linux.backend==='wayland'){
+      await until(surface,value=>value.visible&&value.maximized);check('the Wayland line is maximized by the compositor');
+      await application.evaluate(()=>global.__clipboardLineTest.command('library'));
+      await until(surface,value=>value.visible&&!value.maximized);check('the Library leaves the maximized line for a normal window');
+    }
+
     const native=await application.evaluate(()=>global.__clipboardLineTest.native.captureDiagnostics());
     assert.equal(native.platform,'linux');check(`desktop bridge reports ${native.session}/${native.compositor} (window: ${native.windowBackend||'compositor focus return'}, keys: ${native.keyBackend||'manual paste'})`);
   }finally{await application.close().catch(()=>{});fs.rmSync(data,{recursive:true,force:true});}

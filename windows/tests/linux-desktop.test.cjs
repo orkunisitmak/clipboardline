@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {LinuxDesktop,session,handleFor,backendRelaunchArguments,launchCommand,RELAUNCHED}=require('../lib/linux-desktop.cjs');
-const {LinuxClipboard,ClipboardWatcher,backend,keptImage,pixelFingerprint,decodableJPEG,clipboardSignature,writeClipboard,fileClipboard,FORMAT_MAP,MARKER_TYPE}=require('../lib/linux-clipboard.cjs');
+const {LinuxClipboard,ClipboardWatcher,backend,keptImage,pixelFingerprint,decodableJPEG,clipboardSignature,writeClipboard,fileClipboard,ownerCommand,FORMAT_MAP,MARKER_TYPE}=require('../lib/linux-clipboard.cjs');
 const {readClipboardContent}=require('../lib/clipboard-policy.cjs');
 const {setAutostart,autostartEnabled,autostartEntry}=require('../lib/linux-autostart.cjs');
 const {PasteTargetTracker}=require('../lib/paste-target.cjs');
@@ -282,4 +282,14 @@ test('writes carry the marker and every format; a hidden Wayland write falls bac
   assert.equal(await writeClipboard({electron,ClipboardItem:Item,tool,marker,text:'t',focused:true,delay:async()=>{}}),'electron');assert.deepEqual(tool.writes,[]);
   tool.read=async()=>[];assert.equal(await writeClipboard({electron,ClipboardItem:Item,tool,marker,text:'t',focused:true,delay:async()=>{}}),'wl-copy');assert.deepEqual(tool.writes,[['text','t']]);
   assert.deepEqual(fileClipboard(['/tmp/a b.png']),{uriList:'file:///tmp/a%20b.png\r\n',gnome:'copy\nfile:///tmp/a%20b.png'});
+});
+
+test('a surviving selection owner keeps only its standard streams',async t=>{
+  if(process.platform!=='linux')return t.skip('needs /proc');
+  const {spawn}=require('node:child_process'),descriptor=fs.openSync(process.execPath,'r');t.after(()=>fs.closeSync(descriptor));
+  const [file,args]=ownerCommand('sh',['-c','ls /proc/self/fd']);
+  const child=spawn(file,args,{stdio:['pipe','pipe','ignore',...Array(descriptor>3?descriptor-3:0).fill('ignore'),descriptor]});let output='';child.stdout.on('data',chunk=>{output+=chunk;});
+  await new Promise(resolve=>child.on('close',resolve));
+  assert.deepEqual(output.trim().split('\n').map(Number).filter(value=>value>2&&value===descriptor),[]);
+  assert.deepEqual(ownerCommand('wl-copy',['--type','x'],()=>null),['wl-copy',['--type','x']]);
 });

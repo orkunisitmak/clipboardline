@@ -63,7 +63,7 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
  const context={window:{clipboardLine:api,addEventListener(name,listener){if(!listeners.has('window:'+name))listeners.set('window:'+name,[]);listeners.get('window:'+name).push(listener);}},document,HTMLElement:Element,HTMLTextAreaElement:TextArea,Image:FixtureImage,console,structuredClone,URL,Set,Date,JSON,Math,Number,String,requestAnimationFrame:fn=>queuedAnimationFrames?animationFrames.push(fn):fn(),setTimeout:fn=>{queueMicrotask(fn);return 1;},clearTimeout(){}};
  vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../locales.js'),'utf8'),context,{filename:'locales.js'});vm.runInContext(fs.readFileSync(path.join(__dirname,'../renderer.js'),'utf8'),context,{filename:'renderer.js'});
  async function ready(){await new Promise(setImmediate);}
- async function key(code,{ctrl=false,alt=false,shift=false,key,target,composing=false,keyCode=0}={}){const event={code,key:key||(/^Key/.test(code)?code.slice(3).toLowerCase():code==='Space'?' ':code),ctrlKey:ctrl,metaKey:false,altKey:alt,shiftKey:shift,repeat:false,isComposing:composing,keyCode,target:target||new Element(),preventDefault(){this.prevented=true;}};for(const listener of listeners.get('keydown')||[])await listener(event);await ready();return event;}
+ async function key(code,{ctrl=false,alt=false,shift=false,meta=false,key,target,composing=false,keyCode=0}={}){const event={code,key:key||(/^Key/.test(code)?code.slice(3).toLowerCase():code==='Space'?' ':code),ctrlKey:ctrl,metaKey:meta,altKey:alt,shiftKey:shift,repeat:false,isComposing:composing,keyCode,target:target||new Element(),preventDefault(){this.prevented=true;}};for(const listener of listeners.get('keydown')||[])await listener(event);await ready();return event;}
  async function click(action,extra={}){const target=new Element();target.dataset.action=action;Object.assign(target.dataset,extra);target.closest=selector=>selector==='[data-action]'?target:null;for(const listener of listeners.get('click')||[])listener({target,stopPropagation(){}});await ready();}
  async function pointer(type,x,y){const target=document.getElementById('markup-canvas');for(const listener of listeners.get(type)||[])listener({target,clientX:x,clientY:y,pointerId:1,shiftKey:false,preventDefault(){}});await ready();}
  async function input(id,value){const target=document.getElementById(id);target.value=value;target.selectionStart=value.length;for(const listener of listeners.get('input')||[])await listener({target});await ready();}
@@ -787,4 +787,19 @@ test('the Move to Trash confirmation uses the shared localized catalog entry',as
  assert.match(f.overlay,/1 içerik geri alınabilir Çöp’e taşınsın mı\?/);
  f.api.emit({settings:{...f.state.settings,language:'en'}});await f.click('close-modal');await f.click('trash');
  assert.match(f.overlay,/Move 1 items to recoverable Trash\?/);
+});
+
+test('a Linux global shortcut records the Windows key as Super; local shortcuts and Windows keep it as Ctrl',async()=>{
+ const saved=f=>f.commands.filter(value=>value.action==='setSettings').at(-1)?.payload.patch.shortcuts?.toggle;
+ const linux=fixture({platform:'linux'});await linux.ready();await linux.api.command('settings');await linux.ready();await linux.click('settings-tab',{tab:'shortcuts'});
+ await linux.click('record-global',{keyAction:'toggle'});await linux.key('KeyV',{meta:true});await linux.click('confirm-modal');assert.equal(saved(linux),'Super+V');
+ const windows=fixture({platform:'windows'});await windows.ready();await windows.api.command('settings');await windows.ready();await windows.click('settings-tab',{tab:'shortcuts'});
+ await windows.click('record-global',{keyAction:'toggle'});await windows.key('KeyV',{meta:true,alt:true});await windows.click('confirm-modal');assert.equal(saved(windows),'Control+Alt+V');
+});
+test('Linux settings follow the selected language',async()=>{
+ const f=fixture({platform:'linux'});await f.ready();await f.api.command('settings');
+ f.api.emit({settings:{...f.state.settings,language:'tr'},linux:{session:'wayland',backend:'wayland',clipboardMonitor:'focused-polling',automaticPaste:false,missing:['wl-clipboard'],problem:'Install wl-clipboard for background clipboard capture on Wayland.'},update:{...f.state.update,status:'manual',message:'Install newer Linux releases as an AppImage, .deb, .rpm or pacman package.'}});await f.ready();
+ await f.click('settings-tab',{tab:'sources'});for(const text of ['Linux entegrasyonu','Kopyalar yalnızca ClipBoardLine odaktayken yakalanır.','wl-clipboard’u kur','Ctrl+V’ye bas','İsteğe bağlı paketler','dağıtımının paketlerinden kur'])assert.ok(f.main.includes(text),text);
+ await f.click('settings-tab',{tab:'shortcuts'});for(const text of ['Linux kopyalama, yapıştırma','bir sistem kısayolu atayabilirsin','<code>clipboardline --toggle</code>'])assert.ok(f.main.includes(text),text);
+ await f.click('settings-tab',{tab:'updates'});for(const text of ['Sürümler sayfasını aç','Yeni Linux sürümlerini','Linux sürümleri kendini güncellemez'])assert.ok(f.main.includes(text),text);
 });

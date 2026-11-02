@@ -51,6 +51,19 @@ function launchCommand({environment=process.env,execPath=process.execPath,packag
   if(typeof environment.APPIMAGE==='string'&&path.isAbsolute(environment.APPIMAGE)&&appDir&&execPath.startsWith(appDir))return[environment.APPIMAGE];
   return packaged?[execPath]:[execPath,appPath];
 }
+// KWin (Scale) and Mutter fade in every newly mapped window, which would hide a
+// reveal that starts at the same moment. The line waits out that animation;
+// KDE stretches it by the user's animation speed (0 turns animations off).
+function mapAnimationDelay(environment=process.env,read=fs.readFileSync){
+  const desktops=String(environment.XDG_CURRENT_DESKTOP||'').toLowerCase().split(':').map(name=>name.trim());
+  if(!desktops.includes('kde'))return desktops.some(name=>MUTTER_DESKTOPS.has(name))?150:0;
+  let factor=1;
+  try{
+    const home=path.isAbsolute(environment.XDG_CONFIG_HOME||'')?environment.XDG_CONFIG_HOME:path.join(environment.HOME||os.homedir(),'.config');let section='';
+    for(const line of String(read(path.join(home,'kdeglobals'),'utf8')).split('\n')){const value=line.trim();if(value.startsWith('['))section=value;else if(section==='[KDE]'&&value.startsWith('AnimationDurationFactor='))factor=Number(value.slice(24));}
+  }catch{}
+  return Number.isFinite(factor)?Math.round(Math.min(600,Math.max(0,200*factor))):200;
+}
 // KWin exposes window state only to its own scripts. A one-shot script reports
 // through the user journal with a per-call nonce; ids are KWin's window UUIDs.
 const KWIN_ACTIVE="const w=workspace.activeWindow;print(MARK+' '+(w?JSON.stringify({id:String(w.internalId),pid:w.pid}):'null'));";
@@ -192,4 +205,4 @@ class LinuxDesktop{
   cancel(){this.cancelled++;}
   diagnostics(){return{ok:true,platform:'linux',session:this.session.type,compositor:this.session.compositor,windowBackend:this.windowBackend(),keyBackend:this.keyBackend()};}
 }
-module.exports={LinuxDesktop,session,handleFor,focusedSway,backendRelaunchArguments,launchCommand,RELAUNCHED};
+module.exports={LinuxDesktop,session,handleFor,focusedSway,backendRelaunchArguments,launchCommand,mapAnimationDelay,RELAUNCHED};
