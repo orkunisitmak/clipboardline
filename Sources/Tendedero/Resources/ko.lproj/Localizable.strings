@@ -449,6 +449,7 @@
 /* Searchable action bar. */
 "Actions" = "동작";
 "Available on the shelves" = "선반에서 사용할 수 있음";
+"Available in Library" = "라이브러리에서 사용할 수 있음";
 "Available on the shelves or in Library" = "선반 또는 라이브러리에서 사용할 수 있음";
 "Edit item details" = "항목 세부사항 편집";
 "Finish editing first" = "먼저 편집을 완료하세요";
