@@ -49,19 +49,26 @@ def audit(root):
         manifest.append({'file': name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
         # This scanner's own expressions are patterns, not real credentials.
         # Runtime-generated test keys remain in ignored temporary directories.
-        # UTF-16 stores one NUL byte per ASCII character, so also scan both decodings.
-        views = [data]
+        # UTF-16 stores one NUL byte per ASCII character, so also scan each decoding (even or odd start, either byte order).
+        # Decoding the real code units keeps a character like U+010A, whose bytes include 0x0A, on its own line.
+        # An even start comes first; the same text read from a shifted start is skipped, as its line count is unreliable.
+        views = [(data, 0, 0)]
         if b'\0' in data:
-            # Each byte lane holds the ASCII half of UTF-16 text (low bytes for LE, high for BE, either one after an odd start).
-            # Keep only bytes next to a NUL so the lines count as they do in the source, whatever the alignment.
-            views += [bytes(b if (j > 0 and data[j - 1] == 0) or (j + 1 < len(data) and data[j + 1] == 0) else 1
-                            for j, b in zip(range(lane, len(data), 2), data[lane::2])) for lane in (0, 1)]
-        seen = set()
+            for start in (0, 1):
+                chunk = data[start:len(data) - (len(data) - start) % 2]
+                for codec, low in (('utf-16-le', 0), ('utf-16-be', 1)):
+                    views.append((chunk.decode(codec, 'surrogatepass').encode('ascii', 'replace'), start + low, 2))
+        seen, seen_offsets = set(), set()
         for rule, pattern in PATTERNS.items():
-            for view in views:
+            for view, base, step in views:
                 line, offset = 1, 0
                 for match in re.finditer(pattern, view):
                     line += view.count(b'\n', offset, match.start()); offset = match.start()
+                    if step:
+                        key = (rule, base + step * match.start())
+                        if key in seen_offsets:
+                            continue
+                        seen_offsets.add(key)
                     if (rule == 'url-userinfo' and name == 'Tests/ImageHistoryTests/AppUpdateControllerTests.swift' and
                         match.group() == b'https://user' + b':password@'):
                         continue  # Exact synthetic credential-rejection test, never a real credential.

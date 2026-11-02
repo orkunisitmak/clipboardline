@@ -63,6 +63,11 @@ class PublicationGuardTests(unittest.TestCase):
         (self.root / 'c.txt').write_bytes(('\u010a ' + value).encode('utf-16-le'))
         self.assertEqual(scanner.audit(self.root)['findings'], [{'file': 'c.txt', 'line': 1, 'rule': 'github-token'}])
 
+    def test_utf16_character_ending_in_a_line_feed_byte_after_an_ascii_character_keeps_its_own_line(self):
+        value = 'gh' + 'p_' + 'H' * 36
+        (self.root / 'a.txt').write_bytes(('a\u010a ' + value).encode('utf-16-le'))
+        self.assertEqual(scanner.audit(self.root)['findings'], [{'file': 'a.txt', 'line': 1, 'rule': 'github-token'}])
+
     def test_utf16_secret_after_a_wide_character_and_line_feed_is_reported_once_on_its_line(self):
         value = 'gh' + 'p_' + 'C' * 36
         for codec in ('utf-16-le', 'utf-16-be'):
