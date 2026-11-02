@@ -64,6 +64,12 @@
         "behavior": "The Link shelf lists links by when they were last copied, falling back to when they were captured, so copying an older link moves it to the first slot; Text and Image shelves stay in capture order. Copying a stored link again records the copy time and keeps its date added, so Newest first and Date added do not change, and it still counts as freshly captured for retention.",
         "macos": "LibraryStore.shelfItems orders the .link kind by COALESCE(copied,created) DESC; LibraryStoreTests.testRecapturedLinkMovesLeftAndRenewsTemporaryCaptureWithoutResettingOriginalDate covers a recaptured link.",
         "windows": "rowItems in renderer.js sorts the link kind by the newer of lastCopiedAt and createdAt (a link saved by an earlier build had createdAt renewed on a re-copy), and Store.insert keeps createdAt and sets lastCopiedAt and lastCapturedAt when a stored link is captured again, with expire() reading lastCapturedAt before createdAt like macOS prune; shelf-render.test.cjs and media-revision.test.cjs cover it."
+        },
+        {
+        "id": "image-recopy-dedupe",
+        "behavior": "Copying the same image again keeps one Library item: the existing item moves to the front and keeps its pin, name, tags and folders. A different image is a new item.",
+        "macos": "LibraryStore.captureImage finds a live image with identical original bytes (file size first, then SHA-256), moves it to the front and removes the duplicate clipboard PNG; LibraryStoreTests.testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization covers it.",
+        "windows": "Store.insert matches a live image by its managed PNG hash and moves it to the front; model.test.cjs 'exact image recopy moves the image in front of another image and preserves saved organization' covers it."
       },
       {
         "id": "mixed-selection-pin",

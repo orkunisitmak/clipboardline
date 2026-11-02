@@ -453,8 +453,42 @@ extension String {
     @discardableResult func captureImage(_ url: URL, capturedAt: Date? = nil) throws -> LibraryRecord {
         if let existing = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE path=? AND deleted IS NULL", [.text(url.standardizedFileURL.path)])).first { return existing }
         guard files.isRegularFile(url) else { throw HistoryFiles.Failure.unsafeFile }
-        let date = capturedAt ?? now(); var item = LibraryRecord(id: UUID(), kind: .image, createdAt: date, updatedAt: date); item.path = url.standardizedFileURL.path; item.captureRevision = UUID()
-        try db.transaction { try put(item) }; changed([item.id]); return item
+        let date = capturedAt ?? now()
+        // The same pixels copied again move the existing item to the front and keep its pin, tags and folders, as on Windows.
+        // Match and insert in one write transaction, so two app instances copying the same image cannot both insert it.
+        var fresh = LibraryRecord(id: UUID(), kind: .image, createdAt: date, updatedAt: date); fresh.path = url.standardizedFileURL.path; fresh.captureRevision = UUID()
+        var moved: LibraryRecord?
+        try db.transaction {
+            if let match = try identicalImage(to: url), var existing = try item(match.id), existing.deletedAt == nil {
+                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.captureRevision = UUID()
+                try put(existing); moved = existing
+            } else { try put(fresh) }
+        }
+        if let moved {
+            if files.isClipboardCopy(url) { _ = try? files.trashAppCopy(url) }
+            invalidateShelfUndo([moved.id]); changed([moved.id]); return moved
+        }
+        changed([fresh.id]); return fresh
+    }
+    /// The capture time, nudged just past the newest shelf image when the clock has not moved on since it.
+    private func frontDate(_ date: Date) throws -> Date {
+        if case let .real(newest)? = try db.rows("SELECT created FROM items WHERE kind='image' AND shelf=1 AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1").first?["created"],
+           date.timeIntervalSince1970 <= newest { return Date(timeIntervalSince1970: newest.nextUp) }
+        return date
+    }
+    /// A live image whose original bytes equal this file's. Size narrows the candidates before any file is hashed.
+    private func identicalImage(to url: URL) throws -> LibraryRecord? {
+        func size(_ url: URL) -> Int? { (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? nil }
+        guard let wanted = size(url) else { return nil }
+        var digest: SHA256.Digest?
+        let rows = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='image' AND deleted IS NULL ORDER BY created DESC,rowid DESC"))
+        for record in rows where record.recordingOriginalPath == nil {
+            guard let original = (record.markupBasePath ?? record.path).map({ URL(fileURLWithPath: $0) }),
+                  original.path != url.standardizedFileURL.path, size(original) == wanted else { continue }
+            if digest == nil { digest = SHA256.hash(data: try Data(contentsOf: url)) }
+            if let bytes = try? Data(contentsOf: original), SHA256.hash(data: bytes) == digest { return record }
+        }
+        return nil
     }
     @discardableResult func captureText(_ text: String) throws -> LibraryRecord? {
         guard !text.isEmpty, text.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
