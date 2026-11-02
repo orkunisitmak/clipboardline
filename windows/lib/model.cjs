@@ -106,6 +106,23 @@ function plainURL(value) {
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
 
+// Match macOS LinkIdentity.normalized: tracking parameters and the youtu.be, shorts, embed and live forms of a video
+// do not make a different link.
+const YOUTUBE_HOSTS=['youtube.com','www.youtube.com','m.youtube.com','music.youtube.com'];
+function linkKey(href) {
+  const u = new URL(href), pieces = u.pathname.split('/').filter(Boolean);
+  let id = null;
+  if (['youtu.be', 'www.youtu.be'].includes(u.hostname)) id = pieces[0];
+  else if (YOUTUBE_HOSTS.includes(u.hostname)) id = ['shorts', 'embed', 'live'].includes(pieces[0]) && pieces.length > 1 ? pieces[1] : u.searchParams.get('v');
+  const params = [...u.searchParams].filter(([name]) => { name = name.toLowerCase(); return !name.startsWith('utm_') && name !== 'fbclid' && name !== 'gclid'; });
+  if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) {
+    const rest = params.filter(([name]) => name !== 'v' && name !== 'si');
+    return new URL('https://www.youtube.com/watch?' + new URLSearchParams([['v', id], ...rest]) + u.hash).href;
+  }
+  u.search = new URLSearchParams(params).toString();
+  return u.href;
+}
+
 // A cold PowerShell start can exceed 15 seconds on a busy machine, for example
 // while antivirus scans it. The script is idempotent, so retry only a timed-out
 // attempt once with a longer limit before refusing to open the library.
@@ -323,7 +340,7 @@ class Store {
     // A new note is always its own record, like macOS createNote; only captures deduplicate,
     // and they never match a note (createdAsNote), so a capture or import cannot merge or drop one.
     const matching = extra.fresh ? [] : this.data.items.filter(i => i.kind === kind && !i.trashedAt && !i.createdAsNote &&
-      (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? i.url === url : !i.recording&&i.imageFile === imageFile));
+      (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? linkKey(i.url) === linkKey(url) : !i.recording&&i.imageFile === imageFile));
     const prior = matching.sort((a, b) => b.updatedAt - a.updatedAt)[0];
     if(!prior&&this.data.items.length>=20000){
       if(kind==='image'){
