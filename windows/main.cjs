@@ -26,7 +26,7 @@ const {decodeTextFile}=require('./lib/text-file.cjs');
 const native = require('./lib/native.cjs');
 const {setLaunchAtLogin}=require('./lib/linux-autostart.cjs');
 const {portalScreenshot}=require('./lib/linux-screenshot.cjs');
-const {which}=require('./lib/linux-clipboard.cjs');
+const {which,keptImage}=require('./lib/linux-clipboard.cjs');
 const {backendRelaunchArguments}=require('./lib/linux-desktop.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
@@ -51,7 +51,7 @@ const linux=process.platform==='linux'?native.linux:null;
 if(linux?.desktop.session.backend==='wayland')app.commandLine.appendSwitch('enable-features','GlobalShortcutsPortal');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
-let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
+let lastGeneration={sequence:0},ownFingerprint='',keptId=null,capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
@@ -187,17 +187,26 @@ async function clipboardContent() {
 async function readClipboard() {
   if(capturing){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;capturing=true;
   try{
-    const content=await clipboardContent();if(!content)return;
+    const content=await clipboardContent();if(!content){if(linux)await keepClipboard();return;}
     if(content.raced){pendingClipboard=true;return;}
     if(repeatedGeneration(lastGeneration,content))return;
+    keptId=null;
     if(content.fingerprint===ownFingerprint){ownFingerprint='';return;}
     if(content.owned)return;
     const key={image:'captureImages',text:'captureText',link:'captureLinks'}[content.kind];if(!store.data.settings[key])return;
     const item=store.insert(content.kind,content.value);broadcast();
+    if(linux&&item.kind==='image')keptId=item.id;
     if(item.kind==='link')void enrich(item.id);
     if(item.kind==='image'){queueOCR(item.id);refreshImageSearch();}
     if(item.kind==='image'&&store.data.settings.openAfterScreenshot&&!desiredVisible)await show('shelves',{selectId:item.id,kind:'image'});
   }catch(error){notify('Clipboard capture: '+error.message);}finally{capturing=false;if(pendingClipboard){pendingClipboard=false;queueMicrotask(()=>void readClipboard());}}
+}
+async function keepClipboard(){
+  // Any other unread content, such as a private copy, ends the keep as well.
+  const id=keptId;keptId=null;if(!id)return;
+  const item=keptImage(id,store.data.items);if(!item||(await linux.clipboard.types().catch(()=>['unknown'])).length)return;
+  const image=nativeImage.createFromPath(store.mediaPath(item.id));if(image.isEmpty())return;
+  await linux.clipboard.writePNG(image.toPNG());ownFingerprint=(await clipboardContent())?.fingerprint||'';
 }
 async function enrich(id,{refresh=false}={}) {
   if(!store.data.settings.fetchLinkMetadata||(!refresh&&pending.has(id)))return;

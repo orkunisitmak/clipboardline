@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {LinuxDesktop,session,handleFor,backendRelaunchArguments}=require('../lib/linux-desktop.cjs');
-const {LinuxClipboard,ClipboardWatcher,backend}=require('../lib/linux-clipboard.cjs');
+const {LinuxClipboard,ClipboardWatcher,backend,keptImage}=require('../lib/linux-clipboard.cjs');
 const {setLaunchAtLogin,command}=require('../lib/linux-autostart.cjs');
 const {PasteTargetTracker}=require('../lib/paste-target.cjs');
 const {parseResponse,screenshotPath,portalScreenshot}=require('../lib/linux-screenshot.cjs');
@@ -35,6 +35,16 @@ test('the portal is called only after the signal subscription is confirmed',linu
   await assert.rejects(portalScreenshot({gdbus:null}),/requires gdbus/);
 });
 
+test('only a captured still image still on the shelf is served again',()=>{
+  const image={id:'a',kind:'image'};
+  assert.equal(keptImage('a',[image]),image);
+  assert.equal(keptImage('a',[]),null,'deleted');
+  assert.equal(keptImage('a',[{...image,trashedAt:1}]),null,'trashed');
+  assert.equal(keptImage('a',[{...image,hiddenFromShelf:true}]),null,'off the shelf');
+  assert.equal(keptImage('a',[{...image,recording:{}}]),null,'recording');
+  assert.equal(keptImage('a',[{id:'a',kind:'text'}]),null,'text stays cleared');
+  assert.equal(keptImage('a',[{id:'a',kind:'link'}]),null,'links stay cleared');
+});
 test('Mutter desktops use Xwayland for clipboard capture and other sessions stay native',()=>{
   const gnome={XDG_CURRENT_DESKTOP:'ubuntu:GNOME',WAYLAND_DISPLAY:'wayland-0',DISPLAY:':0'};
   assert.equal(session(gnome,[]).backend,'x11');assert.equal(session(gnome,[]).type,'wayland');

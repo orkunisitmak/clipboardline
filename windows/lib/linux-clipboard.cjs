@@ -127,4 +127,8 @@ class ClipboardWatcher{
   read(){return this.sequence;}
   kill(){this.stopped=true;clearInterval(this.timer);this.timer=null;this.child?.kill();this.child=null;}
 }
-module.exports={LinuxClipboard,ClipboardWatcher,backend,which,run,TEXT_TYPES,IMAGE_TYPES};
+// A Linux selection disappears when the app that copied it quits. Only a captured
+// image still on the shelf comes back: text and links stay cleared, so a password
+// manager's clear is never undone.
+function keptImage(id,items){return items.find(item=>item.id===id&&item.kind==='image'&&!item.recording&&!item.trashedAt&&!item.hiddenFromShelf)||null;}
+module.exports={keptImage,LinuxClipboard,ClipboardWatcher,backend,which,run,TEXT_TYPES,IMAGE_TYPES};
