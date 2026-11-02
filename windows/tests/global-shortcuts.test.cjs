@@ -73,3 +73,55 @@ test('reassigning a released shortcut in the same update does not spuriously con
  f.callbacks.get('Control+Alt+S')();await Promise.resolve();
  assert.deepEqual(f.fired,['toggle']);
 });
+
+
+test('three owned shortcuts rotate in one settings update without losing their callbacks',async()=>{
+ const f=fixture(),before={toggle:'Control+Alt+T',search:'Control+Alt+S',library:'Control+Alt+L'};
+ assert.deepEqual(f.shortcuts.update(before),[]);
+ const stale=[...f.callbacks.values()];
+ const after={toggle:'Control+Alt+S',search:'Control+Alt+L',library:'Control+Alt+T'};
+ assert.deepEqual(f.shortcuts.update(after),[]);
+ assert.deepEqual(Object.fromEntries(f.shortcuts.registered),after);
+ for(const callback of stale)callback();await Promise.resolve();assert.deepEqual(f.fired,[]);
+ for(const action of ['toggle','search','library'])f.callbacks.get(after[action])();
+ await Promise.resolve();assert.deepEqual(f.fired,['toggle','search','library']);
+});
+
+test('failed three-way rotation restores all owned registrations',async()=>{
+ const f=fixture(),before={toggle:'Control+Alt+T',search:'Control+Alt+S',library:'Control+Alt+L'},after={toggle:'Control+Alt+S',search:'Control+Alt+L',library:'Control+Alt+T'};
+ f.shortcuts.update(before);
+ const stale=[...f.callbacks.values()];
+ const unregister=f.shortcuts.registry.unregister;
+ f.shortcuts.registry.unregister=key=>{const callback=f.callbacks.get(key);if(callback)stale.push(callback);unregister(key);};
+ const original=f.shortcuts.registry.register;let deny=true;
+ f.shortcuts.registry.register=(key,callback)=>{if(deny&&key===after.search){deny=false;return false;}return original(key,callback);};
+ assert.deepEqual(f.shortcuts.update(after).map(item=>item.action).sort(),['library','search','toggle']);
+ assert.equal(deny,false);
+ assert.deepEqual(Object.fromEntries(f.shortcuts.registered),before);
+ assert.deepEqual([...f.callbacks.keys()].sort(),Object.values(before).sort());
+ for(const callback of new Set(stale))callback();await Promise.resolve();assert.deepEqual(f.fired,[]);
+ for(const action of ['toggle','search','library'])f.callbacks.get(before[action])();
+ await Promise.resolve();assert.deepEqual(f.fired,['toggle','search','library']);
+});
+
+
+test('failed cycle rollback identifies a previously owned key that the OS could not restore',()=>{
+ const f=fixture(),errors=[];
+ f.shortcuts.failed=error=>errors.push(error.message);
+ const before={toggle:'Control+Alt+T',search:'Control+Alt+S',library:'Control+Alt+L'};
+ const after={toggle:'Control+Alt+S',search:'Control+Alt+L',library:'Control+Alt+T'};
+ f.shortcuts.update(before);
+ const original=f.shortcuts.registry.register;
+ let failNew=true,failRestore=true;
+ f.shortcuts.registry.register=(key,callback)=>{
+  if(key===after.search&&failNew){failNew=false;return false;}
+  if(key===before.toggle&&failRestore){failRestore=false;return false;}
+  return original(key,callback);
+ };
+ const rejected=f.shortcuts.update(after);
+ assert.equal(failNew,false);assert.equal(failRestore,false);
+ assert.deepEqual(rejected.filter(value=>value.restorationFailed).map(value=>value.action),['toggle']);
+ assert.equal(f.shortcuts.registered.has('toggle'),false);
+ assert.deepEqual([...f.callbacks.keys()].sort(),[before.search,before.library].sort());
+ assert.equal(errors.length,1);
+});

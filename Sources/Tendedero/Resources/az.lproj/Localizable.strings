@@ -354,6 +354,39 @@
 "Verifying update…" = "Verifying update…";
 "Version %@ is ready to install." = "Version %@ is ready to install.";
 "You are up to date." = "You are up to date.";
+"The update repository is invalid." = "Yeniləmə reposu yararsızdır.";
+"The release contains an invalid download address." = "Buraxılışda yararsız yükləmə ünvanı var.";
+"The update manifest is malformed." = "Yeniləmə manifesti zədəlidir.";
+"The update manifest signature is invalid." = "Yeniləmə manifestinin imzası yararsızdır.";
+"The update manifest contains invalid release information." = "Yeniləmə manifestində yararsız buraxılış məlumatı var.";
+"The update belongs to another repository." = "Yeniləmə başqa repoya aiddir.";
+"The update is not newer than the installed application." = "Yeniləmə quraşdırılmış tətbiqdən daha yeni deyil.";
+"The update archive exceeds the download limit." = "Yeniləmə arxivi yükləmə limitini aşır.";
+"The update has no application information." = "Yeniləmədə tətbiq məlumatı yoxdur.";
+"The update belongs to another application." = "Yeniləmə başqa tətbiqə aiddir.";
+"The update executable is invalid." = "Yeniləmənin icra faylı yararsızdır.";
+"The update staging directory is not private." = "Yeniləmənin hazırlıq qovluğu şəxsi deyil.";
+"The update is missing a supported architecture." = "Yeniləmədə dəstəklənən arxitektura yoxdur.";
+"The application signature is missing." = "Tətbiqin imzası yoxdur.";
+"The application signature is invalid." = "Tətbiqin imzası yararsızdır.";
+"The signing certificate could not be read." = "İmza sertifikatı oxuna bilmədi.";
+"An ad-hoc or unrelated application cannot install updates." = "Müvəqqəti imzalı və ya əlaqəsiz tətbiq yeniləmə quraşdıra bilməz.";
+"The application identity is missing." = "Tətbiqin kimliyi yoxdur.";
+"The application identity could not be read." = "Tətbiqin kimliyi oxuna bilmədi.";
+"The application identity is empty." = "Tətbiqin kimliyi boşdur.";
+"The installed build is invalid." = "Quraşdırılmış versiyanın quruluş nömrəsi yararsızdır.";
+"The downloaded version does not match the release." = "Yüklənmiş versiya buraxılışla uyğun gəlmir.";
+"This update needs a newer version of macOS." = "Bu yeniləmə macOS-un daha yeni versiyasını tələb edir.";
+"The update changed the trusted application identity." = "Yeniləmə etibarlı tətbiq kimliyini dəyişdi.";
+"The update is not signed by the installed application's publisher." = "Yeniləmə quraşdırılmış tətbiqin nəşriyyatçısı tərəfindən imzalanmayıb.";
+"The installed architectures have different signing identities." = "Quraşdırılmış arxitekturaların imza kimlikləri fərqlidir.";
+"The update download is incomplete." = "Yeniləmənin yüklənməsi tamamlanmayıb.";
+"The update download failed its integrity check." = "Yeniləmənin yüklənməsi bütövlük yoxlamasından keçmədi.";
+"The update staging directory is already in use." = "Yeniləmənin hazırlıq qovluğu artıq istifadədədir.";
+"The update archive could not be opened." = "Yeniləmə arxivi açıla bilmədi.";
+"The installed application path is unsafe." = "Quraşdırılmış tətbiqin yolu təhlükəlidir.";
+"Move the app to a writable Applications folder before updating." = "Yeniləməzdən əvvəl tətbiqi yazıla bilən Applications qovluğuna köçür.";
+"The update installer is missing." = "Yeniləmə quraşdırıcısı yoxdur.";
 
 /* Image markup additions. */
 "Annotation color" = "İşarə rəngi";
@@ -496,3 +529,9 @@
 "Focus previous pane" = "Əvvəlki bölməyə fokuslan";
 
 "Undo Move to Trash" = "Zibil qutusuna köçürməni geri al";
+
+/* Image markup errors. */
+"The image markup document is invalid." = "Şəkil işarələmə sənədi yanlışdır.";
+"This image could not be opened for markup." = "Bu şəkil işarələmə üçün açıla bilmədi.";
+"Markup supports images up to 80 megapixels." = "İşarələmə 80 meqapiksələ qədər şəkilləri dəstəkləyir.";
+"The marked image could not be rendered." = "İşarələnmiş şəkil hazırlana bilmədi.";

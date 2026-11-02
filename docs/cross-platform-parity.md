@@ -66,9 +66,23 @@ run the `tracking-parameter-links` scenario.
 selection of pinned and unpinned items to pin all of them, and to unpin only
 when every selected item is already pinned; the Library keyboard contract executes
 this on both platforms with an image, a text and a link selected.
+`subfolder-title` requires the Library title of a subfolder to list every
+ancestor, outermost first (`Parent / Child`, `Parent / Middle / Child`), so
+same-named subfolders of different parents can be told apart.
 `trash-restore-selection` requires restoring items from Library Trash to move
 focus and selection to the first item that remains in Trash and to clear the
 details panel when none remain.
+`trash-copy` requires the Copy action to stay enabled for an item in Library
+Trash, as the copy shortcut already works there, while editing actions wait for
+Restore.
+`item-name-trimming` requires an item name to be used without surrounding
+whitespace and a whitespace-only name to count as no name.
+`folder-removal-view` requires removing a folder to return the Library to My
+library only when the open view is that folder or one of its subfolders.
+`item-display-title` requires an unnamed text to be titled by its first non-blank
+line, trimmed and capped at 120 grapheme clusters (Untitled note when every line is
+blank), and a link without a fetched title by its host name (Link when the stored URL
+does not parse).
 
 The adapters execute application behavior:
 

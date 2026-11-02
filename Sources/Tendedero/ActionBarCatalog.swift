@@ -177,7 +177,8 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .library, .search, .allTypes, .images, .texts, .links:
             return require(c.libraryAvailable, L("Library unavailable"))
         case .searchShelf, .toggleShelves, .toggleImages, .toggleTexts, .toggleLinks: return (true, "")
-        case .copy, .paste, .preview, .pin, .pinToFolder, .nameAndPin, .tag:
+        case .copy: return require(c.hasSelection, L("Select an item first")) // Trash items can be copied
+        case .paste, .preview, .pin, .pinToFolder, .nameAndPin, .tag:
             if action == .paste && c.isTextEditing { return (false, L("Finish editing first")) }
             return require(selected, L("Select an item first"))
         case .open: return require(c.isLink, L("Select a link first"))

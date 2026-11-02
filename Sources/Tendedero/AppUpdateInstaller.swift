@@ -39,10 +39,10 @@ enum AppUpdateInstaller {
     static func info(_ app: URL) throws -> [String: Any] {
         let data = try Data(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
         guard let value = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-            throw AppUpdateInstallError.rejected("The update has no application information.")
+            throw AppUpdateInstallError.rejected(L("The update has no application information."))
         }
-        try require(value["CFBundleIdentifier"] as? String == identifier, "The update belongs to another application.")
-        try require(value["CFBundleExecutable"] as? String == "ClipboardLine", "The update executable is invalid.")
+        try require(value["CFBundleIdentifier"] as? String == identifier, L("The update belongs to another application."))
+        try require(value["CFBundleExecutable"] as? String == "ClipboardLine", L("The update executable is invalid."))
         return value
     }
 
@@ -56,7 +56,7 @@ enum AppUpdateInstaller {
             url.standardizedFileURL == url.resolvingSymlinksInPath().standardizedFileURL &&
             (attributes[.ownerAccountID] as? NSNumber)?.uint32Value == getuid() &&
             ((attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0o777) & 0o077 == 0,
-            "The update staging directory is not private.")
+            L("The update staging directory is not private."))
     }
 
     private struct Identity {
@@ -70,46 +70,46 @@ enum AppUpdateInstaller {
         var code: SecStaticCode?
         let attributes = [kSecCodeAttributeArchitecture as String: NSNumber(value: architecture)] as CFDictionary
         try require(SecStaticCodeCreateWithPathAndAttributes(app as CFURL, [], attributes, &code) == errSecSuccess,
-                    "The update is missing a supported architecture.")
-        guard let code else { throw AppUpdateInstallError.rejected("The application signature is missing.") }
-        try require(SecStaticCodeCheckValidity(code, validationFlags, nil) == errSecSuccess, "The application signature is invalid.")
+                    L("The update is missing a supported architecture."))
+        guard let code else { throw AppUpdateInstallError.rejected(L("The application signature is missing.")) }
+        try require(SecStaticCodeCheckValidity(code, validationFlags, nil) == errSecSuccess, L("The application signature is invalid."))
         var metadata: CFDictionary?
         try require(SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &metadata) == errSecSuccess,
-                    "The signing certificate could not be read.")
+                    L("The signing certificate could not be read."))
         let values = metadata as? [String: Any]
         guard values?[kSecCodeInfoIdentifier as String] as? String == identifier,
               let certificates = values?[kSecCodeInfoCertificates as String] as? [SecCertificate], let leaf = certificates.first else {
-            throw AppUpdateInstallError.rejected("An ad-hoc or unrelated application cannot install updates.")
+            throw AppUpdateInstallError.rejected(L("An ad-hoc or unrelated application cannot install updates."))
         }
         var requirement: SecRequirement?
-        try require(SecCodeCopyDesignatedRequirement(code, [], &requirement) == errSecSuccess, "The application identity is missing.")
-        guard let requirement else { throw AppUpdateInstallError.rejected("The application identity is missing.") }
+        try require(SecCodeCopyDesignatedRequirement(code, [], &requirement) == errSecSuccess, L("The application identity is missing."))
+        guard let requirement else { throw AppUpdateInstallError.rejected(L("The application identity is missing.")) }
         var data: CFData?
-        try require(SecRequirementCopyData(requirement, [], &data) == errSecSuccess, "The application identity could not be read.")
-        guard let data else { throw AppUpdateInstallError.rejected("The application identity is empty.") }
+        try require(SecRequirementCopyData(requirement, [], &data) == errSecSuccess, L("The application identity could not be read."))
+        guard let data else { throw AppUpdateInstallError.rejected(L("The application identity is empty.")) }
         return Identity(code: code, requirement: requirement, requirementData: data as Data, certificate: SecCertificateCopyData(leaf) as Data)
     }
 
     static func validate(candidate: URL, activeApp: URL, manifest: UpdateManifest) throws {
         let old = try info(activeApp), next = try info(candidate)
-        guard let oldBuild = Int(old["CFBundleVersion"] as? String ?? "") else { throw AppUpdateInstallError.rejected("The installed build is invalid.") }
+        guard let oldBuild = Int(old["CFBundleVersion"] as? String ?? "") else { throw AppUpdateInstallError.rejected(L("The installed build is invalid.")) }
         try require(manifest.build > oldBuild && next["CFBundleVersion"] as? String == String(manifest.build) &&
-                    next["CFBundleShortVersionString"] as? String == manifest.version, "The downloaded version does not match the release.")
+                    next["CFBundleShortVersionString"] as? String == manifest.version, L("The downloaded version does not match the release."))
         let version = manifest.minimumSystemVersion.split(separator: ".").compactMap { Int($0) }
         try require(!version.isEmpty && ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(
             majorVersion: version[0], minorVersion: version.count > 1 ? version[1] : 0, patchVersion: version.count > 2 ? version[2] : 0)),
-            "This update needs a newer version of macOS.")
+            L("This update needs a newer version of macOS."))
         var baseline: Identity?
         for architecture: Int32 in [0x0100000c, 0x01000007] { // universal arm64 and x86_64
             let previous = try identity(activeApp, architecture: architecture)
             let incoming = try identity(candidate, architecture: architecture)
             try require(previous.certificate == incoming.certificate && previous.requirementData == incoming.requirementData,
-                        "The update changed the trusted application identity.")
+                        L("The update changed the trusted application identity."))
             try require(SecStaticCodeCheckValidity(incoming.code, validationFlags, previous.requirement) == errSecSuccess &&
                         SecStaticCodeCheckValidity(previous.code, validationFlags, incoming.requirement) == errSecSuccess,
-                        "The update is not signed by the installed application's publisher.")
+                        L("The update is not signed by the installed application's publisher."))
             if let baseline { try require(previous.certificate == baseline.certificate && previous.requirementData == baseline.requirementData,
-                                          "The installed architectures have different signing identities.") }
+                                          L("The installed architectures have different signing identities.")) }
             else { baseline = previous }
         }
     }
@@ -118,18 +118,18 @@ enum AppUpdateInstaller {
         try privateDirectory(workDirectory)
         let size = try FileManager.default.attributesOfItem(atPath: archive.path)[.size] as? NSNumber
         try require(size?.int64Value == manifest.archiveSize && manifest.archiveSize <= AppUpdatePolicy.maxArchiveSize,
-                    "The update download is incomplete.")
-        try require(try sha256(archive) == manifest.archiveSHA256, "The update download failed its integrity check.")
+                    L("The update download is incomplete."))
+        try require(try sha256(archive) == manifest.archiveSHA256, L("The update download failed its integrity check."))
         // The manifest was Ed25519-verified by the caller; authenticate archive
         // bytes before extracting anything, then independently verify all code.
         let extracted = workDirectory.appendingPathComponent("Extracted", isDirectory: true)
-        try require(!FileManager.default.fileExists(atPath: extracted.path), "The update staging directory is already in use.")
+        try require(!FileManager.default.fileExists(atPath: extracted.path), L("The update staging directory is already in use."))
         try privateDirectory(extracted, create: true)
         let process = Process(); process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-x", "-k", archive.path, extracted.path]
         process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
         try process.run(); process.waitUntilExit()
-        try require(process.terminationStatus == 0, "The update archive could not be opened.")
+        try require(process.terminationStatus == 0, L("The update archive could not be opened."))
         let candidate = extracted.appendingPathComponent("ClipboardLine Review.app")
         try validate(candidate: candidate, activeApp: activeApp, manifest: manifest)
         return candidate
@@ -139,11 +139,11 @@ enum AppUpdateInstaller {
         try privateDirectory(workDirectory)
         try validate(candidate: candidate, activeApp: activeApp, manifest: manifest)
         try require(activeApp.standardizedFileURL == activeApp.resolvingSymlinksInPath().standardizedFileURL &&
-                    activeApp.lastPathComponent == "ClipboardLine Review.app", "The installed application path is unsafe.")
+                    activeApp.lastPathComponent == "ClipboardLine Review.app", L("The installed application path is unsafe."))
         try require(FileManager.default.isWritableFile(atPath: activeApp.deletingLastPathComponent().path),
-                    "Move the app to a writable Applications folder before updating.")
+                    L("Move the app to a writable Applications folder before updating."))
         let helper = activeApp.appendingPathComponent("Contents/Helpers/\(helperName)")
-        try require(FileManager.default.isExecutableFile(atPath: helper.path), "The update installer is missing.")
+        try require(FileManager.default.isExecutableFile(atPath: helper.path), L("The update installer is missing."))
         let job = AppUpdateJob(candidate: candidate, activeApp: activeApp, manifest: manifest, workDirectory: workDirectory,
                                parentPID: parentPID, oldExecutableSHA256: try sha256(executable(activeApp)))
         let file = workDirectory.appendingPathComponent("install-job.json")
@@ -170,11 +170,11 @@ enum AppUpdateInstaller {
         try privateDirectory(job.workDirectory)
         let active = job.activeApp.standardizedFileURL
         try require(active == active.resolvingSymlinksInPath().standardizedFileURL && active.lastPathComponent == "ClipboardLine Review.app",
-                    "The installed application path is unsafe.")
+                    L("The installed application path is unsafe."))
         try require(try sha256(executable(active)) == job.oldExecutableSHA256, "The installed app changed while the update was waiting.")
         try validate(candidate: job.candidate, activeApp: active, manifest: job.manifest)
         let parent = active.deletingLastPathComponent()
-        try require(fm.isWritableFile(atPath: parent.path), "Move the app to a writable Applications folder before updating.")
+        try require(fm.isWritableFile(atPath: parent.path), L("Move the app to a writable Applications folder before updating."))
         let transaction = parent.appendingPathComponent(".ClipboardLine-update-\(UUID().uuidString)", isDirectory: true)
         try privateDirectory(transaction, create: true)
         let staged = transaction.appendingPathComponent("ClipboardLine Review.app")

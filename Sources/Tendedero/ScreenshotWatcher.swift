@@ -12,6 +12,10 @@ final class ScreenshotWatcher {
     /// Tendedero's own folder, where nothing else is saved.
     private let acceptsRecordings: Bool
     private var known: Set<String>?
+    /// What the folder held when it was replaced. The descriptor on the old
+    /// folder can still fire and list the replacement by path, so its images
+    /// may already be reported when the replacement is first listed.
+    private var knownBeforeReplacement: Set<String> = []
     private var source: DispatchSourceFileSystemObject?
     private var parentSource: DispatchSourceFileSystemObject?
     private var pending: DispatchWorkItem?
@@ -217,6 +221,7 @@ final class ScreenshotWatcher {
         generation += 1
         pending?.cancel()
         pending = nil
+        knownBeforeReplacement.formUnion(known ?? [])
         known = nil
         missed = false
         source?.cancel()
@@ -291,10 +296,11 @@ final class ScreenshotWatcher {
         // The first listing adopts everything that was already there when the
         // app launched. Later ones compare against the previous listing.
         let first = known == nil
-        let base = known ?? Set(settled.map(\.path))
+        let base = known ?? Set(settled.map(\.path)).union(knownBeforeReplacement)
         for url in candidates where !base.contains(url.path) {
             onNew(url)
         }
+        knownBeforeReplacement = []
         known = Set(files.map(\.path))
         if !first { onChange() }
         if missed {

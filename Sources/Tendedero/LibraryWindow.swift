@@ -203,7 +203,7 @@ final class LibraryNativeWindow: NSWindow {
         alert.addButton(withTitle: L("Remove folder")); alert.addButton(withTitle: L("Cancel"))
         presentAlert(alert) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            self.model.perform { try self.model.store.removeCollection(folder.id) }; self.model.changeScope(.saved)
+            self.model.removeFolder(folder.id)
         }
     }
     func renameTag(_ tag: LibraryTag) {

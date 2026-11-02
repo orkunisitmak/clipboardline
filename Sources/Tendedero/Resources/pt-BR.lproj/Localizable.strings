@@ -354,6 +354,39 @@
 "Verifying update…" = "Verifying update…";
 "Version %@ is ready to install." = "Version %@ is ready to install.";
 "You are up to date." = "You are up to date.";
+"The update repository is invalid." = "O repositório de atualizações é inválido.";
+"The release contains an invalid download address." = "A versão contém um endereço de download inválido.";
+"The update manifest is malformed." = "O manifesto da atualização está malformado.";
+"The update manifest signature is invalid." = "A assinatura do manifesto da atualização é inválida.";
+"The update manifest contains invalid release information." = "O manifesto da atualização contém informações de versão inválidas.";
+"The update belongs to another repository." = "A atualização pertence a outro repositório.";
+"The update is not newer than the installed application." = "A atualização não é mais recente que o aplicativo instalado.";
+"The update archive exceeds the download limit." = "O arquivo da atualização excede o limite de download.";
+"The update has no application information." = "A atualização não tem informações do aplicativo.";
+"The update belongs to another application." = "A atualização pertence a outro aplicativo.";
+"The update executable is invalid." = "O executável da atualização é inválido.";
+"The update staging directory is not private." = "A pasta de preparação da atualização não é privada.";
+"The update is missing a supported architecture." = "A atualização não tem uma arquitetura compatível.";
+"The application signature is missing." = "A assinatura do aplicativo está ausente.";
+"The application signature is invalid." = "A assinatura do aplicativo é inválida.";
+"The signing certificate could not be read." = "Não foi possível ler o certificado de assinatura.";
+"An ad-hoc or unrelated application cannot install updates." = "Um aplicativo com assinatura ad hoc ou sem relação não pode instalar atualizações.";
+"The application identity is missing." = "A identidade do aplicativo está ausente.";
+"The application identity could not be read." = "Não foi possível ler a identidade do aplicativo.";
+"The application identity is empty." = "A identidade do aplicativo está vazia.";
+"The installed build is invalid." = "A compilação instalada é inválida.";
+"The downloaded version does not match the release." = "A versão baixada não corresponde à versão publicada.";
+"This update needs a newer version of macOS." = "Esta atualização precisa de uma versão mais recente do macOS.";
+"The update changed the trusted application identity." = "A atualização alterou a identidade confiável do aplicativo.";
+"The update is not signed by the installed application's publisher." = "A atualização não está assinada pelo desenvolvedor do aplicativo instalado.";
+"The installed architectures have different signing identities." = "As arquiteturas instaladas têm identidades de assinatura diferentes.";
+"The update download is incomplete." = "O download da atualização está incompleto.";
+"The update download failed its integrity check." = "O download da atualização falhou na verificação de integridade.";
+"The update staging directory is already in use." = "A pasta de preparação da atualização já está em uso.";
+"The update archive could not be opened." = "Não foi possível abrir o arquivo da atualização.";
+"The installed application path is unsafe." = "O caminho do aplicativo instalado não é seguro.";
+"Move the app to a writable Applications folder before updating." = "Mova o aplicativo para uma pasta Aplicativos com permissão de gravação antes de atualizar.";
+"The update installer is missing." = "O instalador da atualização está ausente.";
 
 /* Image markup additions. */
 "Annotation color" = "Cor da anotação";
@@ -496,3 +529,9 @@
 "Focus previous pane" = "Focar painel anterior";
 
 "Undo Move to Trash" = "Desfazer mover para o Lixo";
+
+/* Image markup errors. */
+"The image markup document is invalid." = "O documento de marcação da imagem é inválido.";
+"This image could not be opened for markup." = "Não foi possível abrir esta imagem para marcação.";
+"Markup supports images up to 80 megapixels." = "A marcação oferece suporte a imagens de até 80 megapixels.";
+"The marked image could not be rendered." = "Não foi possível renderizar a imagem marcada.";

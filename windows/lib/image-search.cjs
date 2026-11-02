@@ -45,11 +45,20 @@ class ImageSearch{
      if(!this.current(job.id,job.key))continue;
      // Cached vectors can be reused without decoding the image a second time.
      let indexed=await this.request('has',{key:job.key});
-     if(!indexed){const image=await this.readImage(job.id);if(!image||!this.current(job.id,job.key))continue;const bitmap=Uint8Array.from(image.bitmap);indexed=await this.request('index',{key:job.key,width:image.width,height:image.height,bitmap},[bitmap.buffer]);}
+     if(!indexed){if(!this.current(job.id,job.key))continue;const image=await this.readImage(job.id);if(!image||!this.current(job.id,job.key))continue;const bitmap=Uint8Array.from(image.bitmap);indexed=await this.request('index',{key:job.key,width:image.width,height:image.height,bitmap},[bitmap.buffer]);}
      if(indexed&&!this.current(job.id,job.key))await this.request('prune',{keys:[...new Set(this.items().map(value=>this.key(value)).filter(Boolean))]});
      if(indexed&&this.current(job.id,job.key)){this.known.add(job.key);this.state.revision++;delete this.state.error;this.changed({...this.state});}
     }catch{if(this.current(job.id,job.key))this.failed.add(job.key);}
-    finally{this.active=null;this.updateStatus();}
+    finally{
+     this.active=null;
+     // If the record owning this shared fingerprint vanished mid-job, keep
+     // indexing the same image through a surviving record rather than stalling.
+     if(!this.closed&&this.state.available&&!this.current(job.id,job.key)&&!this.known.has(job.key)&&!this.failed.has(job.key)&&!this.queue.some(value=>value.key===job.key)){
+      const replacement=this.items().find(value=>this.key(value)===job.key);
+      if(replacement)this.queue.push({id:replacement.id,key:job.key});
+     }
+     this.updateStatus();
+    }
    }
   }finally{this.draining=false;this.active=null;this.updateStatus();}
  }

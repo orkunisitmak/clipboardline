@@ -46,9 +46,14 @@ struct LibraryRecord: Codable, Equatable, Identifiable {
     var metadataState = "pending"
     var metadataAttemptedAt: Date?
     var displayTitle: String {
-        if !title.isEmpty { return title }
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
         if kind == .link, let metadataTitle, !metadataTitle.isEmpty { return metadataTitle }
-        if let text { return String(text.split(separator: "\n", omittingEmptySubsequences: false).first ?? "").trimmingCharacters(in: .whitespaces).prefix(120).description }
+        if let text {
+            // The first line with visible content, as on Windows; "\r\n" is one Character in Swift.
+            let lines = text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r\n" })
+            return lines.lazy.map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }.map { String($0.prefix(120)) } ?? L("Untitled note")
+        }
         if let path { return URL(fileURLWithPath: originalPath ?? path).deletingPathExtension().lastPathComponent }
         return URL(string: originalURL ?? "")?.host ?? L("Link")
     }

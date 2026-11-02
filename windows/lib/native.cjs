@@ -34,7 +34,7 @@ function run(mode, target) {
     child.stdin.end(target?JSON.stringify({...target,sourceProcessId:process.pid}):'');
   });
 }
-function monitor(changed, failed, focused = () => {}) {
+function monitor(changed, failed, focused = () => {}, ready = () => {}) {
   if (process.platform !== 'win32') return null;
   const child = spawn(powershell, invocation('Monitor'), {windowsHide:true,stdio:['pipe','pipe','pipe'],env:windowsEnvironment()});
   const queries=new ClipboardSequenceQueries(value=>child.stdin.write(value));sequenceQueries=queries;
@@ -43,7 +43,7 @@ function monitor(changed, failed, focused = () => {}) {
   let buffer=''; child.stdout.on('data',chunk => {
     buffer += chunk.toString(); if (buffer.length > 64000) { child.kill(); return; }
     let newline;
-    while ((newline=buffer.indexOf('\n')) >= 0) { const line=buffer.slice(0,newline);buffer=buffer.slice(newline+1);try { const v=JSON.parse(line); if(v.clipboardQuery!==undefined){queries.receive(v);}else if(Number.isInteger(v.sequence)) changed(v.sequence); if(v.focus) focused(v.focus); } catch {} }
+    while ((newline=buffer.indexOf('\n')) >= 0) { const line=buffer.slice(0,newline);buffer=buffer.slice(newline+1);try { const v=JSON.parse(line); if(v.clipboardQuery!==undefined){queries.receive(v);}else if(Number.isInteger(v.sequence)) changed(v.sequence); if(v.focus) focused(v.focus); if(v.ready===true) ready(); } catch {} }
   });
   child.on('error',error=>{stopped();failed(error);}); child.on('exit',code => { stopped();if(code) failed(new Error('Native clipboard monitor stopped.')); }); return child;
 }

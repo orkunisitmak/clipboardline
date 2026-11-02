@@ -29,6 +29,10 @@ class PublicationGuardTests(unittest.TestCase):
         self.assertNotIn(value, json.dumps(report))
         self.assertNotIn(personal, json.dumps(report))
 
+    def test_url_credentials_are_found_with_an_uppercase_scheme(self):
+        (self.root / 'bad.txt').write_text('HTTPS://user:' + 'hunter2pass@host.example/')
+        self.assertEqual([f['rule'] for f in scanner.audit(self.root)['findings']], ['url-userinfo'])
+
     def test_private_artifact_and_symlink_are_rejected(self):
         (self.root / 'credential.p12').write_bytes(b'not a real key')
         (self.root / 'source.txt').write_text('ordinary source')

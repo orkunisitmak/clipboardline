@@ -92,6 +92,16 @@ import XCTest
         XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, domain: "WWW.YouTube.com.")).count, 3)
         XCTAssertTrue(try library.query(LibraryQuery(scope: .recent, domain: "%youtube.com")).isEmpty)
     }
+    func testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let plan = try XCTUnwrap(library.captureText("Quarterly plan\nsecond line")), other = try XCTUnwrap(library.captureText("Middle"))
+        try library.retain([plan.id, other.id])
+        try library.update(plan.id) { $0.title = "   " }
+        XCTAssertEqual(try library.item(plan.id)?.displayTitle, "Quarterly plan")
+        try library.update(plan.id) { $0.title = "  Zulu \n" }
+        XCTAssertEqual(try library.item(plan.id)?.displayTitle, "Zulu")
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .saved, sort: .title)).map(\.id), [other.id, plan.id])
+    }
     func testTagRenameSearchTurkishAndLiteralSQLCharacters() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let record = try XCTUnwrap(library.captureText("İLK çekim 中文 👋"))
@@ -150,6 +160,7 @@ import XCTest
         XCTAssertTrue(differentTime.id != a.id)
         XCTAssertNil(LinkIdentity.standalone("a paragraph https://example.com")); XCTAssertNil(LinkIdentity.standalone("https://one.com https://two.com"))
         XCTAssertNil(LinkIdentity.standalone("file:///private/test")); XCTAssertNil(LinkIdentity.standalone("javascript:alert(1)"))
+        XCTAssertNil(LinkIdentity.standalone("https://example.com:99999/")); XCTAssertNotNil(LinkIdentity.standalone("https://example.com:65535/"))
         XCTAssertFalse(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "http://192.168.1.2/doc"))))
         XCTAssertFalse(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "https://example.com/?token=private"))))
         XCTAssertTrue(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "https://example.com/articles"))))

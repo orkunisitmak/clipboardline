@@ -354,6 +354,39 @@
 "Verifying update…" = "Verifying update…";
 "Version %@ is ready to install." = "Version %@ is ready to install.";
 "You are up to date." = "You are up to date.";
+"The update repository is invalid." = "Le dépôt des mises à jour n’est pas valide.";
+"The release contains an invalid download address." = "La version contient une adresse de téléchargement non valide.";
+"The update manifest is malformed." = "Le manifeste de mise à jour est mal formé.";
+"The update manifest signature is invalid." = "La signature du manifeste de mise à jour n’est pas valide.";
+"The update manifest contains invalid release information." = "Le manifeste de mise à jour contient des informations de version non valides.";
+"The update belongs to another repository." = "La mise à jour appartient à un autre dépôt.";
+"The update is not newer than the installed application." = "La mise à jour n’est pas plus récente que l’application installée.";
+"The update archive exceeds the download limit." = "L’archive de mise à jour dépasse la limite de téléchargement.";
+"The update has no application information." = "La mise à jour ne contient aucune information sur l’application.";
+"The update belongs to another application." = "La mise à jour appartient à une autre application.";
+"The update executable is invalid." = "L’exécutable de la mise à jour n’est pas valide.";
+"The update staging directory is not private." = "Le dossier de préparation de la mise à jour n’est pas privé.";
+"The update is missing a supported architecture." = "Il manque une architecture prise en charge dans la mise à jour.";
+"The application signature is missing." = "La signature de l’application est absente.";
+"The application signature is invalid." = "La signature de l’application n’est pas valide.";
+"The signing certificate could not be read." = "Le certificat de signature n’a pas pu être lu.";
+"An ad-hoc or unrelated application cannot install updates." = "Une application à signature ad hoc ou sans rapport ne peut pas installer de mises à jour.";
+"The application identity is missing." = "L’identité de l’application est absente.";
+"The application identity could not be read." = "L’identité de l’application n’a pas pu être lue.";
+"The application identity is empty." = "L’identité de l’application est vide.";
+"The installed build is invalid." = "Le build installé n’est pas valide.";
+"The downloaded version does not match the release." = "La version téléchargée ne correspond pas à la version publiée.";
+"This update needs a newer version of macOS." = "Cette mise à jour nécessite une version plus récente de macOS.";
+"The update changed the trusted application identity." = "La mise à jour a modifié l’identité de confiance de l’application.";
+"The update is not signed by the installed application's publisher." = "La mise à jour n’est pas signée par l’éditeur de l’application installée.";
+"The installed architectures have different signing identities." = "Les architectures installées ont des identités de signature différentes.";
+"The update download is incomplete." = "Le téléchargement de la mise à jour est incomplet.";
+"The update download failed its integrity check." = "Le téléchargement de la mise à jour a échoué à la vérification d’intégrité.";
+"The update staging directory is already in use." = "Le dossier de préparation de la mise à jour est déjà utilisé.";
+"The update archive could not be opened." = "L’archive de mise à jour n’a pas pu être ouverte.";
+"The installed application path is unsafe." = "Le chemin de l’application installée n’est pas sûr.";
+"Move the app to a writable Applications folder before updating." = "Déplacez l’application dans un dossier Applications accessible en écriture avant de mettre à jour.";
+"The update installer is missing." = "L’installeur de mise à jour est introuvable.";
 
 /* Image markup additions. */
 "Annotation color" = "Couleur d’annotation";
@@ -496,3 +529,9 @@
 "Focus previous pane" = "Activer le volet précédent";
 
 "Undo Move to Trash" = "Annuler le déplacement vers la corbeille";
+
+/* Image markup errors. */
+"The image markup document is invalid." = "Le document de marquage de l’image n’est pas valide.";
+"This image could not be opened for markup." = "Impossible d’ouvrir cette image pour la marquer.";
+"Markup supports images up to 80 megapixels." = "Le marquage prend en charge les images jusqu’à 80 mégapixels.";
+"The marked image could not be rendered." = "Impossible de générer l’image annotée.";

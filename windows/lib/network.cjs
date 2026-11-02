@@ -103,13 +103,15 @@ async function linkMetadata(input, fetcher = metadataFetch) {
     const video = new URL(url.href); if (video.hostname === 'music.youtube.com') video.hostname = 'www.youtube.com';
     const response = await fetcher('https://www.youtube.com/oembed?url=' + encodeURIComponent(video.href) + '&format=json', {maximum: 64 * 1024});
     const data = JSON.parse(response.bytes.toString('utf8'));
-    return {title: String(data.title || '').slice(0, 500), author: String(data.author_name || '').slice(0, 200), thumbnail: data.thumbnail_url || ''};
+    if(!data||typeof data!=='object'||Array.isArray(data))return{title:url.hostname,author:'',thumbnail:''};
+    return {title: String(data.title || '').trim().slice(0, 500)||url.hostname, author: String(data.author_name || '').slice(0, 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
   }
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
   const html = decodeHTML(response.bytes, response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
   const title = collapse(meta(html, 'og:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
-  let thumbnail = meta(html, 'og:image');
+  const rawThumbnail = meta(html, 'og:image');
+  let thumbnail = rawThumbnail.trim() ? rawThumbnail : '';
   if (thumbnail) try { thumbnail = new URL(thumbnail, response.url).href; } catch { thumbnail = ''; }
   return {title: title.slice(0, 500), thumbnail};
 }

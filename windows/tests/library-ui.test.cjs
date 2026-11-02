@@ -154,6 +154,19 @@ test('folder menus create only one subfolder level and generic New folder stays 
  const f=fixture();await f.ready();const parent='20000000-0000-4000-8000-000000000001',child='20000000-0000-4000-8000-000000000002';f.state.folders=[{id:parent,name:'Parent',parentId:null},{id:child,name:'Child',parentId:parent}];f.api.emit({folders:f.state.folders});await f.ready();await f.key('KeyL');await f.click('folder-menu',{folder:child});assert.doesNotMatch(f.overlay,/data-folder-action="new-subfolder"|New subfolder/);await f.click('close-modal');await f.click('folder-scope',{folder:child});await f.click('new-folder');await f.input('simple-input','New root');await f.click('confirm-modal');assert.deepEqual(f.commands.findLast(command=>command.action==='createFolder').payload,{name:'New root',parentId:null});await f.click('folder-menu',{folder:parent});assert.match(f.overlay,/New subfolder/);await f.click('new-subfolder',{folder:parent});await f.input('simple-input','Another child');await f.click('confirm-modal');assert.deepEqual(f.commands.findLast(command=>command.action==='createFolder').payload,{name:'Another child',parentId:parent});await f.click('remove-folder',{folder:parent});assert.match(f.overlay,/Remove this folder and its subfolders\? Item content remains in the library\./);
 });
 
+test('a subfolder scope is titled with its parent like macOS',async()=>{
+ const f=fixture();await f.ready();const parent='20000000-0000-4000-8000-000000000001',child='20000000-0000-4000-8000-000000000002';
+ f.state.folders=[{id:parent,name:'Parent',parentId:null},{id:child,name:'Child',parentId:parent}];f.api.emit({folders:f.state.folders});await f.ready();await savedLibrary(f);
+ await f.click('folder-scope',{folder:parent});assert.match(f.main,/<div class="window-title"><strong>Parent<\/strong>/);await f.click('folder-scope',{folder:child});assert.match(f.main,/<div class="window-title"><strong>Parent \/ Child<\/strong>/);
+});
+
+test('an unnamed item is titled like macOS: trimmed first line capped at 120, link host without a fetched title',async()=>{
+ const f=fixture();await f.ready();const base=(id,kind,extra)=>({id,kind,createdAt:500,updatedAt:500,name:'',title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,retainedAt:500,crop:null,annotations:[],...extra});
+ f.state.items=[base('30000000-0000-4000-8000-000000000001','text',{text:'\t  Indented first line \r\nsecond line'}),base('30000000-0000-4000-8000-000000000002','text',{text:'x'.repeat(130)}),base('30000000-0000-4000-8000-000000000003','link',{url:'https://www.example.com/a/very/long/path?utm_source=news'}),base('30000000-0000-4000-8000-000000000004','link',{url:'https://example.com/ref',title:'Fetched title'}),base('30000000-0000-4000-8000-000000000005','text',{text:'\n \t\r\nSecond line\nthird'}),base('30000000-0000-4000-8000-000000000006','text',{text:' \t\r\n  '}),base('30000000-0000-4000-8000-000000000007','link',{url:'http://[bad'})];
+ f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ assert.deepEqual([...f.main.matchAll(/<article class="[^"]*" [^>]*aria-label="([^"]*)"/g)].map(match=>match[1]),['Indented first line','x'.repeat(120),'www.example.com','Fetched title','Second line','Untitled note','Link']);
+});
+
 test('removing the active folder ancestor returns Library to Saved',async()=>{
  const f=fixture();await f.ready();const parent='20000000-0000-4000-8000-000000000001',child='20000000-0000-4000-8000-000000000002';
  f.state.items[0].retainedAt=1000;f.state.items[0].folderIds=[child];f.state.folders=[{id:parent,name:'Parent',parentId:null},{id:child,name:'Child',parentId:parent}];f.api.emit({items:f.state.items,folders:f.state.folders});await f.ready();
@@ -161,6 +174,18 @@ test('removing the active folder ancestor returns Library to Saved',async()=>{
  assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);assert.deepEqual(cards(f),[f.image]);
 });
 
+test('removing a folder that is not open keeps the current Library view',async()=>{
+ const f=fixture();await f.ready();const keep='20000000-0000-4000-8000-000000000003',other='20000000-0000-4000-8000-000000000004';
+ Object.assign(f.state.items[0],{retainedAt:1000,folderIds:[keep]});Object.assign(f.state.items[1],{retainedAt:900,folderIds:[keep]});f.state.folders=[{id:keep,name:'Keep',parentId:null},{id:other,name:'Other',parentId:null}];f.api.emit({items:f.state.items,folders:f.state.folders});await f.ready();
+ await savedLibrary(f);const command=f.api.command.bind(f.api),removed=[];f.api.command=async(action,payload)=>{if(action==='removeFolder'){removed.push(payload.id);f.state.folders=f.state.folders.filter(folder=>folder.id!==payload.id);}return command(action,payload);};await f.click('folder-scope',{folder:keep});assert.deepEqual(cards(f),[f.image,f.text1]);await f.key('ArrowRight');const selectedCard=/<article class="[^"]*\bselected\b[^"]*"[^>]*data-item-id="00000000-0000-4000-8000-000000000002"/;assert.match(f.main,selectedCard);assert.equal(focusedCard(f),f.text1);await f.click('remove-folder',{folder:other});await f.click('confirm-modal');
+ assert.deepEqual(removed,[other]);assert.deepEqual(f.state.folders.map(folder=>folder.id),[keep]);
+ assert.match(f.main,/<div class="window-title"><strong>Keep<\/strong>/);assert.doesNotMatch(f.main,/data-action="scope" data-scope="saved" class="active"/);assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,selectedCard);assert.equal(focusedCard(f),f.text1);
+});
+
+test('the action list keeps Copy enabled for Trash items while editing actions are disabled',async()=>{
+ const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image]);
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="copy" >/);assert.match(f.overlay,/data-command="pin" disabled>/);assert.match(f.overlay,/data-command="paste" disabled>/);assert.match(f.overlay,/data-command="preview" disabled>/);
+});
 test('restoring from Trash moves focus and selection to the first remaining item',async()=>{
  const f=fixture();await f.ready();for(const value of f.state.items.slice(0,3))value.trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);
  await f.key('ArrowRight');assert.equal(focusedCard(f),f.text1);await f.click('restore');assert.deepEqual(cards(f),[f.image,f.text2]);assert.equal(focusedCard(f),f.image);assert.match(f.main,/<article class="[^"]*\bselected\b[^"]*"[^>]*data-item-id="00000000-0000-4000-8000-000000000001"/);
@@ -171,6 +196,14 @@ test('restoring the only Trash item clears its stale inspector selection',async(
  await f.click('restore');assert.deepEqual(cards(f),[]);assert.doesNotMatch(f.main,/data-action="restore"/);assert.match(f.main,/Select an item to view its details/);
 });
 
+test('Library tags are listed in folded-name order like the Mac library',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['zebra','Çay']});Object.assign(f.state.items[1],{retainedAt:900,tags:['apple','Banana']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ const expected=['apple','Banana','Çay','zebra'],order=(html,pattern)=>[...html.matchAll(pattern)].map(match=>match[1]);
+ assert.deepEqual(order(f.main,/data-action="tag-scope" data-tag="([^"]+)"/g),expected,'sidebar');
+ await f.click('toggle-filters');assert.deepEqual(order(f.main,/data-filter-tag="([^"]+)"/g),expected,'Library tag filter');
+ await f.key('KeyT',{ctrl:true,shift:true});assert.deepEqual(order(f.overlay,/data-action="pick-tag" data-tag="([^"]+)"/g),expected,'Add tags dialog');await f.key('Escape');
+ await f.key('KeyK',{ctrl:true});assert.deepEqual(order(f.overlay,/Open tag · ([^<"]+)/g),expected,'command palette');
+});
 test('global tag menu keyboard rename follows the selected scope and filters while deletion requires confirmation',async()=>{
  const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client'],pinned:true});Object.assign(f.state.items[1],{retainedAt:900,tags:['client'],pinned:false});Object.assign(f.state.items[2],{retainedAt:800,tags:['other']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('tag-scope',{tag:'client'});await f.change('filter-client','',{dataset:{filterTag:'client'},checked:true});assert.deepEqual(cards(f),[f.image,f.text1]);await f.click('tag-menu',{tag:'client'});assert.match(f.overlay,/Rename tag/);assert.match(f.overlay,/Remove tag/);await f.key('Enter');assert.match(f.overlay,/Rename tag/);await f.input('simple-input','Renamed client');await f.key('Enter');assert.deepEqual(f.commands.findLast(command=>command.action==='renameTag').payload,{tag:'client',name:'Renamed client'});assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,/data-action="tag-scope" data-tag="Renamed client" class="active"/);assert.deepEqual(f.state.items[0].tags,['Renamed client']);assert.deepEqual(f.state.items[1].tags,['Renamed client']);assert.equal(f.state.items[1].pinned,false);
  await f.click('tag-menu',{tag:'Renamed client'});await f.key('ArrowDown');await f.key('Enter');assert.match(f.overlay,/Remove this tag\?/);assert.equal(f.commands.some(command=>command.action==='deleteTag'),false);await f.key('Escape');assert.deepEqual(f.state.items[0].tags,['Renamed client']);await f.click('tag-menu',{tag:'Renamed client'});await f.key('ArrowDown');await f.key('Enter');await f.click('confirm-modal');assert.deepEqual(f.commands.findLast(command=>command.action==='deleteTag').payload,{tag:'Renamed client'});assert.deepEqual(f.state.items[0].tags,[]);assert.deepEqual(f.state.items[1].tags,[]);assert.deepEqual(f.state.items[2].tags,['other']);assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);assert.doesNotMatch(f.main,/data-action="tag-scope" data-tag="Renamed client"/);

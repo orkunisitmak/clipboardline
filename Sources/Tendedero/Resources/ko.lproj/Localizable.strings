@@ -354,6 +354,39 @@
 "Verifying update…" = "Verifying update…";
 "Version %@ is ready to install." = "Version %@ is ready to install.";
 "You are up to date." = "You are up to date.";
+"The update repository is invalid." = "업데이트 저장소가 올바르지 않습니다.";
+"The release contains an invalid download address." = "릴리스에 올바르지 않은 다운로드 주소가 있습니다.";
+"The update manifest is malformed." = "업데이트 매니페스트 형식이 잘못되었습니다.";
+"The update manifest signature is invalid." = "업데이트 매니페스트 서명이 올바르지 않습니다.";
+"The update manifest contains invalid release information." = "업데이트 매니페스트에 올바르지 않은 릴리스 정보가 있습니다.";
+"The update belongs to another repository." = "이 업데이트는 다른 저장소의 것입니다.";
+"The update is not newer than the installed application." = "이 업데이트는 설치된 앱보다 최신이 아닙니다.";
+"The update archive exceeds the download limit." = "업데이트 아카이브가 다운로드 한도를 초과합니다.";
+"The update has no application information." = "업데이트에 앱 정보가 없습니다.";
+"The update belongs to another application." = "이 업데이트는 다른 앱의 것입니다.";
+"The update executable is invalid." = "업데이트 실행 파일이 올바르지 않습니다.";
+"The update staging directory is not private." = "업데이트 준비 폴더가 비공개가 아닙니다.";
+"The update is missing a supported architecture." = "업데이트에 지원되는 아키텍처가 없습니다.";
+"The application signature is missing." = "앱 서명이 없습니다.";
+"The application signature is invalid." = "앱 서명이 올바르지 않습니다.";
+"The signing certificate could not be read." = "서명 인증서를 읽을 수 없습니다.";
+"An ad-hoc or unrelated application cannot install updates." = "임시 서명 앱이나 관련 없는 앱은 업데이트를 설치할 수 없습니다.";
+"The application identity is missing." = "앱 ID가 없습니다.";
+"The application identity could not be read." = "앱 ID를 읽을 수 없습니다.";
+"The application identity is empty." = "앱 ID가 비어 있습니다.";
+"The installed build is invalid." = "설치된 빌드가 올바르지 않습니다.";
+"The downloaded version does not match the release." = "다운로드한 버전이 릴리스와 일치하지 않습니다.";
+"This update needs a newer version of macOS." = "이 업데이트에는 더 최신 버전의 macOS가 필요합니다.";
+"The update changed the trusted application identity." = "업데이트로 인해 신뢰하는 앱 ID가 변경되었습니다.";
+"The update is not signed by the installed application's publisher." = "업데이트가 설치된 앱의 게시자로 서명되지 않았습니다.";
+"The installed architectures have different signing identities." = "설치된 아키텍처의 서명 ID가 서로 다릅니다.";
+"The update download is incomplete." = "업데이트 다운로드가 완료되지 않았습니다.";
+"The update download failed its integrity check." = "업데이트 다운로드가 무결성 검사에 실패했습니다.";
+"The update staging directory is already in use." = "업데이트 준비 폴더가 이미 사용 중입니다.";
+"The update archive could not be opened." = "업데이트 아카이브를 열 수 없습니다.";
+"The installed application path is unsafe." = "설치된 앱의 경로가 안전하지 않습니다.";
+"Move the app to a writable Applications folder before updating." = "업데이트하기 전에 앱을 쓰기 가능한 응용 프로그램 폴더로 이동하세요.";
+"The update installer is missing." = "업데이트 설치 프로그램을 찾을 수 없습니다.";
 
 /* Image markup additions. */
 "Annotation color" = "주석 색상";
@@ -496,3 +529,9 @@
 "Focus previous pane" = "이전 패널로 포커스 이동";
 
 "Undo Move to Trash" = "휴지통으로 이동 실행 취소";
+
+/* Image markup errors. */
+"The image markup document is invalid." = "이미지 마크업 문서가 올바르지 않습니다.";
+"This image could not be opened for markup." = "이 이미지를 마크업용으로 열 수 없습니다.";
+"Markup supports images up to 80 megapixels." = "마크업은 최대 8천만 화소의 이미지를 지원합니다.";
+"The marked image could not be rendered." = "마크업한 이미지를 렌더링할 수 없습니다.";

@@ -354,6 +354,39 @@
 "Verifying update…" = "Güncelleme doğrulanıyor…";
 "Version %@ is ready to install." = "%@ sürümü yüklemeye hazır.";
 "You are up to date." = "Güncel sürümü kullanıyorsun.";
+"The update repository is invalid." = "Güncelleme reposu geçersiz.";
+"The release contains an invalid download address." = "Sürüm, geçersiz bir indirme adresi içeriyor.";
+"The update manifest is malformed." = "Güncelleme manifestosu bozuk.";
+"The update manifest signature is invalid." = "Güncelleme manifestosunun imzası geçersiz.";
+"The update manifest contains invalid release information." = "Güncelleme manifestosu geçersiz sürüm bilgisi içeriyor.";
+"The update belongs to another repository." = "Güncelleme başka bir repoya ait.";
+"The update is not newer than the installed application." = "Güncelleme, kurulu uygulamadan daha yeni değil.";
+"The update archive exceeds the download limit." = "Güncelleme arşivi indirme sınırını aşıyor.";
+"The update has no application information." = "Güncellemede uygulama bilgisi yok.";
+"The update belongs to another application." = "Güncelleme başka bir uygulamaya ait.";
+"The update executable is invalid." = "Güncellemenin çalıştırılabilir dosyası geçersiz.";
+"The update staging directory is not private." = "Güncelleme hazırlık klasörü özel değil.";
+"The update is missing a supported architecture." = "Güncellemede desteklenen bir mimari eksik.";
+"The application signature is missing." = "Uygulamanın imzası eksik.";
+"The application signature is invalid." = "Uygulamanın imzası geçersiz.";
+"The signing certificate could not be read." = "İmzalama sertifikası okunamadı.";
+"An ad-hoc or unrelated application cannot install updates." = "Geçici imzalı veya ilgisiz bir uygulama güncelleme yükleyemez.";
+"The application identity is missing." = "Uygulamanın kimliği eksik.";
+"The application identity could not be read." = "Uygulamanın kimliği okunamadı.";
+"The application identity is empty." = "Uygulamanın kimliği boş.";
+"The installed build is invalid." = "Kurulu sürümün yapı numarası geçersiz.";
+"The downloaded version does not match the release." = "İndirilen sürüm, yayımlanan sürümle eşleşmiyor.";
+"This update needs a newer version of macOS." = "Bu güncelleme için macOS’un daha yeni bir sürümü gerekiyor.";
+"The update changed the trusted application identity." = "Güncelleme, güvenilen uygulama kimliğini değiştirdi.";
+"The update is not signed by the installed application's publisher." = "Güncelleme, kurulu uygulamanın yayıncısı tarafından imzalanmamış.";
+"The installed architectures have different signing identities." = "Kurulu mimarilerin imza kimlikleri birbirinden farklı.";
+"The update download is incomplete." = "Güncelleme indirmesi eksik.";
+"The update download failed its integrity check." = "Güncelleme indirmesi bütünlük denetiminden geçemedi.";
+"The update staging directory is already in use." = "Güncelleme hazırlık klasörü zaten kullanımda.";
+"The update archive could not be opened." = "Güncelleme arşivi açılamadı.";
+"The installed application path is unsafe." = "Kurulu uygulamanın konumu güvenli değil.";
+"Move the app to a writable Applications folder before updating." = "Güncellemeden önce uygulamayı yazılabilir bir Uygulamalar klasörüne taşı.";
+"The update installer is missing." = "Güncelleme yükleyicisi bulunamadı.";
 
 /* Image markup additions. */
 "Annotation color" = "İşaret rengi";
@@ -496,3 +529,9 @@
 "Focus previous pane" = "Önceki bölmeye odaklan";
 
 "Undo Move to Trash" = "Çöp’e taşımayı geri al";
+
+/* Image markup errors. */
+"The image markup document is invalid." = "Görsel işaretleme belgesi geçersiz.";
+"This image could not be opened for markup." = "Bu görsel işaretleme için açılamadı.";
+"Markup supports images up to 80 megapixels." = "İşaretleme en fazla 80 megapiksellik görselleri destekler.";
+"The marked image could not be rendered." = "İşaretlenen görsel oluşturulamadı.";

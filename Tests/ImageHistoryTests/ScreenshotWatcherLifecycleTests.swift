@@ -21,10 +21,14 @@ final class ScreenshotWatcherLifecycleTests: XCTestCase {
         let markerCaptured = expectation(description: "replacement directory scan found its image")
         let nextCaptureCaptured = expectation(description: "watcher reported the next image")
         var baselineReady = false
+        var reports: [String: Int] = [:]
 
         let watcher = ScreenshotWatcher(folder: folder, anyImage: true, onNew: { url in
-            if url.standardizedFileURL.path == marker.standardizedFileURL.path { markerCaptured.fulfill() }
-            if url.standardizedFileURL.path == nextCapture.standardizedFileURL.path { nextCaptureCaptured.fulfill() }
+            let path = url.standardizedFileURL.path
+            reports[path, default: 0] += 1
+            guard reports[path] == 1 else { return }
+            if path == marker.standardizedFileURL.path { markerCaptured.fulfill() }
+            if path == nextCapture.standardizedFileURL.path { nextCaptureCaptured.fulfill() }
         }, onChange: {
             if !baselineReady {
                 baselineReady = true
@@ -54,5 +58,13 @@ final class ScreenshotWatcherLifecycleTests: XCTestCase {
 
         try imageData.write(to: nextCapture)
         wait(for: [nextCaptureCaptured], timeout: 2)
+
+        // The old folder's descriptor can list the replacement before the
+        // watcher rebinds; the rebind must not report those images again.
+        let settled = expectation(description: "late scans settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { settled.fulfill() }
+        wait(for: [settled], timeout: 3)
+        XCTAssertEqual(reports[marker.standardizedFileURL.path], 1)
+        XCTAssertEqual(reports[nextCapture.standardizedFileURL.path], 1)
     }
 }
