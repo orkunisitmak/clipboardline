@@ -27,3 +27,9 @@ test('meta tags with unquoted attribute values are read like macOS',async()=>{
  const metadata=await linkMetadata('https://example.com/post',async()=>({bytes:Buffer.from(html),url:'https://example.com/post',type:'text/html; charset=utf-8'}));
  assert.equal(metadata.title,'Real-Article-Title');assert.equal(metadata.thumbnail,'https://cdn.example.com/a.png');
 });
+
+test('long YouTube oEmbed title and author are cut on whole characters',async()=>{
+ const emoji='\u{1F600}',title='a'.repeat(499)+emoji+' tail',author='b'.repeat(199)+emoji+' tail';
+ const metadata=await linkMetadata('https://youtu.be/synthetic',async()=>({bytes:Buffer.from(JSON.stringify({title,author_name:author})),type:'application/json'}));
+ assert.equal(metadata.title,'a'.repeat(499)+emoji);assert.equal(metadata.author,'b'.repeat(199)+emoji);
+});
