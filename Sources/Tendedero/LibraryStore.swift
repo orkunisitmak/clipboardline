@@ -455,17 +455,27 @@ extension String {
         guard files.isRegularFile(url) else { throw HistoryFiles.Failure.unsafeFile }
         let date = capturedAt ?? now()
         // The same pixels copied again move the existing item to the front and keep its pin, tags and folders, as on Windows.
-        if var existing = try identicalImage(to: url) {
-            var front = date
-            if case let .real(newest)? = try db.rows("SELECT created FROM items WHERE kind='image' AND shelf=1 AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1").first?["created"],
-               date.timeIntervalSince1970 <= newest { front = Date(timeIntervalSince1970: newest.nextUp) }
-            existing.createdAt = front; existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.captureRevision = UUID()
-            try db.transaction { try put(existing) }
-            if files.isClipboardCopy(url) { try? FileManager.default.removeItem(at: url) }
-            invalidateShelfUndo([existing.id]); changed([existing.id]); return existing
+        if let match = try identicalImage(to: url) {
+            var moved: LibraryRecord?
+            try db.transaction {
+                // Another app instance may have edited or trashed the item since the match was read.
+                guard var existing = try item(match.id), existing.deletedAt == nil else { return }
+                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.captureRevision = UUID()
+                try put(existing); moved = existing
+            }
+            if let moved {
+                if files.isClipboardCopy(url) { try? FileManager.default.removeItem(at: url) }
+                invalidateShelfUndo([moved.id]); changed([moved.id]); return moved
+            }
         }
         var item = LibraryRecord(id: UUID(), kind: .image, createdAt: date, updatedAt: date); item.path = url.standardizedFileURL.path; item.captureRevision = UUID()
         try db.transaction { try put(item) }; changed([item.id]); return item
+    }
+    /// The capture time, nudged just past the newest shelf image when the clock has not moved on since it.
+    private func frontDate(_ date: Date) throws -> Date {
+        if case let .real(newest)? = try db.rows("SELECT created FROM items WHERE kind='image' AND shelf=1 AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1").first?["created"],
+           date.timeIntervalSince1970 <= newest { return Date(timeIntervalSince1970: newest.nextUp) }
+        return date
     }
     /// A live image whose original bytes equal this file's. Size narrows the candidates before any file is hashed.
     private func identicalImage(to url: URL) throws -> LibraryRecord? {
