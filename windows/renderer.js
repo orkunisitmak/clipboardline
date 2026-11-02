@@ -536,7 +536,7 @@ function actionCommands(){
  const commands=keyboard.map(id=>{
   let reason='';
   if(selectedActions.has(id)&&!hasSelection)reason='Select an item first.';
-  else if(deleted&&['paste','preview','pin','folder','name','tag','remove','markup','crop','copyOCR','edit'].includes(id))reason='Restore this item first.';
+  else if(deleted&&['paste','preview','pin','folder','name','tag','remove','trash','markup','crop','copyOCR','edit'].includes(id))reason='Restore this item first.';
   else if(['crop',...Object.keys(MARKUP_TOOLS),'copyOCR'].includes(id)&&(!image||video))reason='Select a still image first.';
   else if(id==='markup'&&!image)reason='Select an image first.';
   else if(id==='edit'&&!text)reason='Select a text item first.';
