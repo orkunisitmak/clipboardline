@@ -78,6 +78,8 @@ library only when the open view is that folder or one of its subfolders.
 platforms, not 1 MiB of UTF-16 units on Windows.
 `name-fold-keeps-script-marks` requires tag and folder names that differ only by a kana voiced mark or a
 Devanagari or Thai vowel sign to stay distinct on both platforms.
+`width-insensitive-search` also keeps a voiced kana and a Hangul syllable whole, so searching は or 하 does
+not find ばら or 한국 on either platform.
 `item-display-title` requires an unnamed text to be titled by its first non-blank
 line, trimmed and capped at 120 grapheme clusters (Untitled note when every line is
 blank), and a link without a fetched title by its host name (Link when the stored URL

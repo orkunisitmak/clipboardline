@@ -53,7 +53,7 @@ const attr = esc;
 // and ￣ maps to ¯ as on the Mac instead of NFKC's space + macron. Then strip
 // diacritics and use a locale-independent lower case: a Turkish default locale must
 // not turn a typed I into dotless ı.
-const fold = value => String(value || '').replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const fold = value => String(value || '').replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').normalize('NFC').toLowerCase();
 let indexedItems=null,itemIndex=new Map();
 const item = id => {if(indexedItems!==state.items){indexedItems=state.items;itemIndex=new Map(state.items.map(value=>[value.id,value]));}return itemIndex.get(id);};
 const saved = value => value.pinned || value.retainedAt!=null || value.folderIds?.length || value.tags?.length;

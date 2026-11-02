@@ -51,3 +51,9 @@ test('a link whose capture time is newer than its older copy time keeps its capt
  f.emit([...f.raw.items.filter(value=>value.kind!=='link'),link(1,500,{lastCopiedAt:50}),link(2,300,{lastCopiedAt:400}),link(3,200)]);
  assert.deepEqual(api.rowItems('link').map(value=>value.url),['https://m1.example.com/','https://m2.example.com/','https://m3.example.com/']);
 });
+test('search does not find a bare kana or Hangul jamo inside a voiced kana or syllable, like the Mac',async()=>{
+ const f=fixture();await f.ready();const {api}=f;const kana={...structuredClone(f.initial.items[1]),id:'71000000-0000-4000-8000-000000000011',createdAt:5100,text:'ばら 한국 バス'};
+ f.emit([kana,...f.raw.items]);
+ for(const query of ['は','하','ハ'])api.ui.search=query,assert.ok(!plain(api.rowItems('text')).includes(kana.id),query);
+ for(const query of ['ば','한','バ','ばら'])api.ui.search=query,assert.ok(plain(api.rowItems('text')).includes(kana.id),query);
+});
