@@ -285,7 +285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // A watched folder on a volume mounted later is picked up without a restart.
         workspace.addObserver(forName: NSWorkspace.didMountNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, Self.existingExtraFolders.count != self.folderWatchers.count else { return }
+                guard let self, self.watchesFiles, Set(Self.existingExtraFolders.map(\.path)) != Set(self.folderWatchers.map(\.folder.path)) else { return }
                 self.startWatcher()
             }
         }
