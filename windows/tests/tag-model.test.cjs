@@ -30,6 +30,22 @@ test('failed global tag persistence restores every affected membership and keeps
  const first=store.insert('text','One'),second=store.insert('text','Two');store.modify('tag',{ids:[first.id,second.id],tags:['shared']});const before=structuredClone(store.data),bytes=fs.readFileSync(store.file);store.persist=()=>{throw new Error('Synthetic save failure');};for(const action of ['renameTag','deleteTag']){assert.throws(()=>store.modify(action,{tag:'shared',name:'Renamed'}),/Synthetic save failure/);assert.deepEqual(store.data,before);assert.deepEqual(fs.readFileSync(store.file),bytes);}
 }));
 
+test('tags and folders that differ only by a compatibility character stay distinct like macOS',()=>fixture(store=>{
+ const first=store.insert('text','One'),second=store.insert('text','Two');
+ store.modify('tag',{id:first.id,tags:['m2']});store.modify('tag',{id:second.id,tags:['m²','ﬁle','①']});
+ assert.deepEqual(store.item(second.id).tags,['m²','ﬁle','①']);
+ store.modify('createFolder',{name:'m2'});store.modify('createFolder',{name:'m²'});
+ assert.deepEqual(store.data.folders.map(folder=>folder.name),['m2','m²']);
+}));
+
+test('renaming a tag to a compatibility-character spelling is allowed, a width-only duplicate is not',()=>fixture(store=>{
+ const first=store.insert('text','One'),second=store.insert('text','Two');
+ store.modify('tag',{id:first.id,tags:['m2']});store.modify('tag',{id:second.id,tags:['foo']});
+ store.modify('renameTag',{tag:'foo',name:'m²'});assert.deepEqual(store.item(second.id).tags,['m²']);
+ store.modify('tag',{id:second.id,tags:['bar']});
+ assert.throws(()=>store.modify('renameTag',{tag:'bar',name:'ｍ2'}),/already exists/);
+}));
+
 test('adding a tag reuses the existing spelling and drops surrounding # like macOS addTag',()=>fixture(store=>{
  const first=store.insert('text','First'),second=store.insert('text','Second'),third=store.insert('text','Third');
  store.modify('tag',{id:first.id,tags:['#Work# ']});assert.deepEqual(store.item(first.id).tags,['Work']);

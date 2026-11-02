@@ -42,6 +42,11 @@ test('og:title whitespace collapses without rewriting the og:image URL',async()=
  const response=await linkMetadata('https://example.com',async()=>({bytes:Buffer.from('<meta property="og:title" content="  Hello\n   world  "><meta property="og:image" content="https://cdn.example.com/a  b.png?x=1&amp;y=2">'),url:'https://example.com/',type:'text/html'}));
  assert.equal(response.title,'Hello world');assert.equal(response.thumbnail,'https://cdn.example.com/a%20%20b.png?x=1&y=2');
 });
+test('a whitespace-only og:image gives no thumbnail',async()=>{
+ const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'});
+ assert.equal((await linkMetadata('https://example.com',page('<meta property="og:image" content="   ">'))).thumbnail,'');
+ assert.equal((await linkMetadata('https://example.com',page('<meta property="og:image" content="/a.png">'))).thumbnail,'https://example.com/a.png');
+});
 test('metadata titles decode numeric references and collapse layout whitespace',async()=>{
  const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'});
  assert.equal((await linkMetadata('https://example.com',page('<title>\n  It&#8217;s &#x41;&nbsp;test\n</title>'))).title,'It’s A test');
@@ -58,3 +63,4 @@ test('YouTube Music links use oEmbed through the canonical host',async()=>{
  assert.equal(result.title,'Song');
  assert.equal(new URL(requested).searchParams.get('url'),'https://www.youtube.com/watch?v=abc123');
 });
+test('control characters are dropped from a link title like on macOS',async()=>{const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/p',type:'text/html'});assert.equal((await linkMetadata('https://example.com/p',page('<title>Invoice\u0007\u0000 due\u0085 now</title>'))).title,'Invoice due now');assert.equal((await linkMetadata('https://example.com/p',page('<meta property="og:title" content="a\u0007b">'))).title,'ab');});
