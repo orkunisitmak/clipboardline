@@ -114,6 +114,7 @@ test('inspector Add to folder preserves pin state and memberships while ShiftP s
 test('the action list Add to folder keeps an unpinned item unpinned',async()=>{
  const f=fixture();await f.ready();const a='20000000-0000-4000-8000-000000000001';f.state.folders=[{id:a,name:'Work'}];Object.assign(f.state.items[0],{retainedAt:1000,folderIds:[],pinned:false});f.api.emit({folders:f.state.folders,items:f.state.items});await f.ready();await savedLibrary(f);await f.key('KeyK',{ctrl:true});await f.click('execute-command',{command:'folder.assign.'+a});
  assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:a,pinning:false});
+ const value=f.state.items.find(entry=>entry.id===f.image);assert.deepEqual(value.folderIds,[a]);assert.equal(value.pinned,false);
 });
 
 test('ShiftP starts on the first real folder and keeps Pin without folder last like the native picker',async()=>{
