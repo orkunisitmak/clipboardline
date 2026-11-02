@@ -305,7 +305,7 @@ import XCTest
     func testYouTubeWhitespaceOnlyTitleAndAuthorAreDroppedLikeWindows() throws {
         let blank = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"   ","author_name":" \n "}"#.utf8))
         XCTAssertNil(blank.0.title); XCTAssertNil(blank.0.author)
-        let padded = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"  Synthetic title ","author_name":"Synthetic channel"}"#.utf8))
+        let padded = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"  Synthetic title ","author_name":"  Synthetic channel "}"#.utf8))
         XCTAssertEqual(padded.0.title, "Synthetic title"); XCTAssertEqual(padded.0.author, "Synthetic channel")
     }
     func testMetadataConcurrencyBackoffPrivateLinksAndUserTitle() throws {
