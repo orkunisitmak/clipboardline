@@ -434,10 +434,15 @@ test('Library domain filter ignores case, surrounding spaces and dots, www and a
 });
 
 test('typing a search in the Library switches the sort to Best match like macOS, and clearing it returns to Newest first',async()=>{
- const f=fixture();await f.ready();await recent(f);
+ const f=fixture();await f.ready();
+ const older=f.state.items.find(value=>value.id===f.text1),newer=f.state.items.find(value=>value.id===f.link);
+ older.name='reference';older.createdAt=1;newer.createdAt=Math.max(...f.state.items.map(value=>value.createdAt))+1000;f.api.emit({items:f.state.items});await f.ready();
+ await recent(f);
  assert.match(f.main,/<option value="newest" selected>/);
  await f.input('search-input','reference');
  assert.match(f.main,/<option value="relevance" selected>/,'sort stays on Newest first after a search starts');
+ assert.deepEqual(cards(f),[f.text1,f.link],'the older item with the better match comes first');
  await f.input('search-input','');
  assert.match(f.main,/<option value="newest" selected>/);
+ assert.equal(cards(f).indexOf(f.link)<cards(f).indexOf(f.text1),true,'newest first again');
 });
