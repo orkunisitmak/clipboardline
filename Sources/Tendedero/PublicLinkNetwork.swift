@@ -358,7 +358,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     init(data: Data, url: URL, contentType: String = "") throws {
         guard data.count <= 512 * 1024 else { throw PublicLinkError.tooLarge }
         let source = Self.decode(data, contentType: contentType)
-        let html = Self.replacing(#"(?is)<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>"#, in: source, with: "")
+        let html = Self.replacing(#"(?is)<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<script\b[^>]*>.*?(?=<title\b|$)|<style\b[^>]*>.*?</style\s*>"#, in: source, with: "")
         let tags = try NSRegularExpression(pattern: #"(?is)<meta\b([^>]{0,8192})>"#)
         let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)
         var metadata: [String: String] = [:]
