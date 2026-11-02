@@ -126,7 +126,7 @@ private enum LibrarySQL {
         if !query.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             var searchParts = [String](), searchValues = [SQLValue]()
             if query.searchMode != .visual {
-                for term in query.search.libraryFolded.split(whereSeparator: \.isWhitespace) {
+                for term in query.search.searchFolded.split(whereSeparator: \.isWhitespace) {
                     searchParts.append("(instr(i.search,?)>0 OR EXISTS(SELECT 1 FROM image_analysis a WHERE a.item=i.id AND a.path=i.path AND instr(a.content,?)>0))")
                     searchValues += [.text(String(term)), .text(String(term))]
                 }
@@ -154,8 +154,10 @@ private enum LibrarySQL {
     }
 }
 extension String {
-    /// Turkish ı, I, İ and i all fold to i, so text typed with either dotted or dotless letters matches.
-    var libraryFolded: String { folding(options: [.diacriticInsensitive, .widthInsensitive, .caseInsensitive], locale: nil).replacingOccurrences(of: "ı", with: "i") }
+    /// Identity of tags and folders: `kır` and `kir` stay different names.
+    var libraryFolded: String { folding(options: [.diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "tr_TR")).lowercased() }
+    /// Search text: Turkish ı, I, İ and i all fold to i, so text typed with dotted or dotless letters matches.
+    var searchFolded: String { folding(options: [.diacriticInsensitive, .widthInsensitive, .caseInsensitive], locale: nil).replacingOccurrences(of: "ı", with: "i") }
 }
 
 /// The production source of truth. Existing history classes are adapters to
@@ -204,6 +206,7 @@ extension String {
     var canUndoShelfRemoval: Bool { !shelfRemovalUndo.isEmpty }
     var canUndoTrash: Bool { !trashRemovalUndo.isEmpty }
     private let readerQueue = DispatchQueue(label: "local.clipboardline.library.reader", qos: .userInitiated)
+    private let searchRefold = DispatchGroup()
     var retentionDays: Int { let days = defaults.integer(forKey: "historyRetentionDays"); return ImageHistory.dayChoices.contains(days) ? days : 30 }
     func retentionDays(for kind: LibraryKind) -> Int { HistoryRetention.days(kind, defaults: defaults) }
     var thumbnailsFolder: URL { root.appendingPathComponent("Thumbnails", isDirectory: true) }
@@ -303,26 +306,57 @@ extension String {
         }
         try db.backup(to: backup.appendingPathComponent("library-after-migration.sqlite"))
     }
-    /// The search index stores folded text, so rows written before dotless ı folded to i must be folded again.
+    /// The search index stores folded text, so rows written before dotless ı folded to i are folded again.
+    /// Only the index changes (`items.search`, `search_fts`, `image_analysis.content`), in small
+    /// transactions on a private connection off the main thread, so launch is not held up. A relaunch
+    /// before the marker is written starts over; every step is repeatable.
     private func refoldSearch() throws {
         guard try db.rows("SELECT value FROM metadata WHERE key='search-fold-v2'").isEmpty else { return }
-        try db.transaction {
-            var cursor = ""
-            while true {
-                let rows = try db.rows("SELECT id FROM items WHERE id>? ORDER BY id LIMIT 256", [.text(cursor)])
-                guard !rows.isEmpty else { break }
-                for row in rows {
-                    guard let key = row["id"]?.string, let id = UUID(uuidString: key), let value = try item(id) else { throw HistoryFiles.Failure.unsafeFile }
-                    try put(value)
-                    cursor = key
-                }
-            }
-            for row in try db.rows("SELECT item,ocr FROM image_analysis") {
-                guard let key = row["item"]?.string, let ocr = row["ocr"]?.string else { continue }
-                try db.execute("UPDATE image_analysis SET content=? WHERE item=?", [.text(ocr.libraryFolded), .text(key)])
-            }
-            try db.execute("INSERT INTO metadata VALUES('search-fold-v2','complete')")
+        let url = databaseURL
+        searchRefold.enter()
+        DispatchQueue.global(qos: .utility).async { [searchRefold] in
+            defer { searchRefold.leave() }
+            try? Self.refoldSearchIndex(url)
         }
+    }
+    /// Blocks until a started search re-fold finishes. Tests use it; the app does not.
+    func waitForSearchRefold() { searchRefold.wait() }
+    nonisolated private static func refoldSearchIndex(_ url: URL) throws {
+        let db = try LibraryDatabase(url: url, verify: false)
+        var cursor = ""
+        while true {
+            let done = try db.transaction { () throws -> Bool in
+                let rows = try db.rows("SELECT id,payload FROM items WHERE id>? ORDER BY id LIMIT 256", [.text(cursor)])
+                guard !rows.isEmpty else { return true }
+                for row in rows {
+                    guard let key = row["id"]?.string else { continue }
+                    cursor = key
+                    guard let item = try LibrarySQL.decode([row]).first else { continue }
+                    let names = try db.rows("SELECT t.name FROM tags t JOIN item_tags m ON m.tag=t.id WHERE m.item=? ORDER BY t.folded,t.id", [.text(key)]).compactMap { $0["name"]?.string }
+                    let content = searchContent(item, tagNames: names.joined(separator: " "))
+                    try db.execute("UPDATE items SET search=? WHERE id=?", [.text(content), .text(key)])
+                    try db.execute("DELETE FROM search_fts WHERE id=?", [.text(key)])
+                    try db.execute("INSERT INTO search_fts(id,content) VALUES(?,?)", [.text(key), .text(content)])
+                }
+                return false
+            }
+            if done { break }
+        }
+        cursor = ""
+        while true {
+            let done = try db.transaction { () throws -> Bool in
+                let rows = try db.rows("SELECT item,ocr FROM image_analysis WHERE item>? ORDER BY item LIMIT 256", [.text(cursor)])
+                guard !rows.isEmpty else { return true }
+                for row in rows {
+                    guard let key = row["item"]?.string else { continue }
+                    cursor = key
+                    try db.execute("UPDATE image_analysis SET content=? WHERE item=?", [.text((row["ocr"]?.string ?? "").searchFolded), .text(key)])
+                }
+                return false
+            }
+            if done { break }
+        }
+        try db.execute("INSERT OR IGNORE INTO metadata(key,value) VALUES('search-fold-v2','complete')")
     }
     private static func textDigest(_ text: String) -> Data { Data(SHA256.hash(data: Data(TextIdentity.key(text).utf8))) }
     private func putTextIdentity(_ item: LibraryRecord) throws {
@@ -358,12 +392,15 @@ extension String {
         }
         try db.execute("INSERT OR IGNORE INTO metadata(key,value) VALUES('text-identity-v2','complete')")
     }
-    private func put(_ item: LibraryRecord) throws {
-        let tagNames = try tags(for: item.id).map(\.name).joined(separator: " ")
+    nonisolated private static func searchContent(_ item: LibraryRecord, tagNames: String) -> String {
         // A personal label supplements the recognizable source filename.
         // Index its basename only; private directory names are not content.
         let imageName = item.kind == .image ? (item.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? item.fileURL?.lastPathComponent ?? "") : ""
-        let content = [item.displayTitle,imageName,item.metadataTitle ?? "",item.text ?? "",item.note,item.originalURL ?? "",tagNames].joined(separator: " ").libraryFolded
+        return [item.displayTitle,imageName,item.metadataTitle ?? "",item.text ?? "",item.note,item.originalURL ?? "",tagNames].joined(separator: " ").searchFolded
+    }
+    private func put(_ item: LibraryRecord) throws {
+        let tagNames = try tags(for: item.id).map(\.name).joined(separator: " ")
+        let content = Self.searchContent(item, tagNames: tagNames)
         try db.execute("INSERT INTO items VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,created=excluded.created,updated=excluded.updated,copied=excluded.copied,retained=excluded.retained,favorite=excluded.favorite,shelf=excluded.shelf,deleted=excluded.deleted,path=excluded.path,normalized=excluded.normalized,domain=excluded.domain,sort_title=excluded.sort_title,search=excluded.search,payload=excluded.payload", [
             .text(item.id.uuidString), .text(item.kind.rawValue), .real(item.createdAt.timeIntervalSince1970), .real(item.updatedAt.timeIntervalSince1970),
             item.lastCopiedAt.map { .real($0.timeIntervalSince1970) } ?? .null, item.retainedAt.map { .real($0.timeIntervalSince1970) } ?? .null,

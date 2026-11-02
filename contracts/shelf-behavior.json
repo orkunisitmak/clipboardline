@@ -48,6 +48,12 @@
         "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac; shelf-render.test.cjs checks both through the shipped renderer."
       },
       {
+        "id": "dotless-i-search",
+        "behavior": "Shelf and Library text search treat I, İ, i and ı as the same letter, so Işık is found by typing ışık, isik or ISIK. Only search does this: tag and folder names keep their own identity, so kır and kir stay two names.",
+        "macos": "String.searchFolded folds ı to i and is used for the search index and the query; tags and folders keep libraryFolded. LibraryStoreTests.testSearchMatchesTurkishDotlessIAndRefoldsOlderRows and testDotlessITagAndFolderNamesStayDistinct cover it, and an index written the old way is re-folded in the background at launch.",
+        "windows": "The renderer fold maps ı to i after lower-casing; shelf-render.test.cjs covers it, and tag and folder names are compared by the model's own name rules, not this fold."
+      },
+      {
         "id": "link-title-charset",
         "behavior": "A fetched page title and Open Graph text are decoded with the page's declared character set, in this order: UTF-8 byte-order mark, Content-Type charset, XML declaration (XHTML only), early meta charset; unknown labels are skipped, a meta UTF-16 label means UTF-8, and undeclared bytes that are not UTF-8 are windows-1252, so older windows-1254 / ISO-8859-9 pages show their Turkish letters.",
         "macos": "PublicLinkHTMLMetadata.decode follows that order with CoreFoundation IANA names; PublicLinkNetworkTests.testHTMLHonorsDeclaredMetaCharsetAndFallsBackToWindows1252 covers it.",

@@ -123,7 +123,19 @@ import XCTest
         try db.execute("DELETE FROM search_fts WHERE id=?", [.text(record.id.uuidString)])
         try db.execute("INSERT INTO search_fts(id,content) VALUES(?,?)", [.text(record.id.uuidString), .text("isık ısparta ısı")])
         try db.execute("DELETE FROM metadata WHERE key='search-fold-v2'")
-        library = try store(f)
+        library = try store(f); library.waitForSearchRefold()
+        XCTAssertEqual(try library.query(LibraryQuery(search: "ışık")).first?.id, record.id)
+        XCTAssertEqual(try db.rows("SELECT value FROM metadata WHERE key='search-fold-v2'").count, 1)
+    }
+    func testDotlessITagAndFolderNamesStayDistinct() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let record = try XCTUnwrap(library.captureText("Işık"))
+        try library.addTag("kır", to: [record.id]); try library.addTag("kir", to: [record.id])
+        XCTAssertEqual(try library.tags().count, 2)
+        _ = try library.createCollection("kır"); _ = try library.createCollection("kir")
+        XCTAssertEqual(try library.collections().count, 2)
+        try library.retain([record.id])
+        XCTAssertEqual(try library.query(LibraryQuery(search: "kir")).first?.id, record.id)
         XCTAssertEqual(try library.query(LibraryQuery(search: "ışık")).first?.id, record.id)
     }
     func testTrashRestoresContentAndRelationshipsWithoutMovingOriginal() throws {

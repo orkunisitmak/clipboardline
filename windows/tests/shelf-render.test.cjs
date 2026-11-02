@@ -51,3 +51,8 @@ test('a link whose capture time is newer than its older copy time keeps its capt
  f.emit([...f.raw.items.filter(value=>value.kind!=='link'),link(1,500,{lastCopiedAt:50}),link(2,300,{lastCopiedAt:400}),link(3,200)]);
  assert.deepEqual(api.rowItems('link').map(value=>value.url),['https://m1.example.com/','https://m2.example.com/','https://m3.example.com/']);
 });
+test('search treats dotless ı like i, so Işık is found by ışık and isik',async()=>{
+ const f=fixture();await f.ready();const {api}=f,item={...f.initial.items[1],text:'Işık raporu ISPARTA'};
+ for(const query of ['ışık','isik','ISIK','ısparta','Isparta'])assert.equal(api.matches(item,query),true,query);
+ assert.equal(api.matches(item,'ışıl'),false);
+});
