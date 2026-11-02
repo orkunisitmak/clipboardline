@@ -13,8 +13,9 @@ desktops, Hyprland, Sway and GNOME, with the limits listed below.
 ### Arch Linux, CachyOS, EndeavourOS, Manjaro
 
 ```sh
-sudo pacman -S --needed nodejs npm wl-clipboard
-cd packaging/arch
+sudo pacman -S --needed git nodejs npm wl-clipboard xclip
+git clone https://github.com/orkunisitmak/clipboardline.git
+cd clipboardline/packaging/arch
 makepkg -si
 ```
 

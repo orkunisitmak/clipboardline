@@ -80,11 +80,15 @@ class ReleaseVersionTests(unittest.TestCase):
 
     def test_arch_pkgbuild_matches_shared_version(self):
         self.windows()
-        self.pkgbuild("pkgname=clipboardline\npkgver=1.7.2\npkgrel=1\n")
-        self.assertEqual(guard.check_release_version(self.root, require_windows=True), "1.7.2")
+        for line in ["pkgver=1.7.2", "pkgver=1.7.2  # shared release", "pkgver='1.7.2'"]:
+            with self.subTest(line=line):
+                self.pkgbuild(f"pkgname=clipboardline\n{line}\npkgrel=1\n")
+                self.assertEqual(guard.check_release_version(self.root, require_windows=True), "1.7.2")
 
     def test_arch_pkgbuild_drift_is_rejected(self):
-        for contents in ["pkgver=1.7.1\n", "pkgrel=1\n", "pkgver=1.7.2\npkgver=1.7.2\n"]:
+        for contents in ["pkgver=1.7.1\n", "pkgrel=1\n", "pkgver=1.7.2\npkgver=1.7.2\n",
+                         "pkgver=1.7.2\npkgver=1.7.1 # older\n", "pkgver=1.7.2\n  pkgver=1.7.1\n",
+                         "pkgver=1.7.2\npkgver+=.1\n", "pkgver=$(cat VERSION)\n"]:
             with self.subTest(contents=contents):
                 self.pkgbuild(contents)
                 with self.assertRaisesRegex(guard.ReleaseVersionError, "PKGBUILD pkgver"):

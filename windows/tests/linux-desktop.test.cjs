@@ -67,7 +67,7 @@ test('only an Xwayland choice on a Wayland session relaunches, and it keeps the 
 function desktop(environment,tools,responses,{ownPID=4242}={}){
   const calls=[];
   const value=new LinuxDesktop({environment,ownPID,find:name=>tools.includes(name)?'/usr/bin/'+name:null,sleep:async()=>{},
-    run:async(file,args)=>{calls.push([file,...args]);const key=[file,...args].join(' ');const response=typeof responses==='function'?responses(key):responses[key];if(response instanceof Error)throw response;return response??'';}});
+    run:async(file,args)=>{calls.push([file,...args]);const key=[file,...args].join(' ');const response=typeof responses==='function'?responses(key,args):responses[key];if(response instanceof Error)throw response;return response??'';}});
   return{value,calls};
 }
 
@@ -170,8 +170,8 @@ test('XDG autostart entry targets the AppImage path and is removed when disabled
 
 test('KDE Wayland reads and activates windows through one-shot KWin scripts reported by nonce',async()=>{
   const scripts=[];let active='{a1}';
-  const {value,calls}=desktop({WAYLAND_DISPLAY:'w',XDG_CURRENT_DESKTOP:'KDE'},['gdbus','journalctl','ydotool'],key=>{
-    if(key.includes('loadScript')){const file=key.split(' ').at(-2);scripts.push(require('node:fs').readFileSync(file,'utf8'));return '(7,)';}
+  const {value,calls}=desktop({WAYLAND_DISPLAY:'w',XDG_CURRENT_DESKTOP:'KDE'},['gdbus','journalctl','ydotool'],(key,args)=>{
+    if(key.includes('loadScript')){const file=args.at(-2);scripts.push(require('node:fs').readFileSync(file,'utf8'));return '(7,)';}
     if(key.startsWith('journalctl')){const nonce=key.split(' ').at(-1),body=scripts.at(-1);
       if(body.includes('activeWindow;print'))return nonce+' '+JSON.stringify({id:active,pid:51})+'\n';
       return nonce+(body.includes('let count')?' 1':'')+'\n';}

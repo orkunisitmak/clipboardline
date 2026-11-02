@@ -17,11 +17,19 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 STABLE_VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
-PKGVER = re.compile(r"^pkgver=(\S*)$", re.MULTILINE)
+PKGVER = re.compile(r"^[ \t]*pkgver[ \t]*(\+?=.*)$", re.MULTILINE)
 
 
 class ReleaseVersionError(ValueError):
     pass
+
+
+def pkgbuild_version(text: str):
+    """The one plain pkgver assignment, or None when bash could see another value."""
+    assignments = PKGVER.findall(text)
+    if len(assignments) != 1 or not assignments[0].startswith("="):
+        return None
+    return assignments[0][1:].split("#", 1)[0].strip().strip("'\"")
 
 
 def _read_object(root: Path, relative: str) -> dict:
@@ -69,10 +77,10 @@ def check_release_version(root: Path = ROOT, *, require_windows: bool = False,
     pkgbuild = root / "packaging/arch/PKGBUILD"
     if pkgbuild.exists():
         try:
-            versions = PKGVER.findall(pkgbuild.read_text(encoding="utf-8"))
+            version = pkgbuild_version(pkgbuild.read_text(encoding="utf-8"))
         except (OSError, UnicodeError) as error:
             raise ReleaseVersionError(f"Cannot read packaging/arch/PKGBUILD: {error}") from error
-        require(versions[0] if len(versions) == 1 else None, "packaging/arch/PKGBUILD pkgver")
+        require(version, "packaging/arch/PKGBUILD pkgver")
     return expected
 
 

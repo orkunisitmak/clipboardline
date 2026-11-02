@@ -151,6 +151,20 @@
           "StartupWMClass": "clipboardline",
           "Keywords": "clipboard;history;paste;shelf;",
           "StartupNotify": "false"
+        },
+        "desktopActions": {
+          "Toggle": {
+            "Name": "Show or Hide Shelves",
+            "Exec": "clipboardline --toggle"
+          },
+          "Search": {
+            "Name": "Search Shelves",
+            "Exec": "clipboardline --search"
+          },
+          "Library": {
+            "Name": "Open Library",
+            "Exec": "clipboardline --library"
+          }
         }
       },
       "syncDesktopName": true
