@@ -154,7 +154,9 @@ class CrossPlatformParityTests(unittest.TestCase):
         for mutate in [lambda steps: steps[0].pop('url'), lambda steps: steps[0].update(url=' '),
                        lambda steps: steps[0]['expect']['link'].update(item='link-2'), lambda steps: steps[0]['expect'].update(activeKind='link')]:
             self.contract = copy.deepcopy(original); mutate(scenario()['steps'])
-            self.contract_path.write_text(json.dumps(self.contract)); self.rejected()
+            self.contract_path.write_text(json.dumps(self.contract))
+            with self.assertRaises(CHECKER.ParityError):
+                CHECKER.load_contract(self.contract_path)
 
     def test_missing_snapshot_field_is_rejected(self):
         del self.reports['macos']['observations'][0]['actual']['searchEditing']
