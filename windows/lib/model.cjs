@@ -26,6 +26,10 @@ function text(value, maximum = 1024 * 1024, empty = false) {
   if (typeof value !== 'string' || value.length > maximum || (!empty && !value.length) || value.includes('\0')) fail('Invalid text');
   return value;
 }
+function sizedText(value, empty = false) {
+  if (typeof value === 'string' && Buffer.byteLength(value, 'utf8') > 1024 * 1024) fail('Invalid text');
+  return text(value, 1024 * 1024, empty);
+}
 function ids(value) {
   if (!Array.isArray(value) || value.length > 10000 || value.some(id => typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id))) fail('Invalid item selection');
   return [...new Set(value)];
@@ -78,8 +82,10 @@ function settings(patch, previous = DEFAULTS) {
   }
   return out;
 }
-// Match macOS libraryFolded: sibling folder names ignore case, width and diacritics.
-const foldedName=value=>value.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase();
+// Match macOS libraryFolded: sibling folder and tag names ignore case, width and diacritics.
+// Only the ideographic space, compatibility jamo and the Halfwidth and Fullwidth Forms
+// block get compatibility mapping, so ＡＢＣ matches ABC while m² stays distinct from m2.
+const foldedName=value=>value.replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
 function trashUndoFingerprint(item){return crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex');}
 function trashUndoMatches(item,entry){return !!item&&item.trashedAt!=null&&item.trashedAt===entry.afterTrashedAt&&item.updatedAt===entry.afterUpdatedAt&&(item.captureRevision??null)===entry.captureRevision&&trashUndoFingerprint(item)===entry.fingerprint;}
 function availableTrashUndo(items,journal){if(!journal?.length)return false;const byID=new Map(items.map(item=>[item.id,item]));for(let index=journal.length-1;index>=0;index--)if(journal[index].some(entry=>trashUndoMatches(byID.get(entry.id),entry)))return true;return false;}
@@ -96,7 +102,7 @@ function saved(item) { return item.retainedAt != null || item.pinned || item.fol
 function plainURL(value) {
   if (typeof value !== 'string') return null;
   value = value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, '');
-  if (!value || /\s/.test(value) || value.length > 8192) return null;
+  if (!value || /\s/.test(value) || value.length > 8192 || !/^https?:\/\/[^/\\]/i.test(value)) return null;
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
 
@@ -110,6 +116,7 @@ function protectDirectory(directory,{powershell,script,run=execFileSync}){
     catch(error){if(error?.code!=='ETIMEDOUT'||attempt===PROTECTION_TIMEOUTS.length-1)throw error;}
   }
 }
+function protectionFailureDetail(error,directory){return String(error.stderr||error.message||'').replaceAll(directory,'[application data]').replace(/[\r\n]+/g,' ').slice(0,900);}
 class Store {
   constructor(directory, {clock = Date.now} = {}) {
     this.directory = path.resolve(directory); this.clock = clock; this.undoStack = []; this.trashUndoStack = []; this.textIdentities = new WeakMap();this.revision=0;this.inFlightMediaReferences=new Map();
@@ -119,7 +126,7 @@ class Store {
       const script=__dirname.includes('app.asar')?path.join(process.resourcesPath,'native','protect-directory.ps1'):path.join(__dirname,'..','native','protect-directory.ps1');
       const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
       try{protectDirectory(this.directory,{powershell,script});}
-      catch(error){const detail=String(error.stderr||error.message||'').replaceAll(this.directory,'[application data]').replace(/[\r\n]+/g,' ').slice(0,900);fail('The private application data permissions could not be secured. Existing files were preserved. '+detail);}
+      catch(error){fail('The private application data permissions could not be secured. Existing files were preserved. '+protectionFailureDetail(error,this.directory));}
     }
     this.mediaDirectory = path.join(this.directory, 'media'); fs.mkdirSync(this.mediaDirectory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
@@ -146,8 +153,10 @@ class Store {
     ids([item.id]); if (!KINDS.includes(item.kind) || !Array.isArray(item.folderIds) || !Array.isArray(item.tags)) fail('Invalid library record');
     if (item.text != null) text(item.text, 1024 * 1024, true);
     if(item.note!=null)text(item.note,1024*1024,true);
+    if(item.createdAsNote!=null&&typeof item.createdAsNote!=='boolean')fail('Invalid note marker');
     if(item.retainedAt!=null&&(!Number.isFinite(item.retainedAt)||item.retainedAt<0))fail('Invalid saved timestamp');
     if(item.lastCopiedAt!=null&&(!Number.isFinite(item.lastCopiedAt)||item.lastCopiedAt<0))fail('Invalid copy timestamp');
+    if(item.lastCapturedAt!=null&&(!Number.isFinite(item.lastCapturedAt)||item.lastCapturedAt<0))fail('Invalid capture timestamp');
     if(item.retainedAt==null&&(item.pinned||item.folderIds.length||item.tags.length))item.retainedAt=item.updatedAt||item.createdAt||this.clock();
     for (const key of ['imageFile', 'renderedFile','thumbnailFile']) if (item[key] && !/^[a-f0-9]{64}\.png$/.test(item[key])) fail('Unsafe managed media path');
     if(item.recording!==undefined&&typeof item.recording!=='boolean')fail('Invalid recording record');
@@ -309,9 +318,11 @@ class Store {
     let textValue = '', url = '', imageFile = '';
     if (kind === 'image') imageFile = this.putPNG(value);
     else if (kind === 'link') { url = plainURL(value) || fail('Invalid URL'); }
-    else textValue = text(value);
+    else textValue = sizedText(value);
     const identity=kind==='text'?textIdentity(textValue):null;
-    const matching = this.data.items.filter(i => i.kind === kind && !i.trashedAt &&
+    // A new note is always its own record, like macOS createNote; only captures deduplicate,
+    // and they never match a note (createdAsNote), so a capture or import cannot merge or drop one.
+    const matching = extra.fresh ? [] : this.data.items.filter(i => i.kind === kind && !i.trashedAt && !i.createdAsNote &&
       (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? i.url === url : !i.recording&&i.imageFile === imageFile));
     const prior = matching.sort((a, b) => b.updatedAt - a.updatedAt)[0];
     if(!prior&&this.data.items.length>=20000){
@@ -324,9 +335,11 @@ class Store {
     const now = this.clock();
     const item = prior || {id: crypto.randomUUID(), kind, text: textValue, url, title: '', name: '', pinned: false, folderIds: [], tags: [],
       imageFile, renderedFile: '', ocrText: '', annotations: [], crop: null, note:'', retainedAt:null, lastCopiedAt:null, createdAt: now, updatedAt: now, trashedAt: null, hiddenFromShelf: false};
-    item.createdAt = now; item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
+    if(kind==='link'&&prior){item.lastCopiedAt=now;item.lastCapturedAt=now;}else item.createdAt=now;
+    item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
     if(kind==='text')item.text=textValue;
     if (extra.title) item.title = text(extra.title, 500, true);
+    if (extra.createdAsNote) item.createdAsNote = true; // part of the first write, so a stop before retain cannot leave an unmarked note
     if (matching.length > 1) {
       item.pinned ||= matching.some(i => i.pinned);
       item.folderIds = [...new Set(matching.flatMap(i => i.folderIds))]; item.tags = [...new Set(matching.flatMap(i => i.tags))];
@@ -336,6 +349,13 @@ class Store {
     }
     this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
     this.expire(false); this.persist(); return item;
+  }
+  /** A new, retained note record, like macOS createNote. It never reuses a matching capture. */
+  createNote({text: value = '', title = ''} = {}) {
+    const item = this.insert('text', value || 'New note', {fresh: true, createdAsNote: true});
+    if (title) this.modify('details', {id: item.id, name: title});
+    this.modify('retain', {ids: [item.id]});
+    return item;
   }
   textIdentity(item) {
     if(typeof item.text!=='string')return null;
@@ -347,7 +367,7 @@ class Store {
     let changed = false;
     for (const item of this.data.items) {
       const days = this.data.settings.retentionDays[item.kind];
-      if (!item.trashedAt && !saved(item) && days > 0 && item.createdAt < this.clock() - days * 86400000) { item.trashedAt = this.clock(); item.trashRevision=crypto.randomUUID(); changed = true; }
+      if (!item.trashedAt && !saved(item) && days > 0 && (item.lastCapturedAt ?? item.createdAt) < this.clock() - days * 86400000) { item.trashedAt = this.clock(); item.trashRevision=crypto.randomUUID(); changed = true; }
     }
     if (persist && changed) this.persist();
   }
@@ -420,8 +440,7 @@ class Store {
       if(action==='renameTag'){
         name=text(payload.name,TAG_INPUT_LIMIT).trim();
         if(!name||!validTagName(name))fail('Invalid tag name');
-        const folded=value=>value.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase();
-        if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&folded(value)===folded(name))))fail('A tag with this name already exists');
+        if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&foldedName(value)===foldedName(name))))fail('A tag with this name already exists');
       }
       for(const item of affected){item.retainedAt??=now;item.tags=action==='renameTag'?[...new Set(item.tags.map(value=>value===tag?name:value))]:item.tags.filter(value=>value!==tag);}
       this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return;
@@ -443,11 +462,11 @@ class Store {
     for (const item of items) {
       if (action === 'pin') {item.pinned = targetPin;if(targetPin)item.retainedAt??=now;}
       else if(action==='retain')item.retainedAt??=now;
-      else if(action==='note')item.note=text(payload.note,1024*1024,true);
+      else if(action==='note')item.note=sizedText(payload.note,true);
       else if(action==='details') {
         if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
-        if(payload.note!==undefined)item.note=text(payload.note,1024*1024,true);
-        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=text(payload.text,1024*1024,true);}
+        if(payload.note!==undefined)item.note=sizedText(payload.note,true);
+        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }
       else if(action==='markCopied'){item.lastCopiedAt=now;item.captureRevision=crypto.randomUUID();}
       else if (action === 'name') { item.name = text(payload.name, 200, true).trim(); item.pinned = true; item.retainedAt??=now; }
@@ -471,7 +490,7 @@ class Store {
       } else if (action === 'remove') { if (saved(item)) item.hiddenFromShelf = true; else{item.trashedAt = now;item.trashRevision=crypto.randomUUID();} }
       else if (action === 'trash') item.trashedAt = now;
       else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; }
-      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = text(payload.text, 1024 * 1024, true); }
+      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = sizedText(payload.text, true); }
       else if (action === 'saveImage') {
         if (item.kind !== 'image' || item.recording || typeof payload.dataUrl !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(payload.dataUrl) || payload.dataUrl.length > 90_000_000) fail('Invalid image edit');
         const annotations = payload.annotations ?? []; const crop = payload.crop ?? null;
@@ -503,4 +522,4 @@ class Store {
     };
   }
 }
-module.exports = {Store, KINDS, DEFAULTS, settings, saved, plainURL, text, ids, protectDirectory};
+module.exports = {Store, KINDS, DEFAULTS, settings, saved, plainURL, text, ids, protectDirectory, protectionFailureDetail};

@@ -54,6 +54,24 @@
         "windows": "decodeHTML in lib/network.cjs follows that order with TextDecoder; security.test.cjs covers it."
       },
       {
+        "id": "link-blank-thumbnail",
+        "behavior": "A link preview whose Open Graph image is empty or only whitespace has no thumbnail; a valid relative image URL is resolved against the page address.",
+        "macos": "PublicLinkHTMLMetadata drops a whitespace-only og:image before resolving it; PublicLinkNetworkTests.testWhitespaceOnlyOpenGraphImageGivesNoThumbnailAndValidOneIsKept covers it.",
+        "windows": "linkMetadata in lib/network.cjs treats a whitespace-only og:image as missing; security.test.cjs covers it."
+      },
+      {
+        "id": "link-shelf-copied-order",
+        "behavior": "The Link shelf lists links by when they were last copied, falling back to when they were captured, so copying an older link moves it to the first slot; Text and Image shelves stay in capture order. Copying a stored link again records the copy time and keeps its date added, so Newest first and Date added do not change, and it still counts as freshly captured for retention.",
+        "macos": "LibraryStore.shelfItems orders the .link kind by COALESCE(copied,created) DESC; LibraryStoreTests.testRecapturedLinkMovesLeftAndRenewsTemporaryCaptureWithoutResettingOriginalDate covers a recaptured link.",
+        "windows": "rowItems in renderer.js sorts the link kind by the newer of lastCopiedAt and createdAt (a link saved by an earlier build had createdAt renewed on a re-copy), and Store.insert keeps createdAt and sets lastCopiedAt and lastCapturedAt when a stored link is captured again, with expire() reading lastCapturedAt before createdAt like macOS prune; shelf-render.test.cjs and media-revision.test.cjs cover it."
+        },
+        {
+        "id": "image-recopy-dedupe",
+        "behavior": "Copying the same image again keeps one Library item: the existing item moves to the front and keeps its pin, name, tags and folders. A different image is a new item.",
+        "macos": "LibraryStore.captureImage finds a live image with identical original bytes (file size first, then SHA-256), moves it to the front and removes the duplicate clipboard PNG; LibraryStoreTests.testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization covers it.",
+        "windows": "Store.insert matches a live image by its managed PNG hash and moves it to the front; model.test.cjs 'exact image recopy moves the image in front of another image and preserves saved organization' covers it."
+      },
+      {
         "id": "mixed-selection-pin",
         "behavior": "Pin on a selection that contains both pinned and unpinned items pins every item; only a selection that is already fully pinned unpins.",
         "macos": "LibraryStore.toggleFavorite and Line.pinActiveSelection compute one target for the whole selection, matching the action bar, which offers Unpin only when every selected item is pinned; LibraryKeyboardContractTests runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json.",
@@ -100,6 +118,16 @@
         "behavior": "Private mode is one persisted on/off choice, available from Settings and the application menu, with an optional global shortcut that is off by default. While it is on, no new clipboard copies, screenshots or watched-folder images are collected: capture resumes with the next copy, adopting what the clipboard holds at that moment, so nothing copied during the pause or just before it ended is imported, existing history and saved items are untouched, and the state is visible in the menu and status area. The pause also survives a relaunch: screenshot handling is not re-applied while it is on.",
         "macos": "CapturePause stores the choice; ClipboardWatcher, TextClipboardWatcher and ScreenshotWatcher skip new content while it is on, ClipboardWatcher.skipCurrent() adopts the board on resume, Inbox.reconcile(enabled:paused:) restores the user's own screenshot destination for the pause and is used at launch, on the Settings toggle and on resume, and AppDelegate exposes the Settings toggle, the status-menu item, the status tooltip and the optional global shortcut. PrivateModeTests and ClipboardWatcherTests testResumingAdoptsTheBoardSoACopyMadeJustBeforeResumeIsNotHung cover the pause, the relaunch and the resume.",
         "windows": "The paused setting gates readClipboard, which drops a copy that finishes while private mode turns on, adopting its sequence so it is not replayed, and adopts the current native sequence before capture is switched back on, so neither the bounded polling fallback nor a poll that lands during the switch can import a copy made during the pause; configureWatchers closes watched-folder watchers and cancels their pending debounces and in-flight imports, capture() re-checks the pause after its awaits together with a pause generation bumped whenever the mode turns on, so a screenshot that spanned a pause is dropped even if capture was switched back on before its screen read returned, and the tray menu checkbox is rebuilt. The optional pause global shortcut is handled by GlobalShortcuts; the Sources toggle and the shortcut row share the same labels, and settingRow translates the description as well as the label. private-mode-acceptance.cjs, private-mode.test.cjs and renderer-ui.test.cjs cover them."
+        "id": "text-and-note-size-limit",
+        "behavior": "A text or a note is saved only while it is at most 1 MiB of UTF-8 bytes, so 600,000 Turkish or CJK characters are refused on both platforms and the edit reports an error.",
+        "macos": "LibraryStore.update checks text.utf8.count and note.utf8.count against TextClipboardWatcher.maximumDataBytes and LibraryModel.flushEdits shows Changes could not be saved.",
+        "windows": "Store.insert and Store.modify (note, editText, details) count Buffer.byteLength against 1 MiB through sizedText() in model.cjs; model.test.cjs 'a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS' covers it."
+      },
+      {
+        "id": "clear-filters-needs-a-filter",
+        "behavior": "Clear filters is available in the action list only while the Library has a filter to clear (favorites only, a search, a type, a date range, a domain, a tag or a search mode other than all); with no filter it is disabled with the reason \"No filters to clear\", and with the Library closed it keeps the Library reason.",
+        "macos": "ActionBarMenuAction.clearFilters requires libraryAvailable and hasLibraryFilters and otherwise names \"No filters to clear\"; ActionBarCatalogTests covers it.",
+        "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
       }
     ]
   },

@@ -10,6 +10,16 @@ import XCTest
         try XCTUnwrap(ActionBarCatalog.entries(context: context, bindings: bindings).first { $0.action == action }?.command)
     }
 
+    func testClearFiltersIsDisabledUntilTheLibraryHasAFilter() throws {
+        let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
+        let bindings = KeyboardBindings(defaults: fixture.defaults)
+        var context = ActionBarCatalog.Context(); context.origin = .library; context.libraryAvailable = true
+        let idle = try command(.menu(.clearFilters), context: context, bindings: bindings)
+        XCTAssertFalse(idle.isEnabled); XCTAssertEqual(idle.disabledReason, L("No filters to clear"))
+        context.hasLibraryFilters = true
+        XCTAssertTrue(try command(.menu(.clearFilters), context: context, bindings: bindings).isEnabled)
+    }
+
     func testCatalogCoversEveryBrowsingShortcutAndMenuWithoutDuplicateIDs() throws {
         let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
         let bindings = KeyboardBindings(defaults: fixture.defaults)
