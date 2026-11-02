@@ -1,6 +1,8 @@
 'use strict';
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const os=require('node:os');const path=require('node:path');
-const {Store,plainURL,protectDirectory}=require('../lib/model.cjs');
+const {execFileSync}=require('node:child_process');
+const {Store,plainURL,protectDirectory,protectionFailureDetail}=require('../lib/model.cjs');
+const {windowsEnvironment}=require('../lib/windows-environment.cjs');
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
 function fixture(fn){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-model-'));let now=1000;try{const store=new Store(dir,{clock:()=>now});return fn(store,value=>{now=value;},dir);}finally{fs.rmSync(dir,{recursive:true,force:true});}}
 test('exact recopy moves a text to front and preserves saved organization',()=>fixture((s,time)=>{const first=s.insert('text','API key exact value');s.modify('name',{id:first.id,name:'Service key'});const folder=s.modify('createFolder',{name:'Work'});s.modify('folder',{ids:[first.id],folderId:folder.id});s.modify('tag',{ids:[first.id],tags:['api']});time(2000);s.insert('text','something else');time(3000);const latest=s.insert('text','API key exact value');assert.equal(s.data.items.length,2);assert.equal(latest.id,first.id);assert.equal(latest.name,'Service key');assert.deepEqual(latest.folderIds,[folder.id]);assert.deepEqual(latest.tags,['api']);assert.equal(latest.createdAt,3000);assert.equal(s.data.items[0].id,first.id);}));
@@ -102,6 +104,29 @@ test('application data protection retries only a timed-out PowerShell start once
  let calls=[];assert.equal(protectDirectory('C:\\data',{...options,run:(_file,args,settings)=>{calls.push(settings.timeout);if(calls.length===1)throw timeout();assert.deepEqual(args.slice(-2),['-Directory','C:\\data']);return 'ok';}}),'ok');assert.deepEqual(calls,[15000,45000]);
  calls=[];assert.throws(()=>protectDirectory('C:\\data',{...options,run:(_file,_args,settings)=>{calls.push(settings.timeout);throw Object.assign(new Error('Access denied'),{status:1});}}),/Access denied/);assert.deepEqual(calls,[15000]);
  calls=[];assert.throws(()=>protectDirectory('C:\\data',{...options,run:(_file,_args,settings)=>{calls.push(settings.timeout);throw timeout();}}),/ETIMEDOUT/);assert.deepEqual(calls,[15000,45000]);
+});
+test('application data protection failure text is redacted, one line and bounded',()=>{
+ const directory='C:\\Users\\Şeyma\\ClipBoardLine';
+ assert.equal(protectionFailureDetail({stderr:Buffer.from(`İşlem için ayrıcalık gerekli:\r\n'${directory}'\n`)},directory),"İşlem için ayrıcalık gerekli: '[application data]' ");
+ assert.equal(protectionFailureDetail({stderr:Buffer.from('ğ'.repeat(1000))},directory).length,900);
+ assert.equal(protectionFailureDetail(new Error('spawn failed'),directory),'spawn failed');
+});
+test('a real protection script failure stays readable in Turkish under any console code page',{skip:process.platform!=='win32'},t=>{
+ const parent=fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-protect-'))),directory=path.join(parent,'ğüşİıöç-missing');
+ const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe'),script=path.join(__dirname,'..','native','protect-directory.ps1');
+ const turkishConsole=(file,args,settings)=>execFileSync(process.env.ComSpec,['/d','/s','/c',`"chcp 857>nul && "${file}" ${args.map(arg=>`"${arg}"`).join(' ')}"`],{...settings,windowsVerbatimArguments:true});
+ const runs={default:(file,args,settings)=>execFileSync(file,[...args,'-Check'],settings),'OEM 857':(file,args,settings)=>turkishConsole(file,[...args,'-Check'],settings)};
+ try{
+  for(const [name,run] of Object.entries(runs)){
+   let failure;try{protectDirectory(directory,{powershell,script,run});}catch(error){failure=error;}
+   assert.equal(failure?.status,1,name);const stderr=String(failure.stderr);
+   assert.ok(stderr.includes(directory),`${name}: ${stderr}`);assert.ok(!stderr.includes('\uFFFD'),`${name}: ${stderr}`);
+   const detail=protectionFailureDetail(failure,directory);assert.ok(detail.includes('[application data]'),`${name}: ${detail}`);assert.ok(!detail.includes(directory),`${name}: ${detail}`);assert.ok(!/[\r\n]/.test(detail),name);
+  }
+  // Records the reported cause in the CI log: PowerShell's own error stream on a Turkish OEM console.
+  try{turkishConsole(powershell,['-NoProfile','-NonInteractive','-Command',"throw 'ğüşİ'"],{windowsHide:true,stdio:['ignore','pipe','pipe'],env:windowsEnvironment()});}
+  catch(error){t.diagnostic(`PowerShell's own stderr on OEM 857 decoded as UTF-8 has replacement characters: ${String(error.stderr).includes('\uFFFD')}`);}
+ }finally{fs.rmSync(parent,{recursive:true,force:true});}
 });
 test('image unlink failure remains pending and retries safely on next startup',()=>fixture((s,_time,dir)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('trash',{ids:[item.id]});const unlink=fs.unlinkSync;

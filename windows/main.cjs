@@ -55,12 +55,13 @@ const entry = pathToFileURL(path.join(__dirname,'index.html')).href;
 const copyMarker = crypto.randomBytes(16);
 const pending = new Map();
 const ocrJobs=new Map();
+const verifiedOcrModels=new Set();
 const {queue:ocrQueue,queueOCR}=createOcrQueue({
  enabled:()=>!testMode&&!!store?.data.settings.indexImages,
  closing:()=>closing,
  process:async next=>{
   const item=store.data.items.find(i=>i.id===next);if(!item||item.trashedAt||item.ocrText)return;
-  const fingerprint=item.renderedFile||item.imageFile;try{await ocr(next,true);}catch{}
+  const fingerprint=item.renderedFile||item.imageFile;try{await ocr(next,true);}catch(err){console.warn('Background OCR queue error:',err?.message||err);}
   if(store.data.items.includes(item)&&(item.renderedFile||item.imageFile)!==fingerprint)queueOCR(next);
  }
 });
@@ -281,17 +282,23 @@ async function recognize(id,quiet=false) {
   if(!quiet)notify('Recognizing image text locally…');
   const {createWorker}=require('tesseract.js');
   const languageDirectory=path.join(store.directory,'ocr-models');fs.mkdirSync(languageDirectory,{recursive:true});
+  const OCR_HASHES={eng:'45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91',tur:'384ba0dc28040451b7818d7d60e0a88df0d3003fa5a01d713a468779bc3d8c04'};
+  const validFile=(f,hash)=>{try{return fs.existsSync(f)&&crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex')===hash;}catch{return false;}};
   for(const language of ['eng','tur']) {
+    const staleDecompressed=path.join(languageDirectory,language+'.traineddata');
+    try{if(fs.existsSync(staleDecompressed))fs.unlinkSync(staleDecompressed);}catch(err){console.warn('Could not remove stale OCR cache:',err?.message||err);}
+    const expected=OCR_HASHES[language];
     const source=app.isPackaged?path.join(process.resourcesPath,'ocr-data',language,'4.0.0_best_int',language+'.traineddata.gz'):path.join(__dirname,'node_modules','@tesseract.js-data',language,'4.0.0_best_int',language+'.traineddata.gz');
-    const destination=path.join(languageDirectory,language+'.traineddata.gz');if(!fs.existsSync(destination))fs.copyFileSync(source,destination);
+    const destination=path.join(languageDirectory,language+'.traineddata.gz');
+    if(!verifiedOcrModels.has(destination)){if(!validFile(destination,expected)){if(!validFile(source,expected))throw new Error(`OCR source model invalid for ${language}`);fs.copyFileSync(source,destination);if(!validFile(destination,expected))throw new Error(`OCR model integrity verification failed for ${language}`);}verifiedOcrModels.add(destination);}
   }
-  const worker=await createWorker(['eng','tur'],1,{langPath:languageDirectory,cachePath:languageDirectory,gzip:true});
+  const worker=await createWorker(['eng','tur'],1,{langPath:languageDirectory,cachePath:languageDirectory,cacheMethod:'none',gzip:true});
   try{let image=nativeImage.createFromPath(file);const size=image.getSize(),scale=Math.min(1,2400/Math.max(size.width,size.height));if(scale<1)image=image.resize({width:Math.round(size.width*scale),height:Math.round(size.height*scale)});const result=await worker.recognize(image.toPNG());if(!store.data.items.includes(item)||(item.renderedFile||item.imageFile)!==fingerprint)throw new Error('Image changed during recognition');item.ocrText=String(result.data.text||'').slice(0,1024*1024);store.persist();if(!quiet)notify(item.ocrText?'Image text ready':'No text found');else broadcast();return{text:item.ocrText,id};}
   finally{await worker.terminate();}
 }
 function configureWatchers() {
   for(const watcher of watchers)watcher.close();watchers=[];
-  for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(()=>{});}catch{}},700));});watcher.on('error',()=>{});watchers.push(watcher);}catch{}}
+  for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(err=>{console.warn('Watch folder import error:',err?.message||err);});}catch(err){console.warn('Watch folder item error:',err?.message||err);}},700));});watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});watchers.push(watcher);}catch(err){console.warn('Watch folder configure error:',err?.message||err);}}
 }
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){

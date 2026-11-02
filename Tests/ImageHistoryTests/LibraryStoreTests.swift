@@ -160,6 +160,7 @@ import XCTest
         XCTAssertTrue(differentTime.id != a.id)
         XCTAssertNil(LinkIdentity.standalone("a paragraph https://example.com")); XCTAssertNil(LinkIdentity.standalone("https://one.com https://two.com"))
         XCTAssertNil(LinkIdentity.standalone("file:///private/test")); XCTAssertNil(LinkIdentity.standalone("javascript:alert(1)"))
+        XCTAssertNil(LinkIdentity.standalone("https://example.com:99999/")); XCTAssertNotNil(LinkIdentity.standalone("https://example.com:65535/"))
         XCTAssertFalse(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "http://192.168.1.2/doc"))))
         XCTAssertFalse(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "https://example.com/?token=private"))))
         XCTAssertTrue(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "https://example.com/articles"))))

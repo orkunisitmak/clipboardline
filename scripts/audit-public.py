@@ -20,7 +20,7 @@ PATTERNS = {
     'anthropic-token': rb'\bsk-ant-[A-Za-z0-9_-]{35,}\b',
     'aws-access-id': rb'\b(?:AKIA|ASIA)[A-Z0-9]{16}\b',
     'private-key-block': rb'-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----',
-    'url-userinfo': rb'https?://[^\s/\x22\x27:]+:[^\s/@\x22\x27]+@',
+    'url-userinfo': rb'(?i:https?)://[^\s/\x22\x27:]+:[^\s/@\x22\x27]+@',
     'personal-build-path': rb'/Use' rb'rs/(?!example/|synthetic/|Shared/)[^/\s\x22\x27]+/',
 }
 

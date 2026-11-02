@@ -110,6 +110,7 @@ function protectDirectory(directory,{powershell,script,run=execFileSync}){
     catch(error){if(error?.code!=='ETIMEDOUT'||attempt===PROTECTION_TIMEOUTS.length-1)throw error;}
   }
 }
+function protectionFailureDetail(error,directory){return String(error.stderr||error.message||'').replaceAll(directory,'[application data]').replace(/[\r\n]+/g,' ').slice(0,900);}
 class Store {
   constructor(directory, {clock = Date.now} = {}) {
     this.directory = path.resolve(directory); this.clock = clock; this.undoStack = []; this.trashUndoStack = []; this.textIdentities = new WeakMap();this.revision=0;this.inFlightMediaReferences=new Map();
@@ -119,7 +120,7 @@ class Store {
       const script=__dirname.includes('app.asar')?path.join(process.resourcesPath,'native','protect-directory.ps1'):path.join(__dirname,'..','native','protect-directory.ps1');
       const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
       try{protectDirectory(this.directory,{powershell,script});}
-      catch(error){const detail=String(error.stderr||error.message||'').replaceAll(this.directory,'[application data]').replace(/[\r\n]+/g,' ').slice(0,900);fail('The private application data permissions could not be secured. Existing files were preserved. '+detail);}
+      catch(error){fail('The private application data permissions could not be secured. Existing files were preserved. '+protectionFailureDetail(error,this.directory));}
     }
     this.mediaDirectory = path.join(this.directory, 'media'); fs.mkdirSync(this.mediaDirectory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
@@ -503,4 +504,4 @@ class Store {
     };
   }
 }
-module.exports = {Store, KINDS, DEFAULTS, settings, saved, plainURL, text, ids, protectDirectory};
+module.exports = {Store, KINDS, DEFAULTS, settings, saved, plainURL, text, ids, protectDirectory, protectionFailureDetail};
