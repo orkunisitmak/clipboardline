@@ -11,7 +11,10 @@ const {execFileSync}=require('node:child_process');
 const os=require('node:os');
 const {exportCopies}=require('../lib/export-copies.cjs');
 
-function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,exporter=null}={}){
+// Linux ships this same renderer. On a Linux host the shared contracts run with
+// the renderer's Linux state and report as the Linux adapter.
+const ADAPTER=process.platform==='linux'?'linux':'windows',ADAPTER_STATE=ADAPTER==='linux'?'linux':null;
+function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,platform=null,exporter=null}={}){
  const listeners=new Map(),nodes=new Map(),commands=[],imageLoads=[],animationFrames=[],paintCalls=[];let exportFailures=0;
  class Element{
   constructor(id=''){this.id=id;this.innerHTML='';this.textContent='';this.dataset={};this.style={};this.className='';this.value='';this.selectionStart=0;this.selectionEnd=0;this.classList={add(){},remove(){},contains(){return false;}};}
@@ -32,6 +35,7 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
  const image='00000000-0000-4000-8000-000000000001',text1='00000000-0000-4000-8000-000000000002',text2='00000000-0000-4000-8000-000000000003',link='00000000-0000-4000-8000-000000000004';
  const base=(id,kind,createdAt,extra)=>({id,kind,createdAt,updatedAt:createdAt,name:'',title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,...extra});
  const state={items:[base(image,'image',1000,{name:'Synthetic image',...(imageDocument?{annotations:[],crop:null}:{}),mediaUrl:'appmedia://media/'+image,originalMediaUrl:'appmedia://media/'+image+'/original'}),base(text1,'text',900,{text:'Text one'}),base(text2,'text',800,{text:'Text two'}),base(link,'link',700,{url:'https://example.com/reference',title:'Reference link'})],folders:[],settings:{visibleKinds:['image','text','link'],retentionDays:{image:30,text:30,link:30},shortcuts:{toggle:'Control+Alt+Space',search:'Control+Alt+S'},localShortcuts:{},language:'en',theme:'soft',cardSize:'medium'},view:'shelves',version:'1.7.0',windowVisible:initialVisible,canUndo:false,canUndoTrash:false,libraryRevision:0};
+ if(platform)state.platform=platform;
  let subscriber,removed=[],trashRemoved=[],cleanupFailures=0,editFailures=0,delayedReply=null,releaseInitialState,deferredImageBroadcast=null,pendingImageBroadcast=null;
  const clone=value=>structuredClone(value);
  const api={emit(patch){Object.assign(state,patch);subscriber?.(clone(state));},surface(patch){Object.assign(state,patch);subscriber?.({surfaceOnly:true,...clone(patch)});},state:async()=>{const initial=clone(state);if(deferInitialState)await new Promise(resolve=>{releaseInitialState=resolve;});return initial;},subscribe(fn){subscriber=fn;return()=>{};},async command(action,payload={}){commands.push({action,payload:clone(payload)});const selected=state.items.filter(item=>(payload.ids||[payload.id]).includes(item.id));
@@ -331,7 +335,7 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
  assert.equal(contract.schemaVersion,1);assert.equal(contract.contractId,'clipboardline.shelves.v1');
  const observations=[],errors=[];
  for(const scenario of contract.scenarios){
-  const f=fixture();await f.ready();const aliases=new Map(),values=contract.itemSets[scenario.itemSet].map((entry,index)=>{
+  const f=fixture({platform:ADAPTER_STATE});await f.ready();const aliases=new Map(),values=contract.itemSets[scenario.itemSet].map((entry,index)=>{
    const id='20000000-0000-4000-8000-'+String(index+1).padStart(12,'0');aliases.set(id,entry.id);
    const source=f.state.items.find(value=>value.kind===entry.kind);
    return{...structuredClone(source),id,createdAt:10000-index,name:entry.kind==='image'?entry.text:'',text:entry.kind==='text'?entry.text:'',title:entry.kind==='link'?entry.text:'',url:entry.kind==='link'?'https://example.com/contract/'+entry.id:''};
@@ -364,7 +368,7 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
  if(process.env.CLIPBOARDLINE_PARITY_REPORT){
   const revision=process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(__dirname,'../..'),encoding:'utf8'}).trim();
   const implementationSHA256=crypto.createHash('sha256').update(fs.readFileSync(path.resolve(__dirname,'../renderer.js'))).digest('hex');
-  const report={schemaVersion:1,contractId:contract.contractId,platform:'windows',hostPlatform:process.platform,mode:'renderer',sourceRevision:revision,contractSHA256:crypto.createHash('sha256').update(raw).digest('hex'),implementationSHA256,implementationFiles:{'windows/renderer.js':implementationSHA256},observations,passed:errors.length===0,errors};
+  const report={schemaVersion:1,contractId:contract.contractId,platform:ADAPTER,hostPlatform:process.platform,mode:'renderer',sourceRevision:revision,contractSHA256:crypto.createHash('sha256').update(raw).digest('hex'),implementationSHA256,implementationFiles:{'windows/renderer.js':implementationSHA256},observations,passed:errors.length===0,errors};
   fs.mkdirSync(path.dirname(path.resolve(process.env.CLIPBOARDLINE_PARITY_REPORT)),{recursive:true});fs.writeFileSync(process.env.CLIPBOARDLINE_PARITY_REPORT,JSON.stringify(report,null,2)+'\n');
  }
  assert.deepEqual(errors,[]);
@@ -657,7 +661,7 @@ test('shared Library keyboard contract runs actual renderer handlers and durable
  for(const scenario of contract.scenarios){
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-library-contract-'));
   try{
-   const store=new Store(directory),now=Date.now(),f=fixture(),aliases=new Map(),ids=new Map();await f.ready();f.grid(scenario.columns);
+   const store=new Store(directory),now=Date.now(),f=fixture({platform:ADAPTER_STATE}),aliases=new Map(),ids=new Map();await f.ready();f.grid(scenario.columns);
    store.data.items=contract.records.map((entry,index)=>{const id='30000000-0000-4000-8000-'+String(index+1).padStart(12,'0');aliases.set(id,entry.id);ids.set(entry.id,id);const source=f.state.items.find(value=>value.kind===entry.kind);return{...structuredClone(source),id,createdAt:now-index*1000,updatedAt:now-index*1000,retainedAt:now,pinned:entry.pinned,hiddenFromShelf:!entry.onShelf,name:entry.title,title:entry.kind==='link'?entry.title:'',text:entry.kind==='text'?entry.text:'',url:entry.kind==='link'?'https://example.com/library-contract/'+entry.id:'',captureRevision:crypto.randomUUID(),...(entry.kind==='image'?{imageFile:'0'.repeat(64)+'.png'}:{})};});
    store.persist();let surface={view:'shelves',windowVisible:false,version:'1.7.7'};
    f.api.command=async(action,payload={})=>{f.commands.push({action,payload:structuredClone(payload)});let result;if(['library','show','settings'].includes(action))surface={...surface,view:action==='show'?'shelves':action,windowVisible:true};else if(action==='hide')surface.windowVisible=false;else if(action==='searchImages')result={ids:[],scores:[],available:false,indexing:false};else result=store.modify(action,payload);const next={...store.publicState(),...surface,result};f.api.emit(next);return structuredClone(next);};
@@ -682,8 +686,8 @@ test('shared Library keyboard contract runs actual renderer handlers and durable
    }
   }finally{fs.rmSync(directory,{recursive:true,force:true});}
  }
- const libraryReportDestination=process.env.CLIPBOARDLINE_LIBRARY_KEYBOARD_REPORT || (process.env.CLIPBOARDLINE_PARITY_REPORT && path.join(path.dirname(process.env.CLIPBOARDLINE_PARITY_REPORT),'library-windows.json'));
- if(libraryReportDestination){const revision=process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(__dirname,'../..'),encoding:'utf8'}).trim(),report={schemaVersion:1,contractId:contract.contractId,contractSHA256:crypto.createHash('sha256').update(raw).digest('hex'),platform:'windows',hostPlatform:process.platform,mode:'renderer',sourceRevision:revision,observations,errors,passed:errors.length===0};fs.mkdirSync(path.dirname(path.resolve(libraryReportDestination)),{recursive:true});fs.writeFileSync(libraryReportDestination,JSON.stringify(report,null,2)+'\n');}
+ const libraryReportDestination=process.env.CLIPBOARDLINE_LIBRARY_KEYBOARD_REPORT || (process.env.CLIPBOARDLINE_PARITY_REPORT && path.join(path.dirname(process.env.CLIPBOARDLINE_PARITY_REPORT),`library-${ADAPTER}.json`));
+ if(libraryReportDestination){const revision=process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(__dirname,'../..'),encoding:'utf8'}).trim(),report={schemaVersion:1,contractId:contract.contractId,contractSHA256:crypto.createHash('sha256').update(raw).digest('hex'),platform:ADAPTER,hostPlatform:process.platform,mode:'renderer',sourceRevision:revision,observations,errors,passed:errors.length===0};fs.mkdirSync(path.dirname(path.resolve(libraryReportDestination)),{recursive:true});fs.writeFileSync(libraryReportDestination,JSON.stringify(report,null,2)+'\n');}
  assert.deepEqual(errors,[]);
 });
 
