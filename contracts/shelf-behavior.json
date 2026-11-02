@@ -133,7 +133,7 @@
         },
         {
         "id": "clipboard-image-limit",
-        "behavior": "A copied image larger than 40,000,000 pixels or 32 MB is not captured, and no notice is shown, so the same copy lands on the Image shelf on both platforms.",
+        "behavior": "A copied image larger than 40,000,000 pixels or 32 MB is not captured, and no notice is shown, so the same copy is skipped on both platforms; a copied image within both limits lands on the Image shelf.",
         "macos": "ClipboardWatcher.validatedPNG rejects data over maximumDataBytes (32 MB) and images over maximumPixelCount (40,000,000); ClipboardWatcherTests.testValidationRejectsEmptyOversizedAndMislabeledData covers it.",
         "windows": "readClipboardContent in lib/clipboard-policy.cjs skips a PNG over 32 MB or 40,000,000 pixels and Store.insert refuses one, while files imported from disk keep the larger limit; clipboard-admission.test.cjs and model.test.cjs cover it."
       }
