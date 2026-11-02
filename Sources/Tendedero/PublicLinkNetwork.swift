@@ -375,7 +375,9 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         let titleTag = try NSRegularExpression(pattern: #"(?is)<title\b[^>]*>(.{0,8192}?)</title\s*>"#)
         let titleMatch = titleTag.firstMatch(in: html, range: NSRange(html.startIndex..., in: html))
             .flatMap { Range($0.range(at: 1), in: html) }.map { Self.entities(Self.replacing(#"<[^>]*>"#, in: String(html[$0]), with: "")) }
-        title = Self.clean(metadata["og:title"] ?? metadata["twitter:title"] ?? titleMatch, limit: 500)
+        title = Self.clean(metadata["og:title"], limit: 500)
+            ?? Self.clean(metadata["twitter:title"], limit: 500)
+            ?? Self.clean(titleMatch, limit: 500)
         author = Self.clean(metadata["author"] ?? metadata["og:site_name"], limit: 200)
         let image = (metadata["og:image:secure_url"] ?? metadata["og:image"] ?? metadata["twitter:image"]).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
         thumbnailURL = image.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }.flatMap { PublicLinkDestination($0)?.url }

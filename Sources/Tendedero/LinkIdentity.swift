@@ -22,7 +22,8 @@ enum LinkIdentity {
     static func normalized(_ url: URL) -> String? {
         guard var c = URLComponents(url: url, resolvingAgainstBaseURL: false),
               ["http","https"].contains(c.scheme?.lowercased() ?? ""), let host = c.host, !host.isEmpty,
-              (c.port ?? 0) <= 65535 else { return nil }
+              (c.port ?? 0) <= 65535,
+              (c.user ?? "").isEmpty, (c.password ?? "").isEmpty else { return nil }
         c.scheme = c.scheme?.lowercased(); c.host = host.lowercased()
         if (c.scheme == "https" && c.port == 443) || (c.scheme == "http" && c.port == 80) { c.port = nil }
         var parameters = (c.queryItems ?? []).filter { !$0.name.lowercased().hasPrefix("utm_") && !["fbclid","gclid"].contains($0.name.lowercased()) }
