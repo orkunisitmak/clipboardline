@@ -432,3 +432,12 @@ test('Library domain filter ignores case, surrounding spaces and dots, www and a
  await f.input('domain-filter','other.org');assert.deepEqual(cards(f),[]);
  await f.input('domain-filter','  ');assert.deepEqual(cards(f),[f.image,f.link]);
 });
+
+test('typing a search in the Library switches the sort to Best match like macOS, and clearing it returns to Newest first',async()=>{
+ const f=fixture();await f.ready();await recent(f);
+ assert.match(f.main,/<option value="newest" selected>/);
+ await f.input('search-input','reference');
+ assert.match(f.main,/<option value="relevance" selected>/,'sort stays on Newest first after a search starts');
+ await f.input('search-input','');
+ assert.match(f.main,/<option value="newest" selected>/);
+});
