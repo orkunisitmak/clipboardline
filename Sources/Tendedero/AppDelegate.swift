@@ -282,6 +282,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Entering or leaving full screen switches Space. Check again once the
         // switch animation has settled.
         let workspace = NSWorkspace.shared.notificationCenter
+        // A watched folder on a volume mounted later is picked up without a restart.
+        workspace.addObserver(forName: NSWorkspace.didMountNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, Self.existingExtraFolders.count != self.folderWatchers.count else { return }
+                self.startWatcher()
+            }
+        }
         for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
             workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                 MainActor.assumeIsolated {
