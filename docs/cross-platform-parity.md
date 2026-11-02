@@ -55,6 +55,8 @@ Windows folder picker uses the same entry; the macOS folder picker keeps its own
 declared character set (byte-order mark, `Content-Type`, XHTML declaration, early
 `<meta charset>`), falling back to windows-1252, so windows-1254 pages show their
 Turkish letters.
+`image-recopy-dedupe` requires copying the same image again to keep one Library item,
+moved to the front with its pin, name, tags and folders.
 `mixed-selection-pin` requires Pin on a
 selection of pinned and unpinned items to pin all of them, and to unpin only
 when every selected item is already pinned; the Library keyboard contract executes
