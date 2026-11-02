@@ -265,3 +265,12 @@ test('link merging keeps non-tracking query syntax, ignores v outside /watch and
  const merged=s.insert('link','https://example.com/n?fbclid=z');
  assert.deepEqual(merged.note.split('\n\n').sort(),['first','second']);assert.equal(s.data.items.filter(i=>i.url.startsWith('https://example.com/n')).length,1);
 }));
+test('link merging keeps YouTube links on other ports apart and counts the merged note in UTF-8 bytes',()=>fixture(s=>{
+ const plain=s.insert('link','https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+ assert.notEqual(s.insert('link','https://www.youtube.com:8443/watch?v=dQw4w9WgXcQ').id,plain.id);
+ assert.equal(s.insert('link','https://www.youtube.com:443/watch?v=dQw4w9WgXcQ&si=x').id,plain.id);
+ const a=s.insert('link','https://example.com/m'),b=s.insert('link','https://example.com/other');
+ b.url='https://example.com/m?utm_source=x';a.note='ş'.repeat(300000);b.note='ğ'.repeat(300000);
+ const merged=s.insert('link','https://example.com/m?fbclid=z');
+ assert.equal(Buffer.byteLength(merged.note,'utf8')<=1024*1024,true);
+}));
