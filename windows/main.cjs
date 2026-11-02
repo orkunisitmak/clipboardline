@@ -24,10 +24,10 @@ const {copyFiles,cancelFileCopies}=require('./lib/native-files.cjs');
 const {exportCopies}=require('./lib/export-copies.cjs');
 const {decodeTextFile}=require('./lib/text-file.cjs');
 const native = require('./lib/native.cjs');
-const {setLaunchAtLogin}=require('./lib/linux-autostart.cjs');
+const {setAutostart}=require('./lib/linux-autostart.cjs');
 const {portalScreenshot}=require('./lib/linux-screenshot.cjs');
 const {which,keptImage}=require('./lib/linux-clipboard.cjs');
-const {backendRelaunchArguments}=require('./lib/linux-desktop.cjs');
+const {backendRelaunchArguments,launchCommand,RELAUNCHED}=require('./lib/linux-desktop.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
 const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
@@ -431,9 +431,11 @@ async function command(action,payload={}) {
     if(Object.hasOwn(patch,'watchFolders'))throw new Error('Choose watched folders with the folder picker.');
     const wasIndexingImages=!!store.data.settings.indexImages;
     const previousShortcuts={...store.data.settings.shortcuts};
+    // A Linux autostart entry is written first, so a refused one is not saved as enabled.
+    if(linux&&typeof patch.launchAtLogin==='boolean'&&!testMode)setAutostart(patch.launchAtLogin,{command:[...linuxLaunchCommand(),'--hidden']});
     store.modify('setSettings',{patch});if(wasIndexingImages&&!store.data.settings.indexImages)ocrQueue.discardPending();if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
     if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastGeneration.sequence=0;
-    if(Object.hasOwn(patch,'launchAtLogin')&&!testMode){if(linux)setLaunchAtLogin(patch.launchAtLogin,{packaged:app.isPackaged});else app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});}
+    if(!linux&&Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
   }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
   else if(action==='unwatchFolder'){const index=payload.index;if(!Number.isInteger(index)||index<0||index>=store.data.settings.watchFolders.length)throw new Error('Invalid watched folder');store.modify('setSettings',{patch:{watchFolders:store.data.settings.watchFolders.filter((_v,i)=>i!==index)}});configureWatchers();}
@@ -455,12 +457,15 @@ function appIcon(){
   }
   return applicationIcon;
 }
-const relaunch=linux&&!testMode?backendRelaunchArguments(linux.desktop.session,process.argv.slice(1)):null;
+function linuxLaunchCommand(){return launchCommand({packaged:app.isPackaged,appPath:app.getAppPath()});}
+const relaunch=linux&&!testMode?backendRelaunchArguments(linux.desktop.session,process.argv.slice(app.isPackaged?1:2)):null;
+if(linux)delete process.env[RELAUNCHED];
 if(!app.requestSingleInstanceLock())app.quit();
 else if(relaunch){
   // Runs after the lock so shortcut commands reach the live instance directly.
   app.releaseSingleInstanceLock();
-  spawn(process.env.APPIMAGE||process.execPath,relaunch,{detached:true,stdio:'inherit'}).unref();
+  const [file,...launch]=linuxLaunchCommand();
+  spawn(file,[...launch,...relaunch],{detached:true,stdio:'inherit',env:{...process.env,[RELAUNCHED]:'1'}}).unref();
   app.exit(0);
 }
 else app.whenReady().then(async()=>{

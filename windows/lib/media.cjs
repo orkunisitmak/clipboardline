@@ -67,7 +67,7 @@ class MediaJobs {
   const directory=fs.mkdtempSync(path.join(this.directory,'job-'));fs.writeFileSync(path.join(directory,MARKER),JSON.stringify({owner:OWNER}),{flag:'wx',mode:0o600});
   let keep=false;
   try{
-   const result=process.platform==='linux'?await this.linux(mode,source,directory,{startMs,endMs,signal,verifyAudio}):await new Promise((resolve,reject)=>{
+   const result=process.platform==='linux'?await this.linuxMedia().run(mode,{source,outputDirectory:directory,verifyAudio:verifyAudio===true,...(mode==='Trim'?{startMs,endMs}:{})},{signal,timeout:this.timeout,track:child=>this.jobs.set(directory,child)}).finally(()=>this.jobs.delete(directory)):await new Promise((resolve,reject)=>{
     const executable=path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
     const child=spawn(executable,['-NoLogo','-NoProfile','-MTA','-NonInteractive','-ExecutionPolicy','Bypass','-File',this.script,'-Mode',mode],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:windowsEnvironment()});
     let stdout='',stderr='',failure=null,finished=false;this.jobs.set(directory,child);
@@ -87,11 +87,7 @@ class MediaJobs {
    keep=true;return{...details,file:source,posterFile:poster,jobDirectory:directory,...(audioFile?{audioFile}:{})};
   }finally{if(!keep)this.remove(directory);}
  }
- linux(mode,source,directory,{startMs,endMs,signal,verifyAudio}){
-  const {processRecording}=require('./linux-media.cjs'),controller=new AbortController(),cancel=()=>controller.abort();
-  signal?.addEventListener('abort',cancel,{once:true});this.jobs.set(directory,{kill:cancel});
-  return processRecording(mode,{source,outputDirectory:directory,startMs,endMs,verifyAudio:verifyAudio===true},{signal:controller.signal,timeout:this.timeout}).finally(()=>{signal?.removeEventListener('abort',cancel);this.jobs.delete(directory);});
- }
+ linuxMedia(){if(!this.linux){const {LinuxMedia}=require('./linux-media.cjs'),{which}=require('./linux-clipboard.cjs');this.linux=new LinuxMedia({ffmpeg:which('ffmpeg'),ffprobe:which('ffprobe')});}return this.linux;}
  probe(file,options){return this.run('Inspect',file,options);}
  inspect(file,options){return this.probe(file,options);}
  trim(file,options){return this.run('Trim',file,options);}

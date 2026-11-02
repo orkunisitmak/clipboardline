@@ -1,9 +1,9 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {LinuxDesktop,session,handleFor,backendRelaunchArguments}=require('../lib/linux-desktop.cjs');
+const {LinuxDesktop,session,handleFor,backendRelaunchArguments,launchCommand,RELAUNCHED}=require('../lib/linux-desktop.cjs');
 const {LinuxClipboard,ClipboardWatcher,backend,keptImage}=require('../lib/linux-clipboard.cjs');
-const {setLaunchAtLogin,command}=require('../lib/linux-autostart.cjs');
+const {setAutostart,autostartEnabled,autostartEntry}=require('../lib/linux-autostart.cjs');
 const {PasteTargetTracker}=require('../lib/paste-target.cjs');
 const {parseResponse,screenshotPath,portalScreenshot}=require('../lib/linux-screenshot.cjs');
 const {EventEmitter}=require('node:events');
@@ -158,14 +158,28 @@ test('polling watcher advances the sequence only when the clipboard digest chang
   assert.deepEqual(changes,[2]);assert.equal(watcher.read(),2);
 });
 
-test('XDG autostart entry targets the AppImage path and is removed when disabled',()=>{
-  const home=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-autostart-')),environment={XDG_CONFIG_HOME:home,APPIMAGE:'/home/u/Apps/ClipBoardLine.AppImage'};
+test('XDG autostart is written, quoted and removed without touching an entry it does not own',()=>{
+  const home=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-autostart-')),env={XDG_CONFIG_HOME:home},command=['/home/u/Clip Board/App.AppImage','--hidden'];
   try{
-    setLaunchAtLogin(true,{environment});const file=path.join(home,'autostart','clipboardline.desktop');
-    assert.match(fs.readFileSync(file,'utf8'),/^Exec=\/home\/u\/Apps\/ClipBoardLine\.AppImage --hidden$/m);
-    setLaunchAtLogin(false,{environment});assert.equal(fs.existsSync(file),false);
-    assert.equal(command({environment:{},executable:'/opt/Clip Board/clipboardline'}),'"/opt/Clip Board/clipboardline" --hidden');
+    const file=path.join(home,'autostart','clipboardline.desktop');
+    assert.equal(setAutostart(true,{command,env}),true);assert.equal(autostartEnabled(env),true);
+    assert.match(fs.readFileSync(file,'utf8'),/^Exec="\/home\/u\/Clip Board\/App\.AppImage" --hidden$/m);
+    assert.equal(setAutostart(false,{env}),false);assert.equal(fs.existsSync(file),false);
+    fs.writeFileSync(file,'[Desktop Entry]\nExec=mine\n');
+    assert.throws(()=>setAutostart(true,{command,env}),/already exists/);assert.throws(()=>setAutostart(false,{env}),/already exists/);
+    assert.equal(fs.readFileSync(file,'utf8'),'[Desktop Entry]\nExec=mine\n');
+    fs.unlinkSync(file);fs.symlinkSync('/etc/hostname',file);
+    assert.throws(()=>setAutostart(true,{command,env}),/not a regular file/);
+    assert.match(autostartEntry({command:['/a%b']}),/^Exec=\/a%%b$/m);assert.throws(()=>autostartEntry({command:['/a"b']}),/cannot be used/);
   }finally{fs.rmSync(home,{recursive:true,force:true});}
+});
+
+test('a relaunch and autostart use this AppImage only while the app runs from its mount, and relaunch once',()=>{
+  const own={APPIMAGE:'/home/u/ClipBoardLine.AppImage',APPDIR:'/tmp/.mount_Clip1'};
+  assert.deepEqual(launchCommand({environment:own,execPath:'/tmp/.mount_Clip1/clipboardline',packaged:true}),[own.APPIMAGE]);
+  assert.deepEqual(launchCommand({environment:own,execPath:'/opt/ClipBoardLine/clipboardline',packaged:true}),['/opt/ClipBoardLine/clipboardline']);
+  assert.deepEqual(launchCommand({environment:{},execPath:'/usr/bin/electron',packaged:false,appPath:'/src/windows'}),['/usr/bin/electron','/src/windows']);
+  assert.equal(backendRelaunchArguments({type:'wayland',backend:'x11'},[],{[RELAUNCHED]:'1'}),null);
 });
 
 test('KDE Wayland reads and activates windows through one-shot KWin scripts reported by nonce',async()=>{

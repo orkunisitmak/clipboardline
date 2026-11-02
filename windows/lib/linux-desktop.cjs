@@ -36,9 +36,20 @@ function session(environment=process.env,argv=process.argv){
 // Chromium picks its display backend before any application code runs, so a
 // switch appended from main.cjs reaches only child processes. Xwayland on a
 // Wayland session therefore needs a real command-line argument.
-function backendRelaunchArguments(value,argv){
-  if(value?.type!=='wayland'||value.backend!=='x11'||argv.some(item=>typeof item==='string'&&item.startsWith('--ozone-platform=')))return null;
+// The relaunched process carries RELAUNCHED, so it can never start another.
+const RELAUNCHED='CLIPBOARDLINE_BACKEND_RELAUNCHED';
+function backendRelaunchArguments(value,argv,environment=process.env){
+  if(value?.type!=='wayland'||value.backend!=='x11'||environment[RELAUNCHED]==='1'||argv.some(item=>typeof item==='string'&&item.startsWith('--ozone-platform=')))return null;
   return[...argv,'--ozone-platform=x11'];
+}
+// The AppImage runtime sets APPIMAGE and APPDIR, and a terminal opened from
+// another AppImage passes both on. APPIMAGE names this app only while it runs
+// from that APPDIR; otherwise the relaunch and the autostart entry would start
+// the other program.
+function launchCommand({environment=process.env,execPath=process.execPath,packaged,appPath}){
+  const appDir=typeof environment.APPDIR==='string'&&path.isAbsolute(environment.APPDIR)?path.resolve(environment.APPDIR)+path.sep:null;
+  if(typeof environment.APPIMAGE==='string'&&path.isAbsolute(environment.APPIMAGE)&&appDir&&execPath.startsWith(appDir))return[environment.APPIMAGE];
+  return packaged?[execPath]:[execPath,appPath];
 }
 // KWin exposes window state only to its own scripts. A one-shot script reports
 // through the user journal with a per-call nonce; ids are KWin's window UUIDs.
@@ -181,4 +192,4 @@ class LinuxDesktop{
   cancel(){this.cancelled++;}
   diagnostics(){return{ok:true,platform:'linux',session:this.session.type,compositor:this.session.compositor,windowBackend:this.windowBackend(),keyBackend:this.keyBackend()};}
 }
-module.exports={LinuxDesktop,session,handleFor,focusedSway,backendRelaunchArguments};
+module.exports={LinuxDesktop,session,handleFor,focusedSway,backendRelaunchArguments,launchCommand,RELAUNCHED};
