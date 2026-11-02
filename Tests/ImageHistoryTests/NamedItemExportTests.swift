@@ -27,4 +27,13 @@ import XCTest
         XCTAssertEqual(HistoryFiles.exportName(for: url, originalPath: nil, title: nil), "Text \(id).txt")
         XCTAssertEqual(HistoryFiles.exportName(for: url, originalPath: nil, title: "   "), "Text \(id).txt")
     }
+    func testALongNameInMultibyteCharactersStaysWithinTheFileNameLimit() {
+        let url = URL(fileURLWithPath: "/tmp/Text \(UUID()).txt")
+        for character in ["😀", "界", "a"] {
+            let name = HistoryFiles.exportName(for: url, originalPath: nil, title: String(repeating: character, count: 100))
+            XCTAssertLessThanOrEqual(name.utf8.count, 255, character)
+            XCTAssertTrue(name.hasSuffix(".txt")); XCTAssertTrue(name.hasPrefix(character))
+        }
+        XCTAssertEqual(HistoryFiles.exportName(for: url, originalPath: nil, title: String(repeating: "😀", count: 100)), String(repeating: "😀", count: 62) + ".txt")
+    }
 }
