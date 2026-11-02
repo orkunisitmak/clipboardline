@@ -191,6 +191,11 @@ test('edit and open actions need exactly one selected item',async()=>{
  await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="edit" disabled>/);await f.key('Escape');
  await f.key('KeyE');assert.doesNotMatch(f.main+f.overlay,/text-editor/);
 });
+test('image actions need exactly one selected item',async()=>{
+ const f=fixture();await f.ready();const other='00000000-0000-4000-8000-000000000005';f.state.items.push({...structuredClone(f.state.items[0]),id:other,createdAt:2000,mediaUrl:'appmedia://media/'+other,originalMediaUrl:'appmedia://media/'+other+'/original'});f.api.emit({items:f.state.items});await f.ready();await recent(f);await f.key('ArrowRight',{shift:true});
+ await f.key('KeyK',{ctrl:true});for(const id of ['crop','markup','pen','copyOCR'])assert.match(f.overlay,new RegExp('data-command="'+id+'" disabled>'));await f.key('Escape');
+ await f.key('KeyC');assert.doesNotMatch(f.main+f.overlay,/markup-canvas/);
+});
 test('the action list disables Clear filters until a Library filter is set',async()=>{
  const f=fixture();await f.ready();await savedLibrary(f);
  const row=()=>f.overlay.match(/<button[^>]*data-command="clear-filters"[^>]*>[\s\S]*?<\/button>/)[0];
