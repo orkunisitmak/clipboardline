@@ -29,8 +29,8 @@ test('a source removed before native copy returns a rejected Promise, not a sync
 });
 
 // Windows PowerShell decodes piped stdin with the OEM code page unless told otherwise,
-// so UTF-8 JSON paths/text with non-ASCII characters (Turkish usernames) arrived mangled.
-test('every native helper decodes its UTF-8 JSON stdin as UTF-8', async () => {
+// so UTF-8 JSON paths/text with non-ASCII characters (non-ASCII usernames) arrived mangled.
+test('the media helper decodes its UTF-8 JSON stdin as UTF-8', async () => {
   const fs = require('node:fs');
   if (process.platform !== 'win32') return;
   const {MediaJobs} = require('../lib/media.cjs');
