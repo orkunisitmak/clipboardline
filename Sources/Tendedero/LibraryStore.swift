@@ -945,8 +945,9 @@ extension String {
             expired += try LibrarySQL.decode(db.rows(sql, [.text(kind.rawValue), .real(cutoff.timeIntervalSince1970)])).filter { ($0.lastCapturedAt ?? $0.createdAt) <= cutoff }
         }
         // A screenshot deleted in Finder falls off the shelf, as it does without the Library.
+        let expiredIDs = Set(expired.map(\.id))
         let gone = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='image' AND shelf=1 AND deleted IS NULL AND retained IS NULL")).filter { record in
-            record.path.map { !FileManager.default.fileExists(atPath: $0) } ?? false && !expired.contains { $0.id == record.id }
+            record.path.map { !FileManager.default.fileExists(atPath: $0) } ?? false && !expiredIDs.contains(record.id)
         }
         expired += gone
         if !expired.isEmpty { try trash(expired.map(\.id)) }

@@ -22,6 +22,17 @@ import XCTest
         XCTAssertNil(try library.item(kept.id)?.deletedAt)
         XCTAssertTrue(try library.item(kept.id)?.onShelf == true)
     }
+    func testPruneKeepsASavedScreenshotWhoseFileWasDeleted() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let record = try library.captureImage(try f.image(owned: false))
+        try library.retain([record.id])
+        let saved = try XCTUnwrap(try library.item(record.id))
+        try? FileManager.default.removeItem(atPath: try XCTUnwrap(saved.path))
+        try library.prune()
+        XCTAssertNil(try library.item(record.id)?.deletedAt)
+        XCTAssertTrue(try library.item(record.id)?.onShelf == true)
+    }
     func testMigrationPreservesTextBytesDatesFavoritesIDsAndOriginals() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let image = try f.image(owned: false), bytes = try Data(contentsOf: image)
