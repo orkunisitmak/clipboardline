@@ -139,6 +139,14 @@ import XCTest
         let page = try PublicLinkHTMLMetadata(data: Data("<title>Page</title><meta property='og:title' content=''><meta name='twitter:title' content=' '>".utf8), url: url)
         XCTAssertEqual(page.title, "Page")
     }
+
+    func testBlankSecureImageFallsBackToOpenGraphImage() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        for blank in ["", "   "] {
+            let html = "<meta property='og:image:secure_url' content='\(blank)'><meta property='og:image' content='/a.png'>"
+            XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url).thumbnailURL?.absoluteString, "https://public.example.org/a.png")
+        }
+    }
 }
 
 #if !STANDALONE_TESTS
