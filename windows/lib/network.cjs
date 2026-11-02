@@ -110,7 +110,8 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   const html = decodeHTML(response.bytes, response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
   const title = collapse(meta(html, 'og:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
-  let thumbnail = meta(html, 'og:image');
+  const rawThumbnail = meta(html, 'og:image');
+  let thumbnail = rawThumbnail.trim() ? rawThumbnail : '';
   if (thumbnail) try { thumbnail = new URL(thumbnail, response.url).href; } catch { thumbnail = ''; }
   return {title: title.slice(0, 500), thumbnail};
 }

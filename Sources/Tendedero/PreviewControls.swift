@@ -23,6 +23,9 @@ final class ActionPreviewPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     private func nativeControlOwns(_ event: NSEvent) -> Bool {
+        // keyCode is only valid for key events; reading it from a mouse event
+        // raises, and AppKit then silently drops the click.
+        guard event.type == .keyDown || event.type == .keyUp else { return false }
         guard firstResponder is NSControl, !(firstResponder is NSTextField),
               event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
         return [36, 76, 49, 48, 123, 124, 125, 126].contains(Int(event.keyCode))

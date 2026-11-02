@@ -214,6 +214,16 @@ import XCTest
         model.changeScope(.collection(middle)); wait { model.query.scope == .collection(middle) && !model.loading }
         XCTAssertEqual(model.title, "Parent / Middle")
     }
+    func testUnnamedItemTitlesAreTheTrimmedFirstLineAndLinkHostLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let indented = try XCTUnwrap(store.captureText("\t  Indented first line \nsecond line")), long = try XCTUnwrap(store.captureText(String(repeating: "x", count: 130)))
+        let link = try store.captureLink(URL(string: "https://www.example.com/a/very/long/path?utm_source=news")!)
+        XCTAssertEqual(indented.displayTitle, "Indented first line"); XCTAssertEqual(long.displayTitle, String(repeating: "x", count: 120)); XCTAssertEqual(link.displayTitle, "www.example.com")
+        let blankFirst = try XCTUnwrap(store.captureText("\n \t\nSecond line\nthird"))
+        XCTAssertEqual(blankFirst.displayTitle, "Second line")
+        let blank = try XCTUnwrap(store.captureText(" \t")); XCTAssertEqual(blank.displayTitle, L("Untitled note"))
+        try store.update(link.id) { $0.originalURL = "http://[bad" }; XCTAssertEqual(try XCTUnwrap(store.item(link.id)).displayTitle, L("Link"))
+    }
     func testRemovingAnotherFolderKeepsTheOpenViewLikeWindows() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let keep = try store.createCollection("Keep"), other = try store.createCollection("Other")
