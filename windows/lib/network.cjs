@@ -91,7 +91,7 @@ function meta(html, name) {
   for (const match of html.matchAll(/<meta\b([^>]{0,4096})>/gi)) {
     const attributes = {};
     for (const attr of match[1].matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) attributes[attr[1].toLowerCase()] = attr[2] ?? attr[3] ?? attr[4];
-    if ([attributes.property, attributes.name].includes(name)) return entities(attributes.content || '').slice(0, 1000);
+    if ([attributes.property, attributes.name].some(key => String(key).toLowerCase() === name)) return entities(attributes.content || '').slice(0, 1000);
   }
   return '';
 }
@@ -109,9 +109,8 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
   const html = decodeHTML(response.bytes, response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
-  const title = collapse(meta(html, 'og:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
-  const rawThumbnail = meta(html, 'og:image');
-  let thumbnail = rawThumbnail.trim() ? rawThumbnail : '';
+  const title = collapse(meta(html, 'og:title') || meta(html, 'twitter:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
+  let thumbnail = ['og:image:secure_url', 'og:image', 'twitter:image'].map(name => meta(html, name)).find(value => value.trim()) || '';
   if (thumbnail) try { thumbnail = new URL(thumbnail, response.url).href; } catch { thumbnail = ''; }
   return {title: title.slice(0, 500), thumbnail};
 }
