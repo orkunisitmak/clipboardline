@@ -381,7 +381,8 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         author = Self.clean(metadata["author"] ?? metadata["og:site_name"], limit: 200)
         thumbnailURL = ["og:image:secure_url", "og:image", "twitter:image"]
             .compactMap { metadata[$0] }
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
             .compactMap { URL(string: $0, relativeTo: url)?.absoluteURL }
             .compactMap { PublicLinkDestination($0)?.url }
             .first
