@@ -94,10 +94,34 @@ function decodeHTML(bytes, type = '') {
 }
 // As on macOS, drop control characters except whitespace (U+0085 counts as whitespace).
 const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
+// Yields [start, end] of each `opening…>` tag body of at most `limit` characters. Every tag shares the
+// next '>' instead of rescanning for it, so a page of unclosed tags costs one pass, not one per tag (#39).
+function* tags(html, opening, limit) {
+  const pattern = new RegExp(opening, 'gi'); let close = -1;
+  for (let match; (match = pattern.exec(html));) {
+    const start = pattern.lastIndex; if (close < start) close = html.indexOf('>', start);
+    if (close < 0) return;
+    if (close - start > limit) continue;
+    yield [start, close]; pattern.lastIndex = close + 1;
+  }
+}
+// The first <title> whose </title> follows within 2000 characters; the closing marker is shared the same way.
+function titleText(html) {
+  const ending = /<\/title>/gi; let end = -1;
+  for (const [, close] of tags(html, '<title', Infinity)) {
+    if (end <= close) { ending.lastIndex = close + 1; end = ending.exec(html)?.index ?? -1; }
+    if (end < 0) return '';
+    if (end - close - 1 <= 2000) return html.slice(close + 1, end);
+  }
+  return '';
+}
 function meta(html, name) {
-  for (const match of html.matchAll(/<meta\b([^>]{0,4096})>/gi)) {
+  for (const [start, close] of tags(html, '<meta\\b', 4096)) {
     const attributes = {};
-    for (const attr of match[1].matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) attributes[attr[1].toLowerCase()] = attr[2] ?? attr[3] ?? attr[4];
+    // A name without a value still consumes its whole run, so a long run is not retried from every character.
+    for (const attr of html.slice(start, close).matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
+      const value = attr[2] ?? attr[3] ?? attr[4]; if (value !== undefined) attributes[attr[1].toLowerCase()] = value;
+    }
     if ([attributes.property, attributes.name].some(key => String(key).toLowerCase() === name)) return entities(attributes.content || '');
   }
   return '';
@@ -116,7 +140,7 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
   const html = decodeHTML(response.bytes, response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
-  const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
+  const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities(titleText(html).replace(/<[^>]*>/g, ''))) || url.hostname;
   // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
   let thumbnail = '';
   for (const name of ['og:image:secure_url', 'og:image', 'twitter:image']) {
