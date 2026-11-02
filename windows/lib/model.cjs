@@ -85,7 +85,7 @@ function settings(patch, previous = DEFAULTS) {
 // Match macOS libraryFolded: sibling folder and tag names ignore case, width and diacritics.
 // Only the ideographic space, compatibility jamo and the Halfwidth and Fullwidth Forms
 // block get compatibility mapping, so ＡＢＣ matches ABC while m² stays distinct from m2.
-const foldedName=value=>value.replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
+const foldedName=value=>value.replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').normalize('NFC').toLowerCase();
 function trashUndoFingerprint(item){return crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex');}
 function trashUndoMatches(item,entry){return !!item&&item.trashedAt!=null&&item.trashedAt===entry.afterTrashedAt&&item.updatedAt===entry.afterUpdatedAt&&(item.captureRevision??null)===entry.captureRevision&&trashUndoFingerprint(item)===entry.fingerprint;}
 function availableTrashUndo(items,journal){if(!journal?.length)return false;const byID=new Map(items.map(item=>[item.id,item]));for(let index=journal.length-1;index>=0;index--)if(journal[index].some(entry=>trashUndoMatches(byID.get(entry.id),entry)))return true;return false;}
