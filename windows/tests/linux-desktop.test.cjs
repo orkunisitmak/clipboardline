@@ -1,8 +1,8 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {LinuxDesktop,session,handleFor}=require('../lib/linux-desktop.cjs');
-const {LinuxClipboard,ClipboardWatcher}=require('../lib/linux-clipboard.cjs');
+const {LinuxDesktop,session,handleFor,backendRelaunchArguments}=require('../lib/linux-desktop.cjs');
+const {LinuxClipboard,ClipboardWatcher,backend}=require('../lib/linux-clipboard.cjs');
 const {setLaunchAtLogin,command}=require('../lib/linux-autostart.cjs');
 const {PasteTargetTracker}=require('../lib/paste-target.cjs');
 const {parseResponse,screenshotPath,portalScreenshot}=require('../lib/linux-screenshot.cjs');
@@ -35,6 +35,25 @@ test('the portal is called only after the signal subscription is confirmed',linu
   await assert.rejects(portalScreenshot({gdbus:null}),/requires gdbus/);
 });
 
+test('Mutter desktops use Xwayland for clipboard capture and other sessions stay native',()=>{
+  const gnome={XDG_CURRENT_DESKTOP:'ubuntu:GNOME',WAYLAND_DISPLAY:'wayland-0',DISPLAY:':0'};
+  assert.equal(session(gnome,[]).backend,'x11');assert.equal(session(gnome,[]).type,'wayland');
+  assert.equal(session({...gnome,DISPLAY:''},[]).backend,'wayland','no Xwayland: stay native');
+  assert.equal(session({...gnome,XDG_CURRENT_DESKTOP:'KDE'},[]).backend,'wayland');
+  assert.equal(session(gnome,['--ozone-platform=wayland']).backend,'wayland','an explicit choice wins');
+  assert.equal(session({...gnome,XDG_CURRENT_DESKTOP:'KDE',CLIPBOARDLINE_DISPLAY_BACKEND:'x11'},[]).backend,'x11');
+  assert.equal(session({DISPLAY:':0'},[]).backend,'x11');
+  const tools=name=>['wl-paste','wl-copy','xclip'].includes(name);
+  assert.equal(backend({environment:gnome,find:tools}),'wayland');assert.equal(backend({environment:gnome,find:tools,display:'x11'}),'x11');
+});
+test('only an Xwayland choice on a Wayland session relaunches, and it keeps the original arguments once',()=>{
+  const xwayland={type:'wayland',backend:'x11'};
+  assert.deepEqual(backendRelaunchArguments(xwayland,['--toggle']),['--toggle','--ozone-platform=x11']);
+  assert.equal(backendRelaunchArguments(xwayland,['--toggle','--ozone-platform=x11']),null);
+  assert.equal(backendRelaunchArguments({type:'wayland',backend:'wayland'},[]),null);
+  assert.equal(backendRelaunchArguments({type:'x11',backend:'x11'},[]),null);
+});
+
 function desktop(environment,tools,responses,{ownPID=4242}={}){
   const calls=[];
   const value=new LinuxDesktop({environment,ownPID,find:name=>tools.includes(name)?'/usr/bin/'+name:null,sleep:async()=>{},
@@ -43,11 +62,11 @@ function desktop(environment,tools,responses,{ownPID=4242}={}){
 }
 
 test('session detection distinguishes compositors and display servers',()=>{
-  assert.deepEqual(session({WAYLAND_DISPLAY:'wayland-1',XDG_CURRENT_DESKTOP:'KDE'}),{type:'wayland',compositor:'kde'});
-  assert.deepEqual(session({WAYLAND_DISPLAY:'wayland-1',HYPRLAND_INSTANCE_SIGNATURE:'x'}),{type:'wayland',compositor:'hyprland'});
-  assert.deepEqual(session({WAYLAND_DISPLAY:'wayland-1',SWAYSOCK:'/run/sway'}),{type:'wayland',compositor:'sway'});
-  assert.deepEqual(session({DISPLAY:':0',XDG_CURRENT_DESKTOP:'XFCE'}),{type:'x11',compositor:'other'});
-  assert.deepEqual(session({}),{type:'none',compositor:'other'});
+  assert.deepEqual(session({WAYLAND_DISPLAY:'wayland-1',XDG_CURRENT_DESKTOP:'KDE'}),{type:'wayland',compositor:'kde',backend:'wayland'});
+  assert.deepEqual(session({WAYLAND_DISPLAY:'wayland-1',HYPRLAND_INSTANCE_SIGNATURE:'x'}),{type:'wayland',compositor:'hyprland',backend:'wayland'});
+  assert.deepEqual(session({WAYLAND_DISPLAY:'wayland-1',SWAYSOCK:'/run/sway'}),{type:'wayland',compositor:'sway',backend:'wayland'});
+  assert.deepEqual(session({DISPLAY:':0',XDG_CURRENT_DESKTOP:'XFCE'}),{type:'x11',compositor:'other',backend:'x11'});
+  assert.deepEqual(session({}),{type:'none',compositor:'other',backend:'none'});
 });
 
 test('X11 capture yields a paste-target identity accepted by the shared tracker and pastes with xdotool',async()=>{

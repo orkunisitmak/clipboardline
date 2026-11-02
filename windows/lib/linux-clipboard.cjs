@@ -17,8 +17,8 @@ function which(name,{environment=process.env}={}){
   }
   return null;
 }
-function backend({environment=process.env,find=name=>which(name,{environment})}={}){
-  if(environment.WAYLAND_DISPLAY&&find('wl-paste')&&find('wl-copy'))return'wayland';
+function backend({environment=process.env,find=name=>which(name,{environment}),display=null}={}){
+  if(display!=='x11'&&environment.WAYLAND_DISPLAY&&find('wl-paste')&&find('wl-copy'))return'wayland';
   if(environment.DISPLAY&&find('xclip'))return'x11';
   return null;
 }

@@ -48,8 +48,8 @@ function monitor(changed, failed, focused = () => {}, ready = () => {}) {
   child.on('error',error=>{stopped();failed(error);}); child.on('exit',code => { stopped();if(code) failed(new Error('Native clipboard monitor stopped.')); }); return child;
 }
 function linuxBridge(){
-  const {LinuxDesktop}=require('./linux-desktop.cjs'),{LinuxClipboard,ClipboardWatcher}=require('./linux-clipboard.cjs');
-  const desktop=new LinuxDesktop(),clipboard=new LinuxClipboard();let watcher=null;
+  const {LinuxDesktop}=require('./linux-desktop.cjs'),{LinuxClipboard,ClipboardWatcher,backend}=require('./linux-clipboard.cjs');
+  const desktop=new LinuxDesktop(),clipboard=new LinuxClipboard({kind:backend({display:desktop.session.backend})});let watcher=null;
   return {linux:{desktop,clipboard},clipboardSequence:async()=>watcher?watcher.read():null,cancelPaste:()=>desktop.cancel(),capture:()=>desktop.capture(),captureDiagnostics:async()=>desktop.diagnostics(),selfTestFocusPolicy:async()=>desktop.diagnostics(),
     restore:target=>desktop.restore(target),preparePaste:target=>desktop.preparePaste(target),validatePaste:target=>desktop.validatePaste(target),paste:target=>desktop.paste(target),
     copyImages:payload=>clipboard.writeFiles(payload?.files),

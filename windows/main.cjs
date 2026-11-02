@@ -27,6 +27,7 @@ const native = require('./lib/native.cjs');
 const {setLaunchAtLogin}=require('./lib/linux-autostart.cjs');
 const {portalScreenshot}=require('./lib/linux-screenshot.cjs');
 const {which}=require('./lib/linux-clipboard.cjs');
+const {backendRelaunchArguments}=require('./lib/linux-desktop.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
 const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
@@ -47,7 +48,7 @@ if(development){const directory=path.join(app.getPath('appData'),'ClipBoardLine 
 app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
 const linux=process.platform==='linux'?native.linux:null;
 // Wayland compositors deliver global shortcuts only through the desktop portal.
-if(linux)app.commandLine.appendSwitch('enable-features','GlobalShortcutsPortal');
+if(linux?.desktop.session.backend==='wayland')app.commandLine.appendSwitch('enable-features','GlobalShortcutsPortal');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
 let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
@@ -445,7 +446,14 @@ function appIcon(){
   }
   return applicationIcon;
 }
+const relaunch=linux&&!testMode?backendRelaunchArguments(linux.desktop.session,process.argv.slice(1)):null;
 if(!app.requestSingleInstanceLock())app.quit();
+else if(relaunch){
+  // Runs after the lock so shortcut commands reach the live instance directly.
+  app.releaseSingleInstanceLock();
+  spawn(process.env.APPIMAGE||process.execPath,relaunch,{detached:true,stdio:'inherit'}).unref();
+  app.exit(0);
+}
 else app.whenReady().then(async()=>{
   store=new Store(app.getPath('userData'));mediaJobs=new MediaJobs({directory:path.join(store.directory,'media-jobs')});try{dragFiles=new DragFiles(store.directory);}catch{}updates=new Updates(path.join(store.directory,'updates'),{build:BUILD_NUMBER,version:app.getVersion(),changed:()=>broadcast(),available:updateAvailable});
   // The signed Windows channel never installs on Linux; packages update the app.

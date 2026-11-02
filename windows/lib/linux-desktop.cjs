@@ -11,7 +11,12 @@ const KEY_CTRL=29,KEY_V=47;
 function exec(file,args,{timeout=4000}={}){
   return new Promise((resolve,reject)=>execFile(file,args,{timeout,maxBuffer:4*1024*1024},(error,stdout)=>error?reject(error):resolve(String(stdout))));
 }
-function session(environment=process.env){
+// Mutter offers no data-control protocol, so a hidden native Wayland client
+// cannot observe the clipboard. It mirrors the selection to Xwayland, which
+// keeps background capture available to an X11 client on these desktops.
+const MUTTER_DESKTOPS=new Set(['gnome','gnome-classic','gnome-flashback','ubuntu','pantheon','budgie','budgie-desktop','unity','x-cinnamon','cinnamon']);
+const BACKENDS=new Set(['wayland','x11']);
+function session(environment=process.env,argv=process.argv){
   const desktop=String(environment.XDG_CURRENT_DESKTOP||'').toLowerCase();
   const wayland=!!environment.WAYLAND_DISPLAY||environment.XDG_SESSION_TYPE==='wayland';
   let compositor='other';
@@ -19,7 +24,21 @@ function session(environment=process.env){
   else if(environment.SWAYSOCK)compositor='sway';
   else if(desktop.includes('kde'))compositor='kde';
   else if(desktop.includes('gnome'))compositor='gnome';
-  return{type:wayland?'wayland':environment.DISPLAY?'x11':'none',compositor};
+  const type=wayland?'wayland':environment.DISPLAY?'x11':'none',xwayland=wayland&&!!environment.DISPLAY;
+  const mutter=desktop.split(':').some(name=>MUTTER_DESKTOPS.has(name.trim()));
+  const flag=argv.find(value=>typeof value==='string'&&value.startsWith('--ozone-platform='))?.slice('--ozone-platform='.length);
+  const requested=BACKENDS.has(flag)?flag:BACKENDS.has(environment.CLIPBOARDLINE_DISPLAY_BACKEND)?environment.CLIPBOARDLINE_DISPLAY_BACKEND:null;
+  let backend=type;
+  if(requested&&(requested==='x11'?!!environment.DISPLAY:wayland))backend=requested;
+  else if(mutter&&xwayland)backend='x11';
+  return{type,compositor,backend};
+}
+// Chromium picks its display backend before any application code runs, so a
+// switch appended from main.cjs reaches only child processes. Xwayland on a
+// Wayland session therefore needs a real command-line argument.
+function backendRelaunchArguments(value,argv){
+  if(value?.type!=='wayland'||value.backend!=='x11'||argv.some(item=>typeof item==='string'&&item.startsWith('--ozone-platform=')))return null;
+  return[...argv,'--ozone-platform=x11'];
 }
 // KWin exposes window state only to its own scripts. A one-shot script reports
 // through the user journal with a per-call nonce; ids are KWin's window UUIDs.
@@ -162,4 +181,4 @@ class LinuxDesktop{
   cancel(){this.cancelled++;}
   diagnostics(){return{ok:true,platform:'linux',session:this.session.type,compositor:this.session.compositor,windowBackend:this.windowBackend(),keyBackend:this.keyBackend()};}
 }
-module.exports={LinuxDesktop,session,handleFor,focusedSway};
+module.exports={LinuxDesktop,session,handleFor,focusedSway,backendRelaunchArguments};
