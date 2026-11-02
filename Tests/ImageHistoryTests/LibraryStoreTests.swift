@@ -198,4 +198,27 @@ import XCTest
         let line = Line(defaults: f.defaults, inbox: f.inbox, breeze: false, library: library)
         line.pinFromUI(first.id); XCTAssertTrue(try library.item(first.id)?.favorite == true); XCTAssertFalse(try library.item(second.id)?.favorite == true)
     }
+    func testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let first = try library.captureImage(f.image(identicalPixels: true)); f.date.addTimeInterval(1)
+        try library.toggleFavorite([first.id])
+        try library.update(first.id) { $0.title = "Logo" }
+        try library.addTag("brand", to: [first.id])
+        let folder = try library.createCollection("Work"); try library.assign([first.id], to: folder)
+        let other = try library.captureImage(f.image()); f.date.addTimeInterval(1)
+        let duplicate = try f.image(identicalPixels: true)
+        let again = try library.captureImage(duplicate)
+        XCTAssertEqual(again.id, first.id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: duplicate.path))
+        let items = try library.shelfItems(.image)
+        XCTAssertEqual(items.map(\.id), [first.id, other.id])
+        XCTAssertTrue(items[0].favorite)
+        XCTAssertEqual(items[0].title, "Logo")
+        XCTAssertEqual(try library.tags(for: first.id).map(\.name), ["brand"])
+        XCTAssertEqual(try library.collections(for: first.id).map(\.id), [folder])
+        let different = try library.captureImage(f.image())
+        XCTAssertNotEqual(different.id, first.id)
+        XCTAssertEqual(try library.shelfItems(.image).count, 3)
+    }
 }

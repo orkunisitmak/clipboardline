@@ -5,11 +5,13 @@ const {Store,plainURL,protectDirectory,protectionFailureDetail}=require('../lib/
 const {windowsEnvironment}=require('../lib/windows-environment.cjs');
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
 function fixture(fn){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-model-'));let now=1000;try{const store=new Store(dir,{clock:()=>now});return fn(store,value=>{now=value;},dir);}finally{fs.rmSync(dir,{recursive:true,force:true});}}
+test('exact image recopy moves the image in front of another image and preserves saved organization',()=>fixture((s,time)=>{const other=Buffer.concat([png,Buffer.from([0])]);const first=s.insert('image',png);s.modify('name',{id:first.id,name:'Logo'});const folder=s.modify('createFolder',{name:'Work'});s.modify('folder',{ids:[first.id],folderId:folder.id});s.modify('tag',{ids:[first.id],tags:['brand']});time(1500);const second=s.insert('image',other);assert.notEqual(second.id,first.id);time(2000);const latest=s.insert('image',png);assert.equal(s.data.items.filter(i=>i.kind==='image').length,2);assert.equal(latest.id,first.id);assert.equal(latest.name,'Logo');assert.equal(latest.pinned,true);assert.deepEqual(latest.folderIds,[folder.id]);assert.deepEqual(latest.tags,['brand']);assert.equal(latest.createdAt,2000);assert.deepEqual(s.data.items.filter(i=>i.kind==='image').map(i=>i.id),[first.id,second.id]);}));
 test('exact recopy moves a text to front and preserves saved organization',()=>fixture((s,time)=>{const first=s.insert('text','API key exact value');s.modify('name',{id:first.id,name:'Service key'});const folder=s.modify('createFolder',{name:'Work'});s.modify('folder',{ids:[first.id],folderId:folder.id});s.modify('tag',{ids:[first.id],tags:['api']});time(2000);s.insert('text','something else');time(3000);const latest=s.insert('text','API key exact value');assert.equal(s.data.items.length,2);assert.equal(latest.id,first.id);assert.equal(latest.name,'Service key');assert.deepEqual(latest.folderIds,[folder.id]);assert.deepEqual(latest.tags,['api']);assert.equal(latest.createdAt,3000);assert.equal(s.data.items[0].id,first.id);}));
 test('copying a stored link again keeps its date added and records the copy, so it leads the Link shelf but not Newest first',()=>fixture((s,time)=>{const first=s.insert('link','https://a.example.com/');time(2000);s.insert('link','https://b.example.com/');time(3000);const again=s.insert('link','https://a.example.com/');assert.equal(again.id,first.id);assert.equal(s.data.items.length,2);assert.equal(again.createdAt,1000);assert.equal(again.lastCopiedAt,3000);assert.equal(again.updatedAt,3000);assert.deepEqual(s.data.items.filter(i=>i.kind==='link').sort((a,b)=>b.createdAt-a.createdAt).map(i=>i.url),['https://b.example.com/','https://a.example.com/']);}));
 test('a link copied again after the retention window stays, like macOS, while an untouched one expires',()=>fixture((s,time)=>{s.insert('link','https://a.example.com/');s.insert('link','https://b.example.com/');time(1000+31*86400000);const again=s.insert('link','https://a.example.com/');assert.equal(again.createdAt,1000);assert.equal(again.trashedAt,null);s.expire(false);const live=s.data.items.filter(i=>!i.trashedAt).map(i=>i.url);assert.deepEqual(live,['https://a.example.com/']);}));
 test('dedup normalizes selection newlines while preserving spaces and case',()=>fixture(s=>{for(const value of ['foo','foo ','Foo','foo\n'])s.insert('text',value);assert.equal(s.data.items.length,3);assert.equal(s.data.items[0].text,'foo\n');}));
 test('URLs must be a sole public-protocol URL, normal prose stays text',()=>{assert.equal(plainURL('hello https://example.com'),null);assert.equal(plainURL('javascript:alert(1)'),null);assert.equal(plainURL('https://secret@example.com'),null);assert.equal(plainURL('https://example.com'), 'https://example.com/');});
+test('Hostless scheme-only copies stay text like the Mac',()=>{for(const value of ['https:/example.com/a','https:example.com','https:///example.com','http:\\\\example.com'])assert.equal(plainURL(value),null);});
 test('a URL copied with surrounding whitespace keeps its link identity like macOS',()=>{
  assert.equal(plainURL('https://example.com/path\n'),'https://example.com/path');assert.equal(plainURL('  https://example.com \r\n'),'https://example.com/');
  assert.equal(plainURL('https://example.com/a b'),null);assert.equal(plainURL(' \n '),null);
@@ -31,6 +33,30 @@ test('folder names share the macOS 64-grapheme and control-character rule',()=>f
 }));
 test('retention is per-kind; pinned/folder/tag records remain permanent',()=>fixture((s,time)=>{const text=s.insert('text','expiring text'),link=s.insert('link','https://example.com'),saved=s.insert('text','tagged');s.modify('tag',{ids:[saved.id],tags:['keep']});s.modify('setSettings',{patch:{retentionDays:{text:1,link:3,image:0}}});time(2*86400000);s.expire();assert.ok(text.trashedAt);assert.equal(link.trashedAt,null);assert.equal(saved.trashedAt,null);}));
 test('remove hides saved items, trashes temporary ones; undo preserves later edits',()=>fixture(s=>{const saved=s.insert('text','saved'),temp=s.insert('text','temporary');s.modify('pin',{ids:[saved.id]});s.modify('remove',{ids:[saved.id,temp.id]});assert.equal(saved.hiddenFromShelf,true);assert.ok(temp.trashedAt);s.modify('name',{id:saved.id,name:'Later name'});s.modify('undo');assert.equal(saved.hiddenFromShelf,false);assert.equal(temp.trashedAt,null);assert.equal(saved.name,'Later name');}));
+test('New note always creates a new retained record, even with the default or an existing text',()=>fixture(s=>{
+ const copied=s.insert('text','Meeting agenda');
+ const a=s.createNote(),b=s.createNote({}),c=s.createNote({text:'Meeting agenda',title:'Agenda'});
+ assert.equal(new Set([copied.id,a.id,b.id,c.id]).size,4);assert.equal(s.data.items.length,4);
+ assert.deepEqual([a.text,b.text,c.text],['New note','New note','Meeting agenda']);
+ for(const note of [a,b,c])assert.equal(s.data.items.find(i=>i.id===note.id),note);
+ assert.equal(c.name,'Agenda');assert.ok([a,b,c].every(note=>Number.isFinite(note.retainedAt)));assert.equal(copied.retainedAt,null);
+}));
+test('a capture or import of a note\'s text never merges or removes notes, also after reopening',()=>fixture((s,time,dir)=>{
+ const copied=s.insert('text','Meeting agenda');
+ time(2000);const a=s.createNote(),b=s.createNote({title:'Second'}),c=s.createNote({text:'Meeting agenda',title:'Agenda'});
+ s.modify('details',{id:a.id,note:'Keep this note'});
+ const before=JSON.stringify([a,b,c].map(note=>s.data.items.find(i=>i.id===note.id)));
+ time(3000);const captured=s.insert('text','New note');const recopied=s.insert('text','Meeting agenda');
+ assert.ok(![a.id,b.id,c.id].includes(captured.id));assert.equal(recopied.id,copied.id);
+ assert.equal(JSON.stringify([a,b,c].map(note=>s.data.items.find(i=>i.id===note.id))),before);
+ assert.ok([a,b,c].every(note=>!s.data.items.find(i=>i.id===note.id).trashedAt));
+ const reopened=new Store(dir,{clock:()=>4000});assert.ok([a,b,c].every(note=>reopened.data.items.find(i=>i.id===note.id)?.createdAsNote===true));
+ reopened.insert('text','New note');assert.equal(reopened.data.items.filter(i=>i.createdAsNote&&!i.trashedAt).length,3);
+}));
+test('a note keeps its marker on disk even when creation stops after the first write',()=>fixture((s,_time,dir)=>{
+ s.modify=()=>{throw new Error('stopped');};assert.throws(()=>s.createNote({title:'Agenda'}),/stopped/);
+ const note=new Store(dir).data.items.find(i=>i.text==='New note');assert.equal(note?.createdAsNote,true);
+}));
 test('explicit Trash invalidates removal undo and deletion requires Trash',()=>fixture(s=>{const item=s.insert('text','text');assert.throws(()=>s.modify('delete',{ids:[item.id]}));s.modify('remove',{ids:[item.id]});s.modify('restore',{ids:[item.id]});assert.equal(s.undoStack.length,0);s.modify('trash',{ids:[item.id]});s.modify('delete',{ids:[item.id]});assert.equal(s.data.items.length,0);}));
 test('batch operations are atomic when one content kind is invalid',()=>fixture(s=>{const text=s.insert('text','before'),image=s.insert('image',png);assert.throws(()=>s.modify('editText',{ids:[text.id,image.id],text:'after'}));assert.equal(s.item(text.id).text,'before');}));
 test('a failed command rolls back in place so background jobs keep the item objects they hold',()=>fixture(s=>{
@@ -211,3 +237,4 @@ test('pin on a mixed selection pins every item and only a fully pinned selection
  s.modify('pin',{ids:[a.id]});s.modify('pin',{ids:[a.id,b.id]});assert.deepEqual(pinned(),[true,true]);
  s.modify('pin',{ids:[a.id,b.id]});assert.deepEqual(pinned(),[false,false]);
 }));
+test('a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS',()=>fixture(s=>{const item=s.insert('text','x');const big='ş'.repeat(600000);assert.throws(()=>s.modify('note',{ids:[item.id],note:big}),/Invalid text/);assert.throws(()=>s.modify('editText',{ids:[item.id],text:big}),/Invalid text/);assert.throws(()=>s.insert('text',big),/Invalid text/);s.modify('note',{ids:[item.id],note:'ş'.repeat(500000)});assert.equal(s.data.items[0].note.length,500000);}));

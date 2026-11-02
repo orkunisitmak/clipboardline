@@ -20,10 +20,16 @@ function publicAddress(address) {
   }
   return false;
 }
-async function publicURL(input, resolver = dns.lookup) {
-  const url = new URL(input); const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+// Everything publicURL can refuse without a DNS lookup.
+function literalDestination(url) {
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port && !['80', '443'].includes(url.port) ||
       /(^localhost$|\.(local|internal|home|localhost|test|invalid)$)/.test(host)) throw new Error('Only public HTTP(S) destinations are allowed');
+  if (net.isIP(host) && !publicAddress(host)) throw new Error('Private network destinations are blocked');
+  return host;
+}
+async function publicURL(input, resolver = dns.lookup) {
+  const url = new URL(input); const host = literalDestination(url);
   const addresses = net.isIP(host) ? [{address: host, family: net.isIP(host)}] : await resolver(host, {all: true, verbatim: true});
   if (!addresses.length || addresses.some(value => !publicAddress(value.address))) throw new Error('Private network destinations are blocked');
   return {url, address: addresses[0]};
@@ -86,12 +92,13 @@ function decodeHTML(bytes, type = '') {
   if (label) return new TextDecoder(label).decode(bytes);
   try { return new TextDecoder('utf-8', {fatal: true}).decode(bytes); } catch { return new TextDecoder('windows-1252').decode(bytes); }
 }
-const collapse = value => value.replace(/\s+/g, ' ').trim();
+// As on macOS, drop control characters except whitespace (U+0085 counts as whitespace).
+const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
 function meta(html, name) {
   for (const match of html.matchAll(/<meta\b([^>]{0,4096})>/gi)) {
     const attributes = {};
     for (const attr of match[1].matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) attributes[attr[1].toLowerCase()] = attr[2] ?? attr[3] ?? attr[4];
-    if ([attributes.property, attributes.name].includes(name)) return entities(attributes.content || '').slice(0, 1000);
+    if ([attributes.property, attributes.name].some(key => String(key).toLowerCase() === name)) return entities(attributes.content || '');
   }
   return '';
 }
@@ -109,10 +116,13 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
   const html = decodeHTML(response.bytes, response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
-  const title = collapse(meta(html, 'og:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
-  const rawThumbnail = meta(html, 'og:image');
-  let thumbnail = rawThumbnail.trim() ? rawThumbnail : '';
-  if (thumbnail) try { thumbnail = new URL(thumbnail, response.url).href; } catch { thumbnail = ''; }
+  const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
+  // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
+  let thumbnail = '';
+  for (const name of ['og:image:secure_url', 'og:image', 'twitter:image']) {
+    const value = meta(html, name); if (!value.trim()) continue;
+    try { const image = new URL(value, response.url); metadataGuard(image); literalDestination(image); thumbnail = image.href; break; } catch {}
+  }
   return {title: title.slice(0, 500), thumbnail};
 }
 module.exports = {publicAddress, publicURL, boundedFetch, metadataGuard,metadataFetch,linkMetadata};
