@@ -542,8 +542,8 @@ function actionCommands(){
   else if(id==='edit'&&!text)reason='Select a text item first.';
   else if(id==='open'&&!link)reason='Select a link first.';
   else if(id==='finishEditing'&&!ui.editingText)reason='Start editing text first.';
-  else if((id==='undo'&&!state.canUndo)||(id==='undoTrash'&&!state.canUndoTrash))reason='Nothing to undo.';
   else if(!['search','library','edit','markup','crop',...Object.keys(MARKUP_TOOLS)].includes(id)&&!shortcutAllowed(id,context))reason='Available '+(['librarySearch','allTypes','images','texts','links','focusNextPane','focusPreviousPane','newNote','newFolder','undoTrash'].includes(id)?'in Library.':'on the shelves.');
+  else if((id==='undo'&&!state.canUndo)||(id==='undoTrash'&&!state.canUndoTrash))reason='Nothing to undo.';
   if(id==='search'&&library)return{id,title:'Search contents',key:effectiveShortcut('librarySearch',context),detail:'Search this Library view',aliases:'ara arama içerik kütüphane',disabled:false};
   const allPinned=hasSelection&&ids.every(id=>item(id)?.pinned);
   return{id,title:id==='remove'&&library?'Move to Trash':id==='pin'&&allPinned?'Unpin':id==='markup'&&video?'Trim video':ACTION_TITLES[id],key:actionShortcut(id,context),detail:reason||(selectedActions.has(id)?ids.length+' selected':(['previous','next','up','down','first','last','previousPage','nextPage'].includes(id)?'Browse selected items':'')),aliases:t(ACTION_TITLES[id])+' '+id,disabled:!!reason};
