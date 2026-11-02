@@ -249,3 +249,16 @@ test('links that differ only by tracking parameters or a youtu.be form share one
  assert.equal(s.insert('link','https://www.youtube.com/watch?v=dQw4w9WgXcQ').id,video.id);
  assert.equal(s.data.items.filter(i=>i.kind==='link').length,3);
 }));
+
+test('link merging keeps non-tracking query syntax, ignores v outside /watch and keeps every distinct note',()=>fixture(s=>{
+ const flag=s.insert('link','https://example.com/a?flag');
+ assert.notEqual(s.insert('link','https://example.com/a?flag=').id,flag.id);
+ assert.notEqual(s.insert('link','https://example.com/a?q=a+b').id,flag.id);
+ assert.equal(s.insert('link','https://example.com/a?flag&utm_source=x').id,flag.id);
+ const watch=s.insert('link','https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+ assert.notEqual(s.insert('link','https://www.youtube.com/@creator?v=dQw4w9WgXcQ').id,watch.id);
+ const a=s.insert('link','https://example.com/n'),b=s.insert('link','https://example.com/other');
+ b.url='https://example.com/n?utm_source=x';a.note='first';b.note='second';
+ const merged=s.insert('link','https://example.com/n?fbclid=z');
+ assert.deepEqual(merged.note.split('\n\n').sort(),['first','second']);assert.equal(s.data.items.filter(i=>i.url.startsWith('https://example.com/n')).length,1);
+}));

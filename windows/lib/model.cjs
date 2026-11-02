@@ -109,17 +109,18 @@ function plainURL(value) {
 // Match macOS LinkIdentity.normalized: tracking parameters and the youtu.be, shorts, embed and live forms of a video
 // do not make a different link.
 const YOUTUBE_HOSTS=['youtube.com','www.youtube.com','m.youtube.com','music.youtube.com'];
+function queryParts(u) { return u.search.slice(1).split('&').filter(Boolean).map(raw => ({raw, name: new URLSearchParams(raw).keys().next().value})); }
 function linkKey(href) {
   const u = new URL(href), pieces = u.pathname.split('/').filter(Boolean);
   let id = null;
   if (['youtu.be', 'www.youtu.be'].includes(u.hostname)) id = pieces[0];
-  else if (YOUTUBE_HOSTS.includes(u.hostname)) id = ['shorts', 'embed', 'live'].includes(pieces[0]) && pieces.length > 1 ? pieces[1] : u.searchParams.get('v');
-  const params = [...u.searchParams].filter(([name]) => { name = name.toLowerCase(); return !name.startsWith('utm_') && name !== 'fbclid' && name !== 'gclid'; });
+  else if (YOUTUBE_HOSTS.includes(u.hostname)) id = ['shorts', 'embed', 'live'].includes(pieces[0]) && pieces.length > 1 ? pieces[1] : u.pathname === '/watch' ? u.searchParams.get('v') : null;
+  const parts = queryParts(u).filter(({name}) => { name = name.toLowerCase(); return !name.startsWith('utm_') && name !== 'fbclid' && name !== 'gclid'; });
   if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) {
-    const rest = params.filter(([name]) => name !== 'v' && name !== 'si');
-    return new URL('https://www.youtube.com/watch?' + new URLSearchParams([['v', id], ...rest]) + u.hash).href;
+    const rest = parts.filter(({name}) => name !== 'v' && name !== 'si').map(({raw}) => raw);
+    return new URL('https://www.youtube.com/watch?' + ['v=' + id, ...rest].join('&') + u.hash).href;
   }
-  u.search = new URLSearchParams(params).toString();
+  u.search = parts.map(({raw}) => raw).join('&');
   return u.href;
 }
 
@@ -361,7 +362,8 @@ class Store {
       item.pinned ||= matching.some(i => i.pinned);
       item.folderIds = [...new Set(matching.flatMap(i => i.folderIds))]; item.tags = [...new Set(matching.flatMap(i => i.tags))];
       item.name ||= matching.find(i => i.name)?.name || '';
-      item.note ||= matching.find(i => i.note)?.note || '';
+      const notes = [...new Set([item.note, ...matching.map(i => i.note)].filter(Boolean))].join('\n\n');
+      if (notes.length <= 1024 * 1024) item.note = notes;
       const dates=matching.map(i=>i.retainedAt).filter(Number.isFinite);if(dates.length)item.retainedAt=Math.min(...dates);
     }
     this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
