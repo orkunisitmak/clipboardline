@@ -116,6 +116,7 @@ import XCTest
     func testSearchMatchesTurkishDotlessIAndRefoldsOlderRows() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; var library = try store(f)
         let record = try XCTUnwrap(library.captureText("Işık ISPARTA ısı"))
+        try library.retain([record.id])
         for query in ["ışık", "ısparta", "ISI", "isik", "ISPARTA"] { XCTAssertEqual(try library.query(LibraryQuery(search: query)).first?.id, record.id, query) }
         let db = try LibraryDatabase(url: library.databaseURL)
         try db.execute("UPDATE items SET search=? WHERE id=?", [.text("isık ısparta ısı"), .text(record.id.uuidString)])
