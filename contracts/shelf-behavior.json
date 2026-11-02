@@ -122,7 +122,7 @@
         {
         "id": "name-fold-keeps-script-marks",
         "behavior": "Tag and folder names are compared without accents and case, but a kana voiced mark and a Devanagari or Thai vowel sign make a different word, so tag or folder は and ば, क and कि, ก and กิ are kept apart.",
-        "macos": "LibraryStore.libraryFolded folds with .diacriticInsensitive, which drops Latin-style accents and keeps these marks; addTag, createCollection and renameCollection compare that value.",
+        "macos": "LibraryStore.libraryFolded folds with .diacriticInsensitive, which drops Latin-style accents and keeps these marks; addTag, createCollection and renameCollection compare that value; LibraryInteractionTests.testTagAndFolderNamesThatDifferByAKanaDevanagariOrThaiMarkStayDistinctLikeWindows covers it.",
         "windows": "foldedName() in model.cjs strips only U+0300 to U+036F after NFD and recomposes, so tag, createFolder and renameFolder keep the marks; tag-model.test.cjs 'tag and folder names that differ by a kana, Devanagari or Thai mark stay distinct like on the Mac' covers it."
       },
       {
