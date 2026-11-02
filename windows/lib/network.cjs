@@ -20,10 +20,16 @@ function publicAddress(address) {
   }
   return false;
 }
-async function publicURL(input, resolver = dns.lookup) {
-  const url = new URL(input); const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+// Everything publicURL can refuse without a DNS lookup.
+function literalDestination(url) {
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port && !['80', '443'].includes(url.port) ||
       /(^localhost$|\.(local|internal|home|localhost|test|invalid)$)/.test(host)) throw new Error('Only public HTTP(S) destinations are allowed');
+  if (net.isIP(host) && !publicAddress(host)) throw new Error('Private network destinations are blocked');
+  return host;
+}
+async function publicURL(input, resolver = dns.lookup) {
+  const url = new URL(input); const host = literalDestination(url);
   const addresses = net.isIP(host) ? [{address: host, family: net.isIP(host)}] : await resolver(host, {all: true, verbatim: true});
   if (!addresses.length || addresses.some(value => !publicAddress(value.address))) throw new Error('Private network destinations are blocked');
   return {url, address: addresses[0]};
@@ -110,11 +116,11 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   const html = decodeHTML(response.bytes, response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
   const title = collapse(meta(html, 'og:title') || meta(html, 'twitter:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
-  // Take the first image the thumbnail fetch would accept, so an HTTP secure_url does not hide a valid og:image.
+  // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
   let thumbnail = '';
   for (const name of ['og:image:secure_url', 'og:image', 'twitter:image']) {
     const value = meta(html, name); if (!value.trim()) continue;
-    try { const image = new URL(value, response.url); metadataGuard(image); thumbnail = image.href; break; } catch {}
+    try { const image = new URL(value, response.url); metadataGuard(image); literalDestination(image); thumbnail = image.href; break; } catch {}
   }
   return {title: title.slice(0, 500), thumbnail};
 }
