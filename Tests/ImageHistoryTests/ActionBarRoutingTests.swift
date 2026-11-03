@@ -33,6 +33,7 @@ import XCTest
         func wait(_ predicate: () -> Bool) { while !predicate() && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.005)) } }
         wait { model.ids.count == 3 && !model.loading }
         let order = model.ids
+        guard order.count == 3 else { return XCTFail("expected three trashed items, got \(order.count)") }
         XCTAssertTrue(model.select(order[1]))
         delegate.showCommands(origin: .library)
         let palette = try XCTUnwrap(delegate.commandPalette)
