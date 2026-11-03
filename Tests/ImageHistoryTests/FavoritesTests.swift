@@ -42,11 +42,15 @@ final class FavoritesTests: HistoryTestCase {
             let desktop = f.folder.appendingPathComponent("Desktop"); try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
             let id = try XCTUnwrap(line.hang(try f.image(), quietly: true)); try store.toggleFavorite([id])
             RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            let libraryFile = try XCTUnwrap(store.item(id)?.fileURL)
             line.saveToDesktop(id, desktop: desktop)
             RunLoop.main.run(until: Date().addingTimeInterval(0.5))
-            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: desktop.path).count, 1)
+            let onDesktop = try FileManager.default.contentsOfDirectory(at: desktop, includingPropertiesForKeys: nil)
+            XCTAssertEqual(onDesktop.count, 1)
             let record = try XCTUnwrap(store.item(id)); XCTAssertTrue(record.favorite)
-            XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(record.fileURL).path))
+            XCTAssertEqual(record.fileURL, libraryFile)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: libraryFile.path))
+            XCTAssertNotEqual(onDesktop[0].standardizedFileURL, libraryFile.standardizedFileURL)
         }
     }
     @MainActor func testFavoritesFilterAndClearPreservePins() throws {
