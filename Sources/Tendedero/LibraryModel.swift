@@ -328,8 +328,8 @@ import Combine
     @discardableResult func select(_ id: UUID, toggle: Bool = false, extending: Bool = false, preservingSelection: Bool = false) -> Bool {
         guard let target = indices[id], id == focusedID || flushEdits() else { return false }
         pendingDetailsSelection = nil
-        // Picking an item that stays after Restore replaces the pending pick; one that is leaving Trash keeps it, so focus lands on the first item left.
-        if !restoringIDs.contains(id) { pendingKeyboardSelection = nil }
+        // A different pick replaces the pending one. Picking the focused item again keeps it, and so does picking one that is leaving Trash, so focus lands on an item that stays.
+        if !restoringIDs.contains(id), id != focusedID || toggle || extending { pendingKeyboardSelection = nil }
         if extending, let anchor, let start = indices[anchor] { selectedIDs = Set(ids[min(start,target)...max(start,target)]) }
         else if toggle { if !selectedIDs.insert(id).inserted { selectedIDs.remove(id) }; anchor = id }
         else if !preservingSelection || !selectedIDs.contains(id) { selectedIDs = [id]; anchor = id }
