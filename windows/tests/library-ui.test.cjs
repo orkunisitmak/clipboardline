@@ -205,6 +205,12 @@ test('Library Trash has no Pin button on a trashed card and Ctrl+Shift+T does no
  const before=f.commands.length;await f.click('card-pin',{id:f.text1});await f.key('KeyT',{ctrl:true,shift:true});
  assert.deepEqual(f.commands.slice(before).filter(c=>c.action==='pin'),[]);assert.doesNotMatch(f.overlay||'',/<input/);
 });
+test('the inspector Add to folder button does not open the folder picker for a trashed item',async()=>{
+ const f=fixture();await f.ready();f.state.folders=[{id:'20000000-0000-4000-8000-000000000001',name:'Client work'}];f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items,folders:f.state.folders});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ await f.key('KeyA',{ctrl:true});const before=f.commands.length;
+ await f.click('add-to-folder');
+ assert.doesNotMatch(f.overlay||'',/modal-query|choose-folder/);assert.deepEqual(f.commands.slice(before).filter(c=>c.action==='folder'),[]);
+});
 test('the action list disables Move to Trash for an item already in Trash',async()=>{
  const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
  await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="trash" disabled>/);

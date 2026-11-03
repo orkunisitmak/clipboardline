@@ -852,7 +852,7 @@ async function clickAction(target){const action=target.dataset.action;
  if(action==='clear-history'){await perform('clear-history');return;}
  if(action==='close-modal'){closeModal();return;}if(action==='confirm-modal'){await confirmModal();return;}
  if(action==='execute-command'){const chosen=actionCommands().find(value=>value.id===target.dataset.command);if(chosen&&!chosen.disabled){const ids=ui.modal?.contextIds,focus=ui.modal?.contextFocus;closeModal();await perform(chosen.id,ids,focus);}return;}
- if(action==='add-to-folder'){startFolder(selectedIds(),{pinning:false});return;}
+ if(action==='add-to-folder'){const ids=selectedIds();if(ids.some(id=>item(id)?.trashedAt))return;startFolder(ids,{pinning:false});return;}
  if(action==='choose-folder'){const modal=ui.modal;if(!modal)return;const folderId=target.dataset.folder;if(!folderId&&modal.pinning===false)return;const result=await command(folderId?'folder':'pin',folderId?{ids:modal.ids,folderId,...(modal.pinning===false?{pinning:false}:{rememberRecent:true})}:{ids:modal.ids,value:true});if(result)closeModal(modal);return;}
  if(action==='new-folder-in-picker'){const back=ui.modal;openModal({type:'new-folder',title:'New folder',value:'',returnTo:back});return;}
  if(action==='pick-tag'){const modal=ui.modal;const tags=(modal.value||'').split(',').map(value=>value.trim()).filter(Boolean);if(!tags.includes(target.dataset.tag))tags.push(target.dataset.tag);modal.value=tags.join(', ');renderOverlay();document.getElementById('tags-input')?.focus();return;}
