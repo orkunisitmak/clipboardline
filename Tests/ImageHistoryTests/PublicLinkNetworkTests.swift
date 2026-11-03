@@ -216,6 +216,14 @@ import XCTest
         XCTAssertEqual(try parsed("<title>Ti<b>t</b>le</title><script>").title, "Title")
         XCTAssertEqual(try parsed("<meta x" + String(repeating: "b", count: 3000) + " property='og:title' content='A &amp; B'>").title, "A & B")
     }
+
+    func testGreaterThanInsideQuotedMetaValueKeepsTheTitle() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let html = "<meta property=\"og:title\" content=\"Tips > Tricks\"><meta property='og:image' content='/a.png'><title>Page</title>"
+        let parsed = try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url)
+        XCTAssertEqual(parsed.title, "Tips > Tricks")
+        XCTAssertEqual(parsed.thumbnailURL?.absoluteString, "https://public.example.org/a.png")
+    }
 }
 
 #if !STANDALONE_TESTS
