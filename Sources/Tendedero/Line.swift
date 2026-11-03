@@ -512,15 +512,30 @@ final class Line: ObservableObject {
         }
     }
 
-    /// Right-click Pin favorite on a card inside a multi-selection acts on the whole selection, like the P key.
-    func pinFromMenu(_ id: UUID, shelf: Shelf) {
+    private func menuPinTargets(_ id: UUID, shelf: Shelf) -> Set<UUID> {
         let selected: Set<UUID>
         switch shelf {
         case .texts: selected = texts.selectedIDs
         case .links: selected = links.selectedIDs
         case .images: selected = selectedIDs
         }
-        if selected.count > 1, selected.contains(id) { focusShelf(shelf); pinActiveSelection(); return }
+        return selected.count > 1 && selected.contains(id) ? selected : [id]
+    }
+
+    /// The menu says Unpin only when every card it will act on is pinned.
+    func menuPinIsUnpin(_ id: UUID, shelf: Shelf) -> Bool {
+        menuPinTargets(id, shelf: shelf).allSatisfy { target in
+            switch shelf {
+            case .texts: texts.entries.first { $0.id == target }?.pinned ?? false
+            case .links: links.entries.first { $0.id == target }?.favorite ?? false
+            case .images: items.first { $0.id == target }?.pinned ?? false
+            }
+        }
+    }
+
+    /// Right-click Pin favorite on a card inside a multi-selection acts on the whole selection, like the P key.
+    func pinFromMenu(_ id: UUID, shelf: Shelf) {
+        if menuPinTargets(id, shelf: shelf).count > 1 { focusShelf(shelf); pinActiveSelection(); return }
         switch shelf {
         case .texts: texts.togglePin(id)
         case .links: links.togglePin(id)
