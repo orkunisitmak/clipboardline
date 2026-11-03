@@ -94,10 +94,16 @@ import XCTest
             XCTAssertEqual(batches.last, expected); XCTAssertTrue(singles.isEmpty)
         }
         line.focusShelf(.texts, requestFocus: false)
-        let outside = try XCTUnwrap(line.texts.displayEntries.last?.id)
-        line.texts.select(outside, width: line.viewportWidth)
+        _ = try store.captureText("synthetic unnamed note outside")
+        wait { line.texts.displayEntries.count == 3 }
+        let entries = line.texts.displayEntries.map(\.id)
+        let outside = try XCTUnwrap(entries.last), selection = Set(entries.dropLast())
+        line.texts.select(entries[0], width: line.viewportWidth)
+        line.texts.select(entries[1], toggle: true, width: line.viewportWidth)
+        XCTAssertEqual(line.texts.selectedIDs, selection)
         line.requestNameAndPin(outside, on: .texts)
         XCTAssertEqual(singles, [outside]); XCTAssertEqual(batches.count, 3)
+        XCTAssertEqual(line.texts.selectedIDs, selection, "Opening the prompt for a card outside the selection keeps the selection")
 
         let first = try XCTUnwrap(store.captureText("first menu note")), second = try XCTUnwrap(store.captureText("second menu note"))
         try store.retain([first.id, second.id])
