@@ -21,6 +21,30 @@ import XCTest
         palette.executeSelected()
     }
 
+    func testLibraryActionsRestoreSelectsTheFirstRemainingTrashItem() throws {
+        let (f, store, _, delegate) = try setup(); defer { f.cleanup() }
+        let records = try ["first trashed note", "second trashed note", "third trashed note"].map { try XCTUnwrap(store.captureText($0)) }
+        try store.trash(records.map(\.id))
+        delegate.showLibrary()
+        let model = try XCTUnwrap(delegate.libraryController).model
+        defer { delegate.commandPalette?.window.close(); delegate.libraryController?.window?.close() }
+        model.changeScope(.trash)
+        let deadline = Date().addingTimeInterval(8)
+        func wait(_ predicate: () -> Bool) { while !predicate() && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.005)) } }
+        wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        XCTAssertTrue(model.select(order[1]))
+        delegate.showCommands(origin: .library)
+        let palette = try XCTUnwrap(delegate.commandPalette)
+        let index = try XCTUnwrap(palette.visibleCommands.firstIndex { $0.id == "menu.restore" })
+        XCTAssertTrue(palette.visibleCommands[index].isEnabled)
+        palette.table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        palette.executeSelected()
+        wait { model.ids.count == 2 && !model.loading }
+        XCTAssertEqual(model.ids, [order[0], order[2]])
+        XCTAssertEqual(model.focusedID, order[0]); XCTAssertEqual(model.inspected?.id, order[0])
+    }
+
     func testShelfButtonOriginWinsOverKeySettingsAndKeepsCapturedPinTarget() throws {
         let (f, store, line, delegate) = try setup(); defer { f.cleanup() }
         _ = line.texts.add("Captured pin target"); _ = line.texts.add("Different selection")

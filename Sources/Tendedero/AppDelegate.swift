@@ -1831,8 +1831,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if action == .renameTag { controller.renameTag(tag) } else { controller.removeTag(tag) }
             }
         case .retain, .restore:
-            do { if action == .retain { try line.library?.retain(snapshot.ids) } else { try line.library?.restore(snapshot.ids) } }
-            catch { reportActionStatus(error.localizedDescription) }
+            if action == .restore, snapshot.origin == .library, let model = libraryController?.model { model.restore(snapshot.ids) }
+            else {
+                do { if action == .retain { try line.library?.retain(snapshot.ids) } else { try line.library?.restore(snapshot.ids) } }
+                catch { reportActionStatus(error.localizedDescription) }
+            }
         case .scopeSaved: library()?.model.changeScope(.saved)
         case .scopeFavorites: library()?.model.changeScope(.favorites)
         case .scopeUnorganized: library()?.model.changeScope(.unorganized)

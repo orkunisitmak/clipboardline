@@ -406,8 +406,8 @@ import Combine
             if !loading { finishKeyboardSelection() }
         } catch { report(error.localizedDescription) }
     }
-    func restore() {
-        let targets = actionIDs
+    func restore(_ ids: [UUID]? = nil) {
+        let targets = ids ?? actionIDs
         guard !targets.isEmpty else { return }
         // The restored items leave Trash: select the first one that remains, as Windows does.
         if query.scope == .trash { pendingKeyboardSelection = (nil, query) }
