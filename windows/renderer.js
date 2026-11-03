@@ -536,7 +536,7 @@ function actionCommands(){
  const commands=keyboard.map(id=>{
   let reason='';
   if(selectedActions.has(id)&&!hasSelection)reason='Select an item first.';
-  else if(deleted&&['paste','preview','pin','folder','name','tag','remove','markup','crop','copyOCR','edit'].includes(id))reason='Restore this item first.';
+  else if(deleted&&['paste','preview','pin','folder','name','tag','remove','trash','markup','crop','copyOCR','edit'].includes(id))reason='Restore this item first.';
   else if(['crop',...Object.keys(MARKUP_TOOLS),'copyOCR'].includes(id)&&(!image||video))reason='Select a still image first.';
   else if(id==='markup'&&!image)reason='Select an image first.';
   else if(id==='edit'&&!text)reason='Select a text item first.';
@@ -743,7 +743,7 @@ default:
  else if(action.startsWith('tag.rename.'))openTagAction('rename-tag',decodeURIComponent(action.slice(11)));
  else if(action.startsWith('tag.delete.'))openTagAction('remove-global-tag',decodeURIComponent(action.slice(11)));
  else if(action.startsWith('folder.open.')){if(!await flushPreview())break;ui.preview=null;ui.scope='folder';ui.folder=action.slice(12);ui.search='';await command('library');focusFirst();render();}
- else if(action.startsWith('folder.assign.')){if(ids.length)await command('folder',{ids,folderId:action.slice(14)});}
+ else if(action.startsWith('folder.assign.')){if(ids.length)await command('folder',{ids,folderId:action.slice(14),pinning:false});}
  else if(action.startsWith('folder.remove.')){if(ids.length)await command('unassign',{ids,folderId:action.slice(14)});}
  else if(action.startsWith('tag.open.')){if(!await flushPreview())break;ui.preview=null;ui.scope='tag';ui.tag=decodeURIComponent(action.slice(9));ui.search='';await command('library');focusFirst();render();}
  break;

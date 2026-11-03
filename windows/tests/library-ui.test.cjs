@@ -111,6 +111,12 @@ test('inspector Add to folder preserves pin state and memberships while ShiftP s
  await f.key('KeyP',{shift:true});assert.match(f.overlay,/Pin without folder/);await f.click('choose-folder',{folder:b});assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:b,rememberRecent:true});assert.equal(f.state.items[0].pinned,true);
 });
 
+test('the action list Add to folder keeps an unpinned item unpinned',async()=>{
+ const f=fixture();await f.ready();const a='20000000-0000-4000-8000-000000000001';f.state.folders=[{id:a,name:'Work'}];Object.assign(f.state.items[0],{retainedAt:1000,folderIds:[],pinned:false});f.api.emit({folders:f.state.folders,items:f.state.items});await f.ready();await savedLibrary(f);await f.key('KeyK',{ctrl:true});await f.click('execute-command',{command:'folder.assign.'+a});
+ assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:a,pinning:false});
+ const value=f.state.items.find(entry=>entry.id===f.image);assert.deepEqual(value.folderIds,[a]);assert.equal(value.pinned,false);
+});
+
 test('ShiftP starts on the first real folder and keeps Pin without folder last like the native picker',async()=>{
  const f=fixture();await f.ready();const first='20000000-0000-4000-8000-000000000001',second='20000000-0000-4000-8000-000000000002';f.api.emit({folders:[{id:first,name:'References'},{id:second,name:'Video ideas'}]});await f.ready();await f.key('KeyP',{shift:true});assert.deepEqual([...f.overlay.matchAll(/data-action="choose-folder" data-folder="([^"]*)"/g)].map(match=>match[1]),[first,second,'']);await f.key('Enter');assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:first,rememberRecent:true});await f.key('KeyP',{shift:true});await f.key('ArrowDown');await f.key('ArrowDown');await f.key('Enter');assert.deepEqual(f.commands.at(-1),{action:'pin',payload:{ids:[f.image],value:true}});
 });
@@ -185,6 +191,10 @@ test('removing a folder that is not open keeps the current Library view',async()
 test('the action list keeps Copy enabled for Trash items while editing actions are disabled',async()=>{
  const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image]);
  await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="copy" >/);assert.match(f.overlay,/data-command="pin" disabled>/);assert.match(f.overlay,/data-command="paste" disabled>/);assert.match(f.overlay,/data-command="preview" disabled>/);
+});
+test('the action list disables Move to Trash for an item already in Trash',async()=>{
+ const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="trash" disabled>/);
 });
 test('the action list disables Clear filters until a Library filter is set',async()=>{
  const f=fixture();await f.ready();await savedLibrary(f);
