@@ -618,7 +618,7 @@ async function finishText(){if(!ui.editingText)return true;if(!await flushTextPr
 async function flushPreview(){if(ui.videoTrim&&!await cancelVideoTrim())return false;if(!await flushInspectorDrafts())return false;if(!await finishText())return false;if(ui.editor&&!await saveImage(false))return false;return true;}
 async function openPreview(id){if(!await flushPreview())return;const value=item(id||ui.focus);if(!value||value.trashedAt)return;ui.preview=value.id;ui.active=value.kind;ui.editingText=false;ui.editor=null;ui.zoom=1;ui.pan={x:0,y:0};renderOverlay();}
 async function closePreview(){if(!await flushPreview())return;ui.preview=null;ui.editor=null;ui.editingText=false;render();focusLibraryResults();}
-async function copySelection(keepOpen=false,paste=false,capturedIds=null){if(!await flushPreview())return;const ids=capturedIds||selectedIds();if(!ids.length){toast(t('Select an item first'));return;}const result=await command(paste?'paste':'copy',{ids,keepOpen});if(!result)return;if(keepOpen)toast(t('Copied'));}
+async function copySelection(keepOpen=false,paste=false,capturedIds=null){if(!await flushPreview())return;const ids=capturedIds||selectedIds();if(!ids.length){toast(t('Select an item first'));return;}const result=await command(paste?'paste':'copy',{ids,keepOpen});if(!result)return;if(keepOpen)toast(ids.length>1?t('%d items copied').replace('%d',String(ids.length)):t('Copied'));}
 const libraryTrashFocus=[];
 async function trashLibrarySelection(ids=selectedIds()){
  const expectedModal=ui.modal;
