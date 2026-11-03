@@ -57,6 +57,21 @@ final class DualShelfTests: HistoryTestCase {
             XCTAssertEqual(Set(trashed), Set(shown[0...1]), "only the two selected links, not the third")
         }
     }
+    @MainActor func testImageTakeDownEverythingToTheRightKeepsPinnedImagesInTheLibrary() throws {
+        try fixture { f in
+            let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+            let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, copyImage: { _ in }, library: store)
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            for item in line.items { try line.togglePin(item.id) }
+            var trashRequested = false; line.onImageTrashRequested = { _ in trashRequested = true }
+            let first = try XCTUnwrap(line.displayItems.first)
+            line.takeDown(first.id, toTheLeft: false)
+            XCTAssertFalse(trashRequested)
+            XCTAssertEqual(line.items.map(\.id), [first.id])
+            let records = try store.query(LibraryQuery(scope: .saved))
+            XCTAssertEqual(records.count, 3); XCTAssertTrue(records.allSatisfy { $0.deletedAt == nil })
+        }
+    }
     @MainActor func testImageTakeDownOnAMultiSelectionKeepsPinnedImagesInTheLibrary() throws {
         try fixture { f in
             let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
