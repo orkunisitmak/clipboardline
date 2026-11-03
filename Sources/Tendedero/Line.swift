@@ -958,9 +958,7 @@ final class Line: ObservableObject {
         guard onFlushPreview() else { return }
         let images = neighbours(of: id, toTheLeft: toTheLeft)
         guard !images.isEmpty else { return }
-        // The same snapshot/confirmation policy as other local batch actions.
-        onImageTrashRequested?(TrashSelection(images: images,
-            appCopies: images.filter { history.files.isAppCopy($0.url) }.count))
+        removeFromShelf(images.map(\.id), on: .images, focusedID: id)
     }
 
     /// Photos whose file was deleted or moved away fall off by themselves.
