@@ -536,3 +536,11 @@
 "This image could not be opened for markup." = "This image could not be opened for markup.";
 "Markup supports images up to 80 megapixels." = "Markup supports images up to 80 megapixels.";
 "The marked image could not be rendered." = "The marked image could not be rendered.";
+
+/* Private mode. */
+"Private mode" = "Private mode";
+"No new copies, screenshots or watched-folder images are collected while this is on. Anything copied during it is skipped, and existing history stays." = "No new copies, screenshots or watched-folder images are collected while this is on. Anything copied during it is skipped, and existing history stays.";
+"Private mode is on. New captures are paused." = "Private mode is on. New captures are paused.";
+"Private mode is off. Capture resumed." = "Private mode is off. Capture resumed.";
+"Use ⌃⌥P" = "Use ⌃⌥P";
+"This shortcut turns private mode on and off from any app." = "This shortcut turns private mode on and off from any app.";

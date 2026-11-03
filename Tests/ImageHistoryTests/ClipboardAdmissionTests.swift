@@ -61,6 +61,21 @@ import XCTest
             if row.capture { XCTAssertEqual(Array(received.last!.utf8), Array(row.value.utf8), row.name) }
         }
     }
+    func testPrivateModeSkipsTextCopiedDuringPauseAndNeverReplaysIt() {
+        let source = AdmissionClipboard(); var paused = true; var received = [String]()
+        let watcher = TextClipboardWatcher(source: source, onText: { received.append($0) }, isPaused: { paused })
+        defer { watcher.stop() }; watcher.start()
+        source.copy([[.string: Data("during pause".utf8)]])
+        watcher.check()
+        XCTAssertTrue(received.isEmpty)
+        paused = false
+        watcher.check()
+        XCTAssertTrue(received.isEmpty)
+        source.copy([[.string: Data("after pause".utf8)]])
+        watcher.check()
+        XCTAssertEqual(received, ["after pause"])
+    }
+
     func testPublicToPrivateReplacementDuringReadIsDiscardedAndFreshCopyCanFollow() {
         let source = AdmissionClipboard(); var received = [String]()
         let watcher = TextClipboardWatcher(source: source, onText: { received.append($0) })

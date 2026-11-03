@@ -77,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var copyHotKey: HotKey?
     private var libraryHotKey: HotKey?
     private var searchHotKey: HotKey?
+    private var pauseHotKey: HotKey?
     private let directPaste: DirectPasteCoordinator
     private var pasteFocusHandoffDepth = 0
     private lazy var imageTextCopy: ImageTextCopy? = line.library.map { store in
@@ -240,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateCapacity()
 
         if watchesFiles {
-            if Inbox.isEnabled { Inbox.apply() }
+            Inbox.reconcileIfEnabled(paused: CapturePause.isPaused)
             startWatcher()
         }
         restoreSettingsOnTermination()
@@ -252,6 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         registerCopyShortcut(line.copyLatestShortcut, persist: false)
         registerLibraryShortcut(line.libraryShortcut, persist: false)
+        registerPauseShortcut(line.pauseShortcut, persist: false)
         if watchesFiles { registerSearchShortcut(line.globalSearchShortcut, persist: false) }
         setUpStatusItem()
         watchMenuBarClicks()
@@ -412,7 +414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setInbox(_ on: Bool) {
         guard watchesFiles else { return }
         Inbox.isEnabled = on
-        if on { Inbox.apply() } else { Inbox.restore() }
+        Inbox.reconcile(enabled: on, paused: CapturePause.isPaused)
         startWatcher()
     }
 
@@ -830,7 +832,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
               Shortcut.current == nil || hotKey?.isRegistered == true,
               line.globalSearchShortcut == nil || searchHotKey?.isRegistered == true,
               line.libraryShortcut == nil || libraryHotKey?.isRegistered == true,
-              line.copyLatestShortcut == nil || copyHotKey?.isRegistered == true else { return }
+              line.copyLatestShortcut == nil || copyHotKey?.isRegistered == true,
+              line.pauseShortcut == nil || pauseHotKey?.isRegistered == true else { return }
         if line.notice == shortcutRestoreWarning { line.notice = nil }
         shortcutRestoreWarning = nil; settingsController?.model.shortcutWarning = nil
     }
@@ -932,16 +935,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The icon fills in while copied images or text are hung, so it shows at a
     /// glance that the clipboard is being watched.
     private func updateStatusIcon() {
-        let on = ClipboardWatcher.isEnabled || TextClipboardWatcher.isEnabled || LinkHistory.isEnabled
+        let paused = CapturePause.isPaused
+        let on = !paused && (ClipboardWatcher.isEnabled || TextClipboardWatcher.isEnabled || LinkHistory.isEnabled)
         let summary = StatusSummary(line: line)
         if let symbol = NSImage(systemSymbolName: AppIdentity.statusSymbol + (on ? ".fill" : ""), accessibilityDescription: AppIdentity.name) {
             statusItem?.button?.image = summary.image(symbol: symbol)
         }
         let update = appUpdates.availableVersion != nil ? L("Update available") : nil
-        statusItem?.button?.appearsDisabled = summary.count == 0 && update == nil
+        let pause = paused ? L("Private mode is on. New captures are paused.") : nil
+        statusItem?.button?.appearsDisabled = summary.count == 0 && update == nil && pause == nil
         statusItem?.button?.contentTintColor = update == nil ? nil : .systemBlue
-        statusItem?.button?.toolTip = [AppIdentity.name, summary.description, update].compactMap { $0 }.joined(separator: "\n")
-        statusItem?.button?.setAccessibilityLabel([AppIdentity.name, summary.description, update].compactMap { $0 }.joined(separator: ", "))
+        statusItem?.button?.toolTip = [AppIdentity.name, summary.description, pause, update].compactMap { $0 }.joined(separator: "\n")
+        statusItem?.button?.setAccessibilityLabel([AppIdentity.name, summary.description, pause, update].compactMap { $0 }.joined(separator: ", "))
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -957,6 +962,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             toggleItem.keyEquivalentModifierMask = shortcut.modifiers
         }
         menu.addItem(toggleItem)
+        let pause = ClosureMenuItem(L("Private mode")) { [weak self] in self?.setPaused(!CapturePause.isPaused) }
+        pause.state = CapturePause.isPaused ? .on : .off
+        pause.isEnabled = startupError == nil
+        menu.addItem(pause)
         let library = ClosureMenuItem(L("Library…")) { [weak self] in self?.showLibrary() }; library.isEnabled = line.library != nil; menu.addItem(library)
         let actions = ClosureMenuItem(L("Actions") + "…  " + line.keyboardBindings.title(.commandPalette)) { [weak self] in self?.showCommands() }
         actions.image = NSImage(systemSymbolName: "command", accessibilityDescription: nil)
@@ -1013,6 +1022,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             model.setLinks = { [weak self] on in LinkHistory.isEnabled = on; self?.refreshTextSources(); self?.updateStatusIcon() }
             model.setMetadata = { [weak self] on in LinkMetadataService.isEnabled = on; if !on { self?.metadataService?.stop() } else { self?.metadataService?.request(self?.line.links.entries.map(\.id) ?? []) } }
+            model.setPaused = { [weak self] in self?.setPaused($0) }
+            model.setPauseShortcut = { [weak self] in self?.registerPauseShortcut($0) }
+            model.recordPauseShortcut = { [weak self] in self?.recordPauseShortcut() }
             model.setLibraryShortcut = { [weak self] in self?.registerLibraryShortcut($0) }
             model.recordLibraryShortcut = { [weak self] in self?.recordLibraryShortcut() }
             model.setSearchShortcut = { [weak self] in self?.registerSearchShortcut($0) }
@@ -1912,6 +1924,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         catch { reportActionStatus(error.localizedDescription) }
     }
     private func copyLatest() { if let id = line.newestID { line.copy(id) } }
+
+    /// Private mode stops new captures without deleting anything already kept.
+    /// While it is on, handled screenshots go back to the user's own macOS
+    /// destination, so nothing is quietly written to the app's folder.
+    private func setPaused(_ on: Bool) {
+        guard CapturePause.isPaused != on else { return }
+        CapturePause.isPaused = on
+        if watchesFiles {
+            Inbox.reconcileIfEnabled(paused: on)
+            startWatcher()
+        }
+        // Resuming starts with the next copy. Text is covered by
+        // refreshTextSources(); images are adopted here so a picture copied
+        // just before the pause ended is not hung after all.
+        if !on { clipboardWatcher.skipCurrent() }
+        refreshTextSources()
+        updateStatusIcon()
+        line.notice = on ? L("Private mode is on. New captures are paused.") : L("Private mode is off. Capture resumed.")
+    }
+
+    private func registerPauseShortcut(_ value: KeyShortcut?, persist: Bool = true) {
+        defer { clearResolvedShortcutWarning() }
+        guard value != nil else { pauseHotKey?.invalidate(); pauseHotKey = nil; if persist { line.savePauseShortcut(nil) }; return }
+        guard let value, value.isValid else { return }
+        if pauseHotKey?.isRegistered == true && value == line.pauseShortcut { return }
+        let replacement = HotKey(keyCode: value.keyCode, modifiers: value.modifiers) { [weak self] in
+            self?.setPaused(!CapturePause.isPaused)
+        }
+        guard replacement.isRegistered else {
+            line.notice = L("Shortcut unavailable; the previous shortcut is kept")
+            if persist {
+                let alert = NSAlert(); alert.messageText = L("Shortcut unavailable; the previous shortcut is kept")
+                alert.runModal()
+            }
+            return
+        }
+        pauseHotKey?.invalidate(); pauseHotKey = replacement
+        if persist { line.savePauseShortcut(value) }
+    }
+
+    private func recordPauseShortcut() {
+        shortcutRecorder?.window.close()
+        let recorder = ShortcutRecorder(); shortcutRecorder = recorder
+        recorder.onRestoreFailure = { [weak self] in self?.reportShortcutRestoreFailure() }
+        recorder.onFinish = { [weak self] value in
+            self?.shortcutRecorder = nil
+            if let value { self?.registerPauseShortcut(value) }
+            self?.settingsController?.model.refresh()
+        }
+        recorder.show()
+    }
+
     private func registerLibraryShortcut(_ value: KeyShortcut?, persist: Bool = true) {
         defer { clearResolvedShortcutWarning() }
         guard value != nil else { libraryHotKey?.invalidate(); libraryHotKey = nil; if persist { line.saveLibraryShortcut(nil) }; return }

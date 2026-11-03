@@ -536,3 +536,11 @@
 "This image could not be opened for markup." = "Bu görsel işaretleme için açılamadı.";
 "Markup supports images up to 80 megapixels." = "İşaretleme en fazla 80 megapiksellik görselleri destekler.";
 "The marked image could not be rendered." = "İşaretlenen görsel oluşturulamadı.";
+
+/* Private mode. */
+"Private mode" = "Gizli mod";
+"No new copies, screenshots or watched-folder images are collected while this is on. Anything copied during it is skipped, and existing history stays." = "Bu açıkken yeni kopyalar, ekran görüntüleri ve izlenen klasörlerdeki görseller toplanmaz. Bu sırada kopyalananlar atlanır ve mevcut geçmiş korunur.";
+"Private mode is on. New captures are paused." = "Gizli mod açık. Yeni yakalamalar duraklatıldı.";
+"Private mode is off. Capture resumed." = "Gizli mod kapalı. Yakalama sürüyor.";
+"Use ⌃⌥P" = "⌃⌥P kullan";
+"This shortcut turns private mode on and off from any app." = "Bu kısayol gizli modu her uygulamadan açar ve kapatır.";

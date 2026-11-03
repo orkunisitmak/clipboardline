@@ -114,12 +114,18 @@
         "windows": "title() in renderer.js applies the same rule (t('Untitled note') and t('Link') as fallbacks) to cards, title sorting and best-match ranking; library-ui.test.cjs runs the unnamed item titles scenario."
       },
       {
+        "id": "private-mode",
+        "behavior": "Private mode is one persisted on/off choice, available from Settings and the application menu, with an optional global shortcut that is off by default. While it is on, no new clipboard copies, screenshots or watched-folder images are collected: capture resumes with the next copy, adopting what the clipboard holds at that moment, so nothing copied during the pause or just before it ended is imported, existing history and saved items are untouched, and the state is visible in the menu and status area. The pause also survives a relaunch: screenshot handling is not re-applied while it is on.",
+        "macos": "CapturePause stores the choice; ClipboardWatcher, TextClipboardWatcher and ScreenshotWatcher skip new content while it is on, ClipboardWatcher.skipCurrent() adopts the board on resume, Inbox.reconcileIfEnabled(paused:) at launch and on the private mode switch plus Inbox.reconcile(enabled:paused:) from the Settings toggle restore the user's own screenshot destination for the pause and apply it again on resume, without touching a disabled Inbox whose bundle does not hold the saved settings, and AppDelegate exposes the Settings toggle, the status-menu item, the status tooltip and the optional global shortcut. PrivateModeTests and ClipboardWatcherTests testResumingAdoptsTheBoardSoACopyMadeJustBeforeResumeIsNotHung cover the pause, the relaunch and the resume.",
+        "windows": "The paused setting gates readClipboard, which drops a copy that finishes while private mode turns on, adopting its sequence so it is not replayed, and adopts the current native sequence before capture is switched back on, so neither the bounded polling fallback nor a poll that lands during the switch can import a copy made during the pause; configureWatchers closes watched-folder watchers and, only while the mode is on, cancels their pending debounces and in-flight imports, so reloading the folder list keeps them, a pause toggle is serialized so two quick presses both count, capture() re-checks the pause after its awaits together with a pause generation bumped whenever the mode turns on, so a screenshot that spanned a pause is dropped even if capture was switched back on before its screen read returned, and the tray menu checkbox is rebuilt. The optional pause global shortcut is handled by GlobalShortcuts; the Sources toggle and the shortcut row share the same labels, and settingRow translates the description as well as the label. private-mode-acceptance.cjs, private-mode.test.cjs and renderer-ui.test.cjs cover them."
+      },
+      {
         "id": "text-and-note-size-limit",
         "behavior": "A text or a note is saved only while it is at most 1 MiB of UTF-8 bytes, so 600,000 Turkish or CJK characters are refused on both platforms and the edit reports an error.",
         "macos": "LibraryStore.update checks text.utf8.count and note.utf8.count against TextClipboardWatcher.maximumDataBytes and LibraryModel.flushEdits shows Changes could not be saved.",
         "windows": "Store.insert and Store.modify (note, editText, details) count Buffer.byteLength against 1 MiB through sizedText() in model.cjs; model.test.cjs 'a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS' covers it."
-        },
-        {
+      },
+      {
         "id": "name-fold-keeps-script-marks",
         "behavior": "Tag and folder names are compared without accents and case, but a kana voiced mark and a Devanagari or Thai vowel sign make a different word, so tag or folder は and ば, क and कि, ก and กิ are kept apart.",
         "macos": "LibraryStore.libraryFolded folds with .diacriticInsensitive, which drops Latin-style accents and keeps these marks; addTag, createCollection and renameCollection compare that value; LibraryInteractionTests.testTagAndFolderNamesThatDifferByAKanaDevanagariOrThaiMarkStayDistinctLikeWindows covers it.",

@@ -13,6 +13,8 @@ final class TextClipboardWatcher {
     private let onLink: ((URL) -> Void)?
     private let capturesText: () -> Bool
     private let capturesLinks: () -> Bool
+    /// Private mode skips new copies without touching saved history.
+    private let isPaused: () -> Bool
     private var timer: Timer?
     private var lastCount: Int?
 
@@ -21,8 +23,10 @@ final class TextClipboardWatcher {
         self.init(source: SystemClipboardSource(), onText: onText, onLink: onLink, capturesText: capturesText, capturesLinks: capturesLinks)
     }
     init(source: any ClipboardSource, onText: @escaping (String) -> Void, onLink: ((URL) -> Void)? = nil,
-         capturesText: @escaping () -> Bool = { true }, capturesLinks: @escaping () -> Bool = { false }) {
+         capturesText: @escaping () -> Bool = { true }, capturesLinks: @escaping () -> Bool = { false },
+         isPaused: @escaping () -> Bool = { CapturePause.isPaused }) {
         self.source = source; self.onText = onText; self.onLink = onLink; self.capturesText = capturesText; self.capturesLinks = capturesLinks
+        self.isPaused = isPaused
     }
     /// Enabling a source starts with the next copy, never the existing board.
     func skipCurrent() { lastCount = source.changeCount }
@@ -40,6 +44,9 @@ final class TextClipboardWatcher {
         guard capturesText() || capturesLinks() else { return }
         let count = source.changeCount
         guard count != lastCount else { return }; lastCount = count
+        // Adopt the changed board first: private mode must not replay it after
+        // capture resumes, just as enabling a source never imports an old copy.
+        guard !isPaused() else { return }
         guard count != ClipboardWatcher.ownChangeCount else { return }
         let items = source.itemTypes
         guard !items.contains(where: { types in

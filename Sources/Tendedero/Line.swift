@@ -839,6 +839,15 @@ final class Line: ObservableObject {
         if let value, value.isValid, let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: "libraryShortcut") }
         else if value == nil { defaults.removeObject(forKey: "libraryShortcut") }
     }
+    /// Off unless the user records a combination for private mode.
+    var pauseShortcut: KeyShortcut? {
+        guard let data = defaults.data(forKey: "pauseShortcut"),
+              let value = try? JSONDecoder().decode(KeyShortcut.self, from: data), value.isValid else { return nil }; return value
+    }
+    func savePauseShortcut(_ value: KeyShortcut?) {
+        if let value, value.isValid, let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: "pauseShortcut") }
+        else if value == nil { defaults.removeObject(forKey: "pauseShortcut") }
+    }
 
     var soundOn: Bool {
         get { !defaults.bool(forKey: "soundOff") }

@@ -36,6 +36,9 @@ final class ScreenshotWatcher {
     private var stopped = false
     private let onNew: (URL) -> Void
     private let onChange: () -> Void
+    /// Private mode adopts new files without reporting them, so nothing that
+    /// landed during the pause is hung when capture resumes.
+    private let isPaused: () -> Bool
 
     private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "tif", "tiff", "gif", "webp"]
 
@@ -49,9 +52,11 @@ final class ScreenshotWatcher {
     /// Watches the folder macOS saves screenshots to, or a given folder.
     /// `anyImage` takes every new image even on the Desktop, for a folder
     /// the user chose to watch.
-    init(folder: URL? = nil, anyImage: Bool = false, onNew: @escaping (URL) -> Void, onChange: @escaping () -> Void) {
+    init(folder: URL? = nil, anyImage: Bool = false, onNew: @escaping (URL) -> Void, onChange: @escaping () -> Void,
+         isPaused: @escaping () -> Bool = { CapturePause.isPaused }) {
         self.onNew = onNew
         self.onChange = onChange
+        self.isPaused = isPaused
         self.folder = folder ?? Self.screenshotFolder()
         onlyTaggedScreenshots = !anyImage
             && self.folder.standardizedFileURL.path == Self.desktop.standardizedFileURL.path
@@ -297,7 +302,8 @@ final class ScreenshotWatcher {
         // app launched. Later ones compare against the previous listing.
         let first = known == nil
         let base = known ?? Set(settled.map(\.path)).union(knownBeforeReplacement)
-        for url in candidates where !base.contains(url.path) {
+        let paused = isPaused()
+        for url in candidates where !base.contains(url.path) && !paused {
             onNew(url)
         }
         knownBeforeReplacement = []

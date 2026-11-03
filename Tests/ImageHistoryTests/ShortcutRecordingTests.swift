@@ -37,8 +37,9 @@ import XCTest
         let registry = Registry(); var actions = [Int]()
         let globals = (1...(try contract()).commonGlobalActions.count).map { index in registry.make(index) { actions.append(index) } }
         registry.active[UInt32.max] = 99 // Represents an unrelated registration, never owned by HotKey.
+        let expected = Array(1...globals.count)
         for value in globals { HotKey.dispatch(value.identifier) }
-        XCTAssertEqual(actions, [1,2,3,4]); actions = []
+        XCTAssertEqual(actions, expected); actions = []
         let staleEvents = registry.active.keys.filter { $0 != UInt32.max }
         let first = HotKey.suspendAll(); var second: HotKey.Suspension? = HotKey.suspendAll()
         XCTAssertNotNil(second)
@@ -46,10 +47,10 @@ import XCTest
         for value in globals { HotKey.dispatch(value.identifier) }
         XCTAssertTrue(actions.isEmpty)
         first.resume(); first.resume(); XCTAssertEqual(registry.active, [UInt32.max: 99])
-        second = nil; XCTAssertEqual(registry.active.count, 5)
+        second = nil; XCTAssertEqual(registry.active.count, globals.count + 1)
         for event in staleEvents { HotKey.dispatchEvent(event) }; XCTAssertTrue(actions.isEmpty)
         for value in globals { XCTAssertTrue(value.isRegistered); HotKey.dispatch(value.identifier); value.invalidate() }
-        XCTAssertEqual(actions, [1,2,3,4]); XCTAssertEqual(registry.active, [UInt32.max: 99])
+        XCTAssertEqual(actions, expected); XCTAssertEqual(registry.active, [UInt32.max: 99])
     }
     func testInvalidatedAndReleasedBindingsAreNotResurrectedByLateLeaseCompletion() {
         let registry = Registry(), retained = registry.make(1)

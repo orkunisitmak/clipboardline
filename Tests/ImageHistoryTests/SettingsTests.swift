@@ -89,7 +89,7 @@ import XCTest
         let delegate = AppDelegate(line: line, watchesFiles: false)
         let menu = NSMenu(); delegate.menuNeedsUpdate(menu)
         XCTAssertEqual(menu.items.filter { !$0.isSeparatorItem }.map(\.title), [
-            AppIdentity.name, L("Show line"), L("Library…"), L("Actions") + "…  " + line.keyboardBindings.title(.commandPalette), L("Copy latest image"), L("Open screenshots folder"),
+            AppIdentity.name, L("Show line"), L("Private mode"), L("Library…"), L("Actions") + "…  " + line.keyboardBindings.title(.commandPalette), L("Copy latest image"), L("Open screenshots folder"),
             L("Settings…"), L("Check for updates…"), String(format: L("Quit %@"), AppIdentity.name)])
         XCTAssertFalse(menu.items[0].isEnabled)
         XCTAssertFalse(try XCTUnwrap(menu.items.first { $0.title == L("Copy latest image") }).isEnabled)

@@ -31,6 +31,8 @@ final class ClipboardWatcher {
     private let source: any ClipboardSource
     private let folder: URL
     private let onImage: (URL) -> Void
+    /// Private mode skips new copies without touching the folder or history.
+    private let isPaused: () -> Bool
     private var timer: Timer?
     private var lastCount: Int?
     static var ownChangeCount = -1
@@ -56,10 +58,12 @@ final class ClipboardWatcher {
         self.init(source: SystemClipboardSource(), folder: Inbox.folder, onImage: onImage)
     }
 
-    init(source: any ClipboardSource, folder: URL, onImage: @escaping (URL) -> Void) {
+    init(source: any ClipboardSource, folder: URL, onImage: @escaping (URL) -> Void,
+         isPaused: @escaping () -> Bool = { CapturePause.isPaused }) {
         self.source = source
         self.folder = folder
         self.onImage = onImage
+        self.isPaused = isPaused
     }
 
     func start() {
@@ -79,12 +83,20 @@ final class ClipboardWatcher {
         lastCount = nil
     }
 
+    /// Starting or resuming a source begins with the next copy, never the
+    /// board as it stands: a picture copied during the pause, or just before
+    /// it ended, is adopted and never hung.
+    func skipCurrent() { lastCount = source.changeCount }
+
     /// Internal so tests can advance a synthetic clipboard without waiting for a timer.
     func check() {
         guard timer != nil else { return }
         let count = source.changeCount
         guard count != lastCount else { return }
+        // Adopt the changed board first: private mode must not replay it after
+        // capture resumes, just as re-enabling never imports an older copy.
         lastCount = count
+        guard !isPaused() else { return }
         guard count != Self.ownChangeCount else { return }
 
         let items = source.itemTypes

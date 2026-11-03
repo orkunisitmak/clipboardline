@@ -45,6 +45,12 @@ app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
 let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
+// A screenshot that started before private mode came on is invalid even when
+// capture is switched back on before its screen read returns.
+let pauseGeneration=0;
+// Two presses in a row must both count, so a toggle decides its target only
+// after the previous one has finished.
+let pauseToggles=Promise.resolve();
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
@@ -104,7 +110,7 @@ function createTray(){
   tray=new Tray(appIcon());
   trayPresentation=new StatusTray({tray,createIcon:summary=>trayIcon(nativeImage,appIcon(),summary),createMenu:summary=>{
     const t=(key,...values)=>translated(summary.language,key,...values);
-    return Menu.buildFromTemplate([{id:'tray-show',label:t('Show line'),click:()=>show('shelves')},{id:'tray-library',label:t('Library'),click:()=>show('library')},{id:'tray-capture',label:t('Screenshots'),click:()=>capture()},{id:'tray-settings',label:t('Settings'),click:()=>show('settings')},
+    return Menu.buildFromTemplate([{id:'tray-show',label:t('Show line'),click:()=>show('shelves')},{id:'tray-pause',label:t('Private mode'),type:'checkbox',checked:!!summary.paused,click:()=>{void command('togglePause');}},{id:'tray-library',label:t('Library'),click:()=>show('library')},{id:'tray-capture',label:t('Screenshots'),click:()=>capture().catch(error=>notify(error.message))},{id:'tray-settings',label:t('Settings'),click:()=>show('settings')},
       ...(summary.updateVersion?[{id:'tray-update',label:t('Update available')+': '+summary.updateVersion+'…',click:openUpdates}]:[]),{id:'tray-check',label:t('Check for updates…'),click:async()=>{await openUpdates();await updates.check();}},{type:'separator'},{id:'tray-quit',label:t('Quit %@','ClipBoardLine'),click:()=>app.quit()}]);
   }});
   refreshTray();tray.on('click',()=>desiredVisible?hide():show('shelves'));
@@ -175,10 +181,34 @@ async function hide(restore=true) {
 async function clipboardContent() {
   return readClipboardContent({clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL,captureLinks:store?.data.settings.captureLinks!==false});
 }
+// Private mode adopts the current native generation, so a copy made during the
+// pause — or just before it ended — is never imported when capture resumes.
+async function adoptClipboardGeneration(){
+  try{const sequence=await native.clipboardSequence();if(Number.isInteger(sequence)&&sequence>0)lastGeneration.sequence=sequence;}catch{}
+}
+function togglePause(){
+  // Serialized: the target is read when this turn runs, so a press that lands
+  // while a previous resume is still adopting the board is not lost.
+  const run=pauseToggles.then(async()=>{
+    const paused=!store.data.settings.paused;
+    // Adopt the board before capture is allowed again. Adopting afterwards left
+    // a window in which the polling fallback could still import the paused copy.
+    if(!paused)await adoptClipboardGeneration();
+    store.modify('setSettings',{patch:{paused}});if(paused)pauseGeneration++;configureWatchers();
+    return paused;
+  });
+  pauseToggles=run.then(()=>{},()=>{});
+  return run;
+}
 async function readClipboard() {
-  if(capturing){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;capturing=true;
+  if(capturing){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;
+  if(store.data.settings.paused){await adoptClipboardGeneration();return;}
+  capturing=true;
   try{
     const content=await clipboardContent();if(!content)return;
+    // Private mode can be switched on while the clipboard is being read: drop
+    // that capture and adopt its generation so resuming never imports it.
+    if(store.data.settings.paused){if(Number.isInteger(content.sequence)&&content.sequence>0)lastGeneration.sequence=content.sequence;return;}
     if(content.raced){pendingClipboard=true;return;}
     if(repeatedGeneration(lastGeneration,content))return;
     if(content.fingerprint===ownFingerprint){ownFingerprint='';return;}
@@ -248,15 +278,15 @@ async function copy(payload,paste=false) {
   if(payload.keepOpen&&!paste){notify('Copied');return;}
   await hide();
 }
-async function importFile(file) {
+async function importFile(file,{signal}={}) {
   const stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink())throw new Error('Select a regular file.');
   const extension=path.extname(file).toLowerCase();
   if(['.mov','.mp4'].includes(extension)){
     if(stat.size>MAXIMUM_VIDEO_BYTES)throw new Error('Recording exceeds the 2 GB import limit.');
-    const inspected=await mediaJobs.probe(file);
+    const inspected=await mediaJobs.probe(file,{signal});
     try{
       const after=fs.lstatSync(file);if(after.isSymbolicLink()||after.size!==stat.size||after.mtimeMs!==stat.mtimeMs||after.ino!==stat.ino)throw new Error('The recording changed while importing.');
-      const item=await store.insertRecording(inspected);refreshImageSearch();return item;
+      const item=await store.insertRecording({...inspected,signal});refreshImageSearch();return item;
     }finally{mediaJobs.release(inspected);}
   }
   if(stat.size>64*1024*1024)throw new Error('File exceeds import limit');
@@ -264,12 +294,19 @@ async function importFile(file) {
   const image=nativeImage.createFromPath(file);if(image.isEmpty())throw new Error('Unsupported image file');const item=store.insert('image',image.toPNG());queueOCR(item.id);refreshImageSearch();return item;
 }
 async function capture() {
+  const generation=pauseGeneration;
+  const pausing=()=>{if(generation!==pauseGeneration||store?.data.settings.paused)throw new Error('Private mode is on. New captures are paused.');};
+  pausing();
   const wasVisible=window.isVisible();visibilityGeneration++;desiredVisible=false;shelfMotion.cancel();if(wasVisible)window.hide();viewEvent=null;broadcast({surfaceOnly:true});await shelfMotion.request('reset');
   try{
     // Capture only after the shelf window has left the compositor.
     await new Promise(resolve=>setTimeout(resolve,150));
+    // Private mode can be switched on while the shelf leaves the compositor or
+    // while the screen is being captured: check again before anything is saved.
+    pausing();
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
+    pausing();
     const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw new Error('Screen capture is unavailable');
     const item=store.insert('image',source.thumbnail.toPNG());queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});return{id:item.id};
   }catch(error){if(wasVisible)await show(view);throw error;}
@@ -296,9 +333,55 @@ async function recognize(id,quiet=false) {
   try{let image=nativeImage.createFromPath(file);const size=image.getSize(),scale=Math.min(1,2400/Math.max(size.width,size.height));if(scale<1)image=image.resize({width:Math.round(size.width*scale),height:Math.round(size.height*scale)});const result=await worker.recognize(image.toPNG());if(!store.data.items.includes(item)||(item.renderedFile||item.imageFile)!==fingerprint)throw new Error('Image changed during recognition');item.ocrText=String(result.data.text||'').slice(0,1024*1024);store.persist();if(!quiet)notify(item.ocrText?'Image text ready':'No text found');else broadcast();return{text:item.ocrText,id};}
   finally{await worker.terminate();}
 }
+// Pending folder debounces and in-flight recording imports outlive a closed
+// watcher, so they are owned here rather than by the generation that scheduled
+// them: a pause aborts them, while merely reloading the watchers keeps a running
+// import alive.
+const watcherTimers=new Map(),watcherImports=new Set();
+// Only private mode cancels these: reloading the watched folders has to keep a
+// file whose debounce is still pending, or adding a folder would drop it.
+function stopWatcherJobs({pause=false}={}){
+  if(!pause)return;
+  for(const timer of watcherTimers.values())clearTimeout(timer);
+  watcherTimers.clear();
+  // An import that already started has to be aborted: importFile saves the item
+  // before it returns, so dropping the result afterwards cannot undo it.
+  for(const controller of watcherImports)controller.abort();
+  watcherImports.clear();
+}
 function configureWatchers() {
+  stopWatcherJobs({pause:store?.data.settings.paused===true});
   for(const watcher of watchers)watcher.close();watchers=[];
-  for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(err=>{console.warn('Watch folder import error:',err?.message||err);});}catch(err){console.warn('Watch folder item error:',err?.message||err);}},700));});watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});watchers.push(watcher);}catch(err){console.warn('Watch folder configure error:',err?.message||err);}}
+  // Private mode skips new files from watched folders; existing files stay.
+  if(store?.data.settings.paused)return;
+  for(const folder of store.data.settings.watchFolders){
+    try{
+      if(!fs.statSync(folder).isDirectory())continue;
+      const watcher=fs.watch(folder,(_event,name)=>{
+        if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;
+        // The same file name can appear in two watched folders at once.
+        const key=folder+'\0'+name;
+        clearTimeout(watcherTimers.get(key));
+        watcherTimers.set(key,setTimeout(async()=>{
+          watcherTimers.delete(key);
+          // The debounce can outlive the watcher that scheduled it.
+          if(store?.data.settings.paused)return;
+          const controller=new AbortController();watcherImports.add(controller);
+          try{
+            const item=await importFile(path.join(folder,path.basename(name)),{signal:controller.signal});
+            if(controller.signal.aborted||store?.data.settings.paused)return;
+            broadcast();
+            if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:item.id,kind:'image'});
+          }catch(err){
+            // Private mode cancels an import that was already running.
+            if(!controller.signal.aborted&&!store?.data.settings.paused)console.warn('Watch folder import error:',err?.message||err);
+          }finally{watcherImports.delete(controller);}
+        },700));
+      });
+      watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});
+      watchers.push(watcher);
+    }catch(err){console.warn('Watch folder configure error:',err?.message||err);}
+  }
 }
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){
@@ -318,6 +401,7 @@ function configureShortcuts(previousPreferences=null) {
     toggle:()=>desiredVisible?hide():show('shelves'),
     search:()=>show('shelves',{search:true}),library:()=>show('library'),
     copyLatest:async()=>{const image=store.data.items.filter(item=>item.kind==='image'&&!item.trashedAt&&!item.hiddenFromShelf).sort((a,b)=>b.createdAt-a.createdAt)[0];if(image){await writeClipboard([image]);notify('Copied');if(store.data.settings.sounds)shell.beep();}},
+    pause:async()=>{await command('togglePause');},
     screenshot:capture
   },{failed:error=>notify(error.message)});
   const rejected=shortcutRegistry.update(store.data.settings.shortcuts);
@@ -371,6 +455,10 @@ async function command(action,payload={}) {
     await enrich(item.id,{refresh:true});result={id:item.id};
   }
   else if(action==='capture')result=await capture();
+  else if(action==='togglePause'){
+    const paused=await togglePause();
+    message=paused?'Private mode is on. New captures are paused.':'Private mode is off. Capture resumed.';result={paused};
+  }
   else if(action==='newNote'){result={id:store.createNote(payload).id};}
   else if(action==='import'){const response=await dialog.showOpenDialog(window,{properties:['openFile','multiSelections'],filters:[{name:'Images, recordings and text',extensions:['png','jpg','jpeg','webp','bmp','mov','mp4','txt','md']}]});const imported=[],failures=[];for(const file of response.filePaths){try{const item=await importFile(file);imported.push(item.id);if(item.kind==='link')void enrich(item.id);}catch(error){failures.push(path.basename(file)+': '+error.message);}}result={ids:imported,failed:failures.length};if(failures.length)message=(imported.length?`Imported ${imported.length} · failed ${failures.length}. `:'')+failures[0];}
   else if(action==='searchImages'){if(!imageSearch)throw new Error('Offline image search is unavailable.');result=await imageSearch.search(payload.query,payload.eligibleIds);}
@@ -394,9 +482,15 @@ async function command(action,payload={}) {
     const patch={...payload.patch};
     if(Object.hasOwn(patch,'watchFolders'))throw new Error('Choose watched folders with the folder picker.');
     const wasIndexingImages=!!store.data.settings.indexImages;
+    const wasPaused=store.data.settings.paused;
     const previousShortcuts={...store.data.settings.shortcuts};
-    store.modify('setSettings',{patch});if(wasIndexingImages&&!store.data.settings.indexImages)ocrQueue.discardPending();if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
+    // Enabling a source starts from scratch; resuming adopts the board. Both are
+    // settled before capture is allowed again, or a poll in between could
+    // import the copy that was made while private mode was on.
     if(['captureText','captureImages','captureLinks'].some(key=>Object.hasOwn(patch,key)))lastGeneration.sequence=0;
+    if(patch.paused===false&&wasPaused)await adoptClipboardGeneration();
+    store.modify('setSettings',{patch});if(patch.paused===true&&!wasPaused)pauseGeneration++;if(wasIndexingImages&&!store.data.settings.indexImages)ocrQueue.discardPending();if(Object.hasOwn(patch,'retentionDays'))refreshImageSearch();if(Object.hasOwn(patch,'shortcuts')&&configureShortcuts(previousShortcuts).length)result={error:message};
+    if(Object.hasOwn(patch,'paused'))configureWatchers();
     if(Object.hasOwn(patch,'launchAtLogin')&&!testMode)app.setLoginItemSettings({openAtLogin:patch.launchAtLogin});
     if(Object.hasOwn(patch,'autoCheckUpdates')&&patch.autoCheckUpdates&&!development)void updateScheduler.tick({force:true});
   }else if(action==='watchFolder'||action==='chooseWatchFolder'){const response=await dialog.showOpenDialog(window,{properties:['openDirectory']});if(response.filePaths[0]){store.modify('setSettings',{patch:{watchFolders:[...store.data.settings.watchFolders,response.filePaths[0]]}});configureWatchers();}}
@@ -480,8 +574,8 @@ else app.whenReady().then(async()=>{
   }
   await show('shelves');
   // Test hooks are main-process only and require an explicit isolated data path.
-  if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
+  if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,configureWatchers,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
 app.on('second-instance',()=>{if(window)void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});
-app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
+app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();stopWatcherJobs({pause:true});watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});

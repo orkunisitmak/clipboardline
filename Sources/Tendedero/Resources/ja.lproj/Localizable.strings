@@ -536,3 +536,11 @@
 "This image could not be opened for markup." = "この画像をマークアップ用に開けませんでした。";
 "Markup supports images up to 80 megapixels." = "マークアップは最大8,000万画素の画像に対応しています。";
 "The marked image could not be rendered." = "マークアップした画像をレンダリングできませんでした。";
+
+/* Private mode. */
+"Private mode" = "プライベートモード";
+"No new copies, screenshots or watched-folder images are collected while this is on. Anything copied during it is skipped, and existing history stays." = "オンの間は、新しいコピー、スクリーンショット、監視フォルダの画像は収集されません。この間にコピーした内容はスキップされ、既存の履歴は保持されます。";
+"Private mode is on. New captures are paused." = "プライベートモードはオンです。新しいキャプチャは一時停止しています。";
+"Private mode is off. Capture resumed." = "プライベートモードはオフです。キャプチャを再開しました。";
+"Use ⌃⌥P" = "⌃⌥P を使用";
+"This shortcut turns private mode on and off from any app." = "このショートカットは、どのアプリからでもプライベートモードを切り替えます。";

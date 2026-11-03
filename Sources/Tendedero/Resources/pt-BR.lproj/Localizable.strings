@@ -536,3 +536,11 @@
 "This image could not be opened for markup." = "Não foi possível abrir esta imagem para marcação.";
 "Markup supports images up to 80 megapixels." = "A marcação oferece suporte a imagens de até 80 megapixels.";
 "The marked image could not be rendered." = "Não foi possível renderizar a imagem marcada.";
+
+/* Private mode. */
+"Private mode" = "Modo privado";
+"No new copies, screenshots or watched-folder images are collected while this is on. Anything copied during it is skipped, and existing history stays." = "Enquanto estiver ativado, novas cópias, capturas de tela e imagens de pastas monitoradas não são coletadas. O que for copiado nesse período é ignorado e o histórico existente é mantido.";
+"Private mode is on. New captures are paused." = "O modo privado está ativado. As novas capturas estão pausadas.";
+"Private mode is off. Capture resumed." = "O modo privado está desativado. A captura foi retomada.";
+"Use ⌃⌥P" = "Usar ⌃⌥P";
+"This shortcut turns private mode on and off from any app." = "Este atalho ativa e desativa o modo privado em qualquer aplicativo.";

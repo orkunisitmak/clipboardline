@@ -29,6 +29,9 @@ final class SettingsModel: ObservableObject {
     var setImages: (Bool) -> Void = { _ in }
     var setTexts: (Bool) -> Void = { _ in }
     var setLinks: (Bool) -> Void = { _ in }
+    var setPaused: (Bool) -> Void = { _ in }
+    var setPauseShortcut: (KeyShortcut?) -> Void = { _ in }
+    var recordPauseShortcut: () -> Void = {}
     var setMetadata: (Bool) -> Void = { _ in }
     var setLibraryShortcut: (KeyShortcut?) -> Void = { _ in }
     var recordLibraryShortcut: () -> Void = {}
@@ -253,6 +256,11 @@ private struct SettingsView: View {
     private var sources: some View {
         Group {
             Section {
+                Toggle(L("Private mode"), isOn: model.binding(get: { CapturePause.isPaused }, set: model.setPaused))
+            } footer: {
+                Text(L("No new copies, screenshots or watched-folder images are collected while this is on. Anything copied during it is skipped, and existing history stays."))
+            }
+            Section {
                 Toggle(L("Hang copied images"), isOn: model.binding(get: { ClipboardWatcher.isEnabled }, set: model.setImages))
                 Toggle(L("Hang copied text"), isOn: model.binding(get: { TextClipboardWatcher.isEnabled }, set: model.setTexts))
                 Toggle(L("Capture copied links"), isOn: model.binding(get: { LinkHistory.isEnabled }, set: model.setLinks))
@@ -354,6 +362,15 @@ private struct SettingsView: View {
                     if let custom = line.copyLatestShortcut, model.copyShortcutChoice == -2 { Text(custom.title).tag(-2) }
                 }
                 Button(L("Record shortcut…"), action: model.recordCopyShortcut)
+            }
+            Section(L("Private mode")) {
+                LabeledContent(L("Shortcut")) { Text(line.pauseShortcut?.title ?? L("Off")).monospaced() }
+                HStack {
+                    Button(L("Use ⌃⌥P")) { model.setPauseShortcut(KeyShortcut(keyCode: 35, modifiers: 4096 | 2048, keyLabel: "P")); model.refresh() }
+                    Button(L("Record shortcut…"), action: model.recordPauseShortcut)
+                    Button(L("Off")) { model.setPauseShortcut(nil); model.refresh() }
+                }
+                Text(L("This shortcut turns private mode on and off from any app.")).font(.caption).foregroundStyle(.secondary)
             }
             Section(L("Browsing shortcuts")) {
                 Text(L("Single keys work while browsing the line, Library or a preview. Typing and standard editing shortcuts stay with the editor.")).font(.caption).foregroundStyle(.secondary)

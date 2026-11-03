@@ -10,9 +10,11 @@ function statusSummary({items=[],settings={},updateVersion=null,systemLocale='en
  for(const item of items)if(item&&!item.trashedAt&&!item.hiddenFromShelf&&kinds.has(item.kind)&&Object.hasOwn(counts,item.kind))counts[item.kind]++;
  const count=counts.image+counts.text+counts.link,badge=count>9?'9+':String(count),language=languageCode(settings.language,systemLocale),version=typeof updateVersion==='string'&&updateVersion?updateVersion:null;
  const description=count?translated(language,'%d images · %d texts · %d links on the line',counts.image,counts.text,counts.link):translated(language,'The line is empty');
+ const paused=settings.paused===true,pause=paused?translated(language,'Private mode is on. New captures are paused.'):null;
  const update=version?translated(language,'Update available')+' · '+(version.length>28?version.slice(0,27)+'…':version):null;
- const tooltip=['ClipBoardLine',description,update].filter(Boolean).join('\n').slice(0,127);
- return Object.freeze({images:counts.image,texts:counts.text,links:counts.link,count,badge,language,description,tooltip,updateVersion:version,dim:count===0&&!version,highlight:!!version,iconKey:badge+':'+(count===0&&!version?'dim':'normal')+':'+!!version,menuKey:JSON.stringify([language,version]),key:JSON.stringify([counts.image,counts.text,counts.link,language,version])});
+ const tooltip=['ClipBoardLine',description,pause,update].filter(Boolean).join('\n').slice(0,127);
+ const dim=(count===0&&!version)||paused;
+ return Object.freeze({images:counts.image,texts:counts.text,links:counts.link,count,badge,language,description,tooltip,updateVersion:version,paused,dim,highlight:!!version,iconKey:badge+':'+(dim?'dim':'normal')+':'+!!version,menuKey:JSON.stringify([language,version,paused]),key:JSON.stringify([counts.image,counts.text,counts.link,language,version,paused])});
 }
 const GLYPHS=Object.freeze({
  '0':['111','101','101','101','111'],'1':['010','110','010','010','111'],'2':['111','001','111','100','111'],'3':['111','001','111','001','111'],'4':['101','101','111','001','001'],
