@@ -106,7 +106,7 @@ struct LinkGrabArea: NSViewRepresentable {
             menu.addItem(ClosureMenuItem(L("Open in browser")) { if let url = entry.linkURL { NSWorkspace.shared.open(url) } })
             menu.addItem(ClosureMenuItem(L("Move to Trash…")) {
                 line.focusShelf(.links)
-                if !links.selectedIDs.contains(id) { links.select(id, width: line.viewportWidth) }
+                links.select(id, preservingSelection: true, width: line.viewportWidth)
                 line.onTrashRequested?()
             })
             menu.addItem(ClosureMenuItem(L("Library…")) { line.onLibraryRequested?() })

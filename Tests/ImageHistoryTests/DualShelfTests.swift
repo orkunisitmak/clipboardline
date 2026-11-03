@@ -45,14 +45,16 @@ final class DualShelfTests: HistoryTestCase {
             let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox)
             let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, copyImage: { _ in }, copyText: { _ in }, library: store)
             for name in ["a", "b", "c"] { _ = line.links.add(try XCTUnwrap(URL(string: "https://example.com/\(name)"))) }
-            line.setPresentation(.links, requestFocus: false); line.links.selectAll()
+            line.setPresentation(.links, requestFocus: false)
+            let shown = line.links.displayEntries.map(\.id)
+            line.links.select(shown[0], width: line.viewportWidth); line.links.select(shown[1], toggle: true, width: line.viewportWidth)
             var trashed: [UUID] = []
             line.onTrashRequested = { trashed = line.links.selectedEntries.map(\.id) }
             let entry = line.links.displayEntries[1], view = GrabView()
             LinkGrabArea(entry: entry, line: line, links: line.links).configure(view)
             let item = try XCTUnwrap(view.menuProvider().items.first { $0.title == L("Move to Trash…") })
             _ = item.target?.perform(item.action, with: item)
-            XCTAssertEqual(Set(trashed), Set(line.links.displayEntries.map(\.id)))
+            XCTAssertEqual(Set(trashed), Set(shown[0...1]), "only the two selected links, not the third")
         }
     }
     @MainActor func testTextRangeEnterCommandAAndDeleteAreSymmetric() throws {
