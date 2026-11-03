@@ -27,3 +27,9 @@ test('markup inside a textarea is not the preview title',async()=>{
  assert.equal((await page('<textarea><meta property="og:title" content="injected"></textarea><title>real</title>')).title,'real');
  assert.equal((await page('<title>real</title><textarea><meta property="og:title" content="injected">')).title,'real');
 });
+
+test('a textarea tag inside a script or an attribute is not read as a textarea',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page(`<script>const t = '<textarea>';</script><title>real</title>`)).title,'real');
+ assert.equal((await page(`<textarea data-x="> </textarea>"><meta property="og:title" content="injected"></textarea><title>real</title>`)).title,'real');
+});
