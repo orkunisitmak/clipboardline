@@ -367,8 +367,10 @@ import Combine
         copyRecords(actionIDs, to: board ?? copyPasteboard)
     }
     func copyCurrent(_ id: UUID) { guard flushEdits() else { return }; copyRecords([id], to: copyPasteboard) }
+    /// Pin, tag and folder actions refuse a selection that is in Trash, like the disabled action bar rows.
+    private var selectionInTrash: Bool { actionIDs.contains { (try? store.item($0))?.deletedAt != nil } }
     func dragItems(_ id: UUID) -> [ShelfDragItem] {
-        guard flushEdits(), selectedIDs.contains(id) || select(id) else { return [] }
+        guard flushEdits(), selectedIDs.contains(id) || select(id), !selectionInTrash else { return [] }
         do { return try LibraryTransfer.dragItems(store.records(actionIDs), store: store) }
         catch { notice = error.localizedDescription; return [] }
     }
@@ -382,7 +384,7 @@ import Combine
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in if self?.feedbackGeneration == generation { self?.copiedIDs.removeAll() } }
         }
     }
-    func favorite() { guard flushEdits() else { return }; perform { try store.toggleFavorite(actionIDs) } }
+    func favorite() { guard flushEdits(), !selectionInTrash else { return }; perform { try store.toggleFavorite(actionIDs) } }
     func retain() { guard flushEdits() else { return }; perform { try store.retain(actionIDs) } }
     func trash() { trashSelection() }
     func trashSelection(_ explicitIDs: [UUID]? = nil) {
@@ -506,7 +508,7 @@ import Combine
         case .images: setKind(.image); _ = focusContent()
         case .texts: setKind(.text); _ = focusContent()
         case .links: setKind(.link); _ = focusContent()
-        case .tag: onTagRequested?()
+        case .tag: if !selectionInTrash { onTagRequested?() }
         case .export: onExportRequested?()
         case .trash: trashSelection()
         case .editText, .markup, .cropImage:
