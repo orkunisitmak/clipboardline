@@ -687,7 +687,8 @@ final class Line: ObservableObject {
         }
     }
     func discardAction(_ id: UUID) {
-        if actionItems(for: id).count > 1 { focusShelf(.images); onTrashRequested?() }
+        let items = actionItems(for: id)
+        if items.count > 1 { focusShelf(.images); removeFromShelf(items.map(\.id), on: .images, focusedID: id) }
         else { discard(id) }
     }
 
