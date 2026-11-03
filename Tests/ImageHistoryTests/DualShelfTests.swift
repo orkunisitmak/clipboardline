@@ -55,6 +55,33 @@ final class DualShelfTests: HistoryTestCase {
             XCTAssertEqual(records.count, 3); XCTAssertTrue(records.allSatisfy { $0.deletedAt == nil })
         }
     }
+    @MainActor func testImageMultiDiscardStopsWhenThePreviewCannotBeSaved() throws {
+        try fixture { f in
+            let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+            let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, copyImage: { _ in }, library: store)
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            line.selectAll()
+            line.onFlushPreview = { false }
+            let image = try XCTUnwrap(line.items.first), view = GrabView()
+            GrabArea(item: image, line: line).configure(view)
+            let item = try XCTUnwrap(view.menuProvider().items.first { [L("Take down"), L("Discard")].contains($0.title) })
+            _ = item.target?.perform(item.action, with: item)
+            XCTAssertEqual(line.items.count, 3)
+        }
+    }
+    @MainActor func testImageTakeDownWithoutALibraryKeepsPinnedAppCopiesOutOfTheTrash() throws {
+        try fixture { f in
+            let line = f.line()
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            for item in line.items { _ = try line.togglePin(item.id) }
+            let urls = line.displayItems.map(\.url)
+            let first = try XCTUnwrap(line.displayItems.first)
+            line.takeDown(first.id, toTheLeft: false)
+            let trashed = (try? FileManager.default.contentsOfDirectory(atPath: f.folder.appendingPathComponent(".test-trash").path)) ?? []
+            XCTAssertTrue(trashed.isEmpty)
+            XCTAssertTrue(urls.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+        }
+    }
     @MainActor func testImageTakeDownOnAMultiSelectionKeepsPinnedImagesInTheLibrary() throws {
         try fixture { f in
             let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })

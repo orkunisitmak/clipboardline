@@ -370,7 +370,10 @@ final class Line: ObservableObject {
             do { try library.removeFromShelf(ids) } catch { notice = error.localizedDescription; return }
         } else {
             switch shelf {
-            case .images: for id in ids { discard(id) }
+            case .images:
+                for id in ids {
+                    if items.first(where: { $0.id == id })?.pinned == true { drop(id) } else { discard(id) }
+                }
             case .texts: for id in ids { texts.removeFromShelf(id) }
             case .links: for id in ids { links.removeFromShelf(id) }
             }
@@ -656,7 +659,11 @@ final class Line: ObservableObject {
     }
     func discardAction(_ id: UUID) {
         let items = actionItems(for: id)
-        if items.count > 1 { focusShelf(.images); removeFromShelf(items.map(\.id), on: .images, focusedID: id) }
+        if items.count > 1 {
+            guard onFlushPreview() else { return }
+            focusShelf(.images)
+            removeFromShelf(items.map(\.id), on: .images, focusedID: id)
+        }
         else { discard(id) }
     }
 
