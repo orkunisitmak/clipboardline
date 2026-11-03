@@ -502,3 +502,7 @@ test('changing the Library sort keeps the selected item like macOS setSort',asyn
  await f.change('sort-filter','oldest');assert.deepEqual(cards(f),[f.link,f.text2,f.text1,f.image]);assert.equal(focusedCard(f),f.text1);
  await f.click('view-mode');await f.click('sort-column',{column:'title'});assert.equal(focusedCard(f),f.text1);
 });
+test('Library cards do not offer the shelf-only Take down button',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ assert.match(f.main,/data-action="card-pin"/);assert.doesNotMatch(f.main,/data-action="card-remove"/);
+});
