@@ -76,13 +76,13 @@ private struct LinkCard: View {
     }
 }
 
-private struct LinkGrabArea: NSViewRepresentable {
+struct LinkGrabArea: NSViewRepresentable {
     let entry: LibraryRecord
     let line: Line
     let links: LinkHistory
     func makeNSView(context: Context) -> GrabView { let view = GrabView(); configure(view); return view }
     func updateNSView(_ view: GrabView, context: Context) { configure(view) }
-    private func configure(_ view: GrabView) {
+    func configure(_ view: GrabView) {
         let id = entry.id
         view.selectionMode = links.selecting; view.appCopy = true; view.allowsMove = false
         view.payloadProvider = { links.dragItems(id) }
@@ -104,7 +104,11 @@ private struct LinkGrabArea: NSViewRepresentable {
             menu.addItem(ClosureMenuItem(entry.favorite ? L("Unpin") : L("Pin favorite")) { links.togglePin(id) })
             menu.addItem(ClosureMenuItem(L("Name and pin…")) { line.onNameAndPinRequested?(id) })
             menu.addItem(ClosureMenuItem(L("Open in browser")) { if let url = entry.linkURL { NSWorkspace.shared.open(url) } })
-            menu.addItem(ClosureMenuItem(L("Move to Trash…")) { links.select(id, width: line.viewportWidth); line.focusShelf(.links); line.onTrashRequested?() })
+            menu.addItem(ClosureMenuItem(L("Move to Trash…")) {
+                line.focusShelf(.links)
+                if !links.selectedIDs.contains(id) { links.select(id, width: line.viewportWidth) }
+                line.onTrashRequested?()
+            })
             menu.addItem(ClosureMenuItem(L("Library…")) { line.onLibraryRequested?() })
             return menu
         }
