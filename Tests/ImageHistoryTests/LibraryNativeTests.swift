@@ -64,6 +64,12 @@ import XCTest
         func enabled(_ title: String) throws -> Bool { try XCTUnwrap(rows.first { $0.title == L(title) }).isEnabled }
         for title in ["Save to library", "Add to folder", "Add tag…"] { XCTAssertFalse(try enabled(title), title) }
         XCTAssertTrue(try enabled("Copy")); XCTAssertTrue(try enabled("Restore"))
+        // Focused but not selected: the menu follows the focused trashed item.
+        XCTAssertTrue(model.select(note.id, toggle: true)); controller.toolbarController.refresh()
+        XCTAssertTrue(model.selectedIDs.isEmpty); XCTAssertEqual(model.focusedID, note.id)
+        let focusedRows = item.menu.items
+        for title in ["Save to library", "Add to folder", "Add tag…"] { XCTAssertFalse(try XCTUnwrap(focusedRows.first { $0.title == L(title) }).isEnabled, title) }
+        XCTAssertTrue(try XCTUnwrap(focusedRows.first { $0.title == L("Restore") }).isEnabled)
     }
     func testClosedLibraryDefersCaptureQueriesAndRefreshesOnceOnReopen() throws {
         _ = NSApplication.shared
