@@ -69,7 +69,7 @@ struct GrabArea: NSViewRepresentable {
             let menu = NSMenu()
             menu.autoenablesItems = false
             menu.addItem(ClosureMenuItem(item.pinned ? L("Unpin") : L("Pin favorite")) { line.pinFromUI(id) })
-            menu.addItem(ClosureMenuItem(L("Name and pin…")) { line.onNameAndPinRequested?(id) })
+            menu.addItem(ClosureMenuItem(L("Name and pin…")) { line.requestNameAndPin(id, on: .images) })
             menu.addItem(ClosureMenuItem(L("Copy")) { line.copyAction(id) })
             menu.addItem(ClosureMenuItem(L("Open")) { line.open(id) })
             menu.addItem(ClosureMenuItem(L("Quick Look")) { line.quickLook(id) })

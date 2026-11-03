@@ -77,6 +77,40 @@ import XCTest
         XCTAssertFalse(keyboard.handle(key()))
         XCTAssertEqual(requested.count, 3)
     }
+    func testMenuNameAndPinNamesTheWholeSelectionLikeTheKey() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+        try populate(f, store: store)
+        let line = line(f, store: store)
+        var batches = [[UUID]](), singles = [UUID]()
+        line.onNameAndPinBatchRequested = { batches.append($0) }
+        line.onNameAndPinRequested = { singles.append($0) }
+        for shelf in Shelf.allCases {
+            line.focusShelf(shelf, requestFocus: false)
+            line.selectAllActive()
+            let expected = line.activeActionIDs
+            XCTAssertEqual(expected.count, 2)
+            line.requestNameAndPin(expected[1], on: shelf)
+            XCTAssertEqual(batches.last, expected); XCTAssertTrue(singles.isEmpty)
+        }
+        line.focusShelf(.texts, requestFocus: false)
+        let outside = try XCTUnwrap(line.texts.displayEntries.last?.id)
+        line.texts.select(outside, width: line.viewportWidth)
+        line.requestNameAndPin(outside, on: .texts)
+        XCTAssertEqual(singles, [outside]); XCTAssertEqual(batches.count, 3)
+
+        let first = try XCTUnwrap(store.captureText("first menu note")), second = try XCTUnwrap(store.captureText("second menu note"))
+        try store.retain([first.id, second.id])
+        let model = LibraryModel(store: store)
+        wait { model.ids.contains(first.id) && model.ids.contains(second.id) }
+        model.selectAll()
+        var requested = [[UUID]](), single = [UUID]()
+        model.onNameAndPinBatchRequested = { requested.append($0) }; model.onNameAndPinRequested = { single.append($0) }
+        model.requestNameAndPin(first.id)
+        XCTAssertEqual(requested, [model.actionIDs]); XCTAssertGreaterThan(requested[0].count, 1); XCTAssertTrue(single.isEmpty)
+        XCTAssertTrue(model.select(first.id)); model.requestNameAndPin(first.id)
+        XCTAssertEqual(single, [first.id]); XCTAssertEqual(requested.count, 1)
+    }
     func testLibraryNamingFlushesDraftAndSnapshotsSelectionWithoutInterceptingNativeEditors() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
