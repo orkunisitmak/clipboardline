@@ -50,7 +50,7 @@ final class FavoritesTests: HistoryTestCase {
             let record = try XCTUnwrap(store.item(id)); XCTAssertTrue(record.favorite)
             XCTAssertEqual(record.fileURL, libraryFile)
             XCTAssertTrue(FileManager.default.fileExists(atPath: libraryFile.path))
-            XCTAssertNotEqual(onDesktop[0].standardizedFileURL, libraryFile.standardizedFileURL)
+            XCTAssertNotEqual(try XCTUnwrap(onDesktop.first).standardizedFileURL, libraryFile.standardizedFileURL)
         }
     }
     @MainActor func testFavoritesFilterAndClearPreservePins() throws {
