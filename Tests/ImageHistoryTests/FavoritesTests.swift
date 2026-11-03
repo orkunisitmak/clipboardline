@@ -35,6 +35,20 @@ final class FavoritesTests: HistoryTestCase {
             XCTAssertFalse(FileManager.default.fileExists(atPath: copy.path))
         }
     }
+    @MainActor func testSaveToDesktopKeepsTheLibraryFileOfAPinnedImage() throws {
+        try fixture { f in
+            let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox)
+            let line = Line(defaults: f.defaults, inbox: f.inbox, breeze: false, copyImage: { _ in }, copyText: { _ in }, library: store)
+            let desktop = f.folder.appendingPathComponent("Desktop"); try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+            let id = try XCTUnwrap(line.hang(try f.image(), quietly: true)); try store.toggleFavorite([id])
+            RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            line.saveToDesktop(id, desktop: desktop)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: desktop.path).count, 1)
+            let record = try XCTUnwrap(store.item(id)); XCTAssertTrue(record.favorite)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(record.fileURL).path))
+        }
+    }
     @MainActor func testFavoritesFilterAndClearPreservePins() throws {
         try fixture { f in
             let line = f.line()
