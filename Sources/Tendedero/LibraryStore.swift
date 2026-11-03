@@ -447,7 +447,7 @@ extension String {
     func imageSearchChanged() { searchRevision += 1 }
     @discardableResult func createNote() throws -> LibraryRecord {
         let date = now(); var record = LibraryRecord(id: UUID(), kind: .text, createdAt: date, updatedAt: date)
-        record.text = ""; record.retainedAt = date; record.title = L("Untitled note")
+        record.text = ""; record.retainedAt = date
         try db.transaction { try put(record) }; changed(); return record
     }
     @discardableResult func captureImage(_ url: URL, capturedAt: Date? = nil) throws -> LibraryRecord {
