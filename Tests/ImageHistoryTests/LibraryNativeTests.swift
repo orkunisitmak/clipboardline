@@ -49,6 +49,22 @@ import XCTest
         for title in [L("Pin favorite"), L("Add tag…"), L("Add to folder"), L("Name and pin…")] { XCTAssertFalse(titles.contains(title), title) }
         XCTAssertTrue(titles.contains(L("Copy")))
     }
+    func testToolbarActionsMenuDisablesOrganizeActionsInTrash() throws {
+        _ = NSApplication.shared
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, moveToTrash: { $0 })
+        let note = try XCTUnwrap(store.captureText("Quarterly plan")); _ = try store.createCollection("Work"); try store.trash([note.id])
+        let controller = LibraryWindowController(store: store, line: Line(defaults: f.defaults, inbox: f.inbox, breeze: false, library: store))
+        let model = controller.model, window = try XCTUnwrap(controller.window)
+        defer { window.contentViewController = nil }
+        model.changeScope(.trash); wait { model.ids == [note.id] && !model.loading }
+        XCTAssertTrue(model.select(note.id)); controller.toolbarController.refresh()
+        let item = try XCTUnwrap(window.toolbar?.items.first { $0.itemIdentifier == LibraryToolbarController.actionsID } as? NSMenuToolbarItem)
+        let rows = item.menu.items
+        func enabled(_ title: String) throws -> Bool { try XCTUnwrap(rows.first { $0.title == L(title) }).isEnabled }
+        for title in ["Save to library", "Add to folder", "Add tag…"] { XCTAssertFalse(try enabled(title), title) }
+        XCTAssertTrue(try enabled("Copy")); XCTAssertTrue(try enabled("Restore"))
+    }
     func testClosedLibraryDefersCaptureQueriesAndRefreshesOnceOnReopen() throws {
         _ = NSApplication.shared
         let f = try SyntheticFixture(); defer { f.cleanup() }

@@ -141,17 +141,17 @@ import SwiftUI
         func add(_ title: String, enabled: Bool = true, _ action: @escaping () -> Void) {
             let item = ClosureMenuItem(title, handler: action); item.isEnabled = enabled; menu.addItem(item)
         }
-        let hasSelection = !model.selectedIDs.isEmpty || model.focusedID != nil
+        let hasSelection = !model.selectedIDs.isEmpty || model.focusedID != nil, canOrganize = hasSelection && model.query.scope != .trash
         add(L("Copy"), enabled: hasSelection) { [weak model] in model?.copy() }
-        add(L("Save to library"), enabled: hasSelection) { [weak model] in model?.retain() }
+        add(L("Save to library"), enabled: canOrganize) { [weak model] in model?.retain() }
         add(L("Show pinned items")) { [weak model] in model?.togglePinnedOnly() }
         menu.items.last?.state = model.showingPinnedOnly ? .on : .off
         if !model.collections.isEmpty {
             let folders = NSMenu()
             for folder in model.collections { folders.addItem(ClosureMenuItem(folder.name) { [weak model] in model?.assign(folder.id) }) }
-            let item = NSMenuItem(title: L("Add to folder"), action: nil, keyEquivalent: ""); item.submenu = folders; item.isEnabled = hasSelection; menu.addItem(item)
+            let item = NSMenuItem(title: L("Add to folder"), action: nil, keyEquivalent: ""); item.submenu = folders; item.isEnabled = canOrganize; menu.addItem(item)
         }
-        add(L("Add tag…"), enabled: hasSelection) { [weak actions] in actions?.promptTag() }
+        add(L("Add tag…"), enabled: canOrganize) { [weak actions] in actions?.promptTag() }
         add(L("Export copies…"), enabled: hasSelection) { [weak actions] in actions?.exportSelection() }
         menu.addItem(.separator())
         if model.query.scope == .trash { add(L("Restore"), enabled: hasSelection) { [weak model] in model?.restore() } }
