@@ -326,8 +326,8 @@ import Combine
     @discardableResult func select(_ id: UUID, toggle: Bool = false, extending: Bool = false, preservingSelection: Bool = false) -> Bool {
         guard let target = indices[id], id == focusedID || flushEdits() else { return false }
         pendingDetailsSelection = nil
-        // A pick made while a reload is pending replaces the queued neighbour pick.
-        pendingKeyboardSelection = nil
+        // A different pick made while a reload is pending replaces the queued neighbour pick; picking the same item again does not.
+        if id != focusedID || toggle || extending { pendingKeyboardSelection = nil }
         if extending, let anchor, let start = indices[anchor] { selectedIDs = Set(ids[min(start,target)...max(start,target)]) }
         else if toggle { if !selectedIDs.insert(id).inserted { selectedIDs.remove(id) }; anchor = id }
         else if !preservingSelection || !selectedIDs.contains(id) { selectedIDs = [id]; anchor = id }
