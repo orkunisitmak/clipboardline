@@ -25,6 +25,15 @@ import XCTest
     private func key(_ code: UInt16, _ character: String = "", _ flags: NSEvent.ModifierFlags = []) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil, characters: character, charactersIgnoringModifiers: character, isARepeat: false, keyCode: code)!
     }
+    func testTagAndFolderNamesThatDifferByAKanaDevanagariOrThaiMarkStayDistinctLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let record = try XCTUnwrap(store.captureText("marks")); try store.retain([record.id])
+        for (plain, marked) in [("は", "ば"), ("क", "कि"), ("ก", "กิ")] {
+            try store.addTag(plain, to: [record.id]); try store.addTag(marked, to: [record.id])
+            try store.createCollection(plain); let folder = try store.createCollection(marked + "x"); try store.renameCollection(folder, name: marked)
+        }
+        XCTAssertEqual(try store.tags().count, 6); XCTAssertEqual(try store.collections().count, 6)
+    }
     func testPagedTagSummariesRefreshAfterRenameAndRemovalWithoutChangingSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let plain = try XCTUnwrap(store.captureText("plain note")), tagged = try XCTUnwrap(store.captureText("tagged note İstanbul 中文"))
