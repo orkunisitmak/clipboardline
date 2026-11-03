@@ -336,9 +336,11 @@ import XCTest
         store.notice = nil
         service.request([link.id])
         XCTAssertNil(store.notice)
+        let before = try XCTUnwrap(try store.item(link.id))
         service.request([link.id], force: true)
         XCTAssertEqual(store.notice, L("Turn on Fetch link titles and thumbnails in Settings to refresh link previews"))
         XCTAssertEqual(calls, 0)
+        XCTAssertEqual(try store.item(link.id), before)
     }
     func testMetadataCancellationDoesNotWriteLateResultOrRevealShelf() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
