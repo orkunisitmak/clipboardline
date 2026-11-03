@@ -327,6 +327,19 @@ import XCTest
         let failing = LinkMetadataService(store: store, enabled: { true }, fetch: { _ in failedCalls += 1; throw HistoryFiles.Failure.unsafeFile })
         let bad = try store.captureLink(URL(string: "https://example.com/offline")!); failing.request([bad.id]); wait { failing.pendingCount == 0 && failedCalls == 1 }; failing.request([bad.id]); XCTAssertEqual(failedCalls, 1); XCTAssertEqual(try store.item(bad.id)?.metadataState, "failed"); failing.stop()
     }
+    func testRefreshLinkPreviewTellsWhyWhenFetchingIsOff() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox)
+        let link = try store.captureLink(URL(string: "https://example.com/article")!)
+        var calls = 0
+        let service = LinkMetadataService(store: store, enabled: { false }, fetch: { _ in calls += 1; return LinkMetadata(title: "Fetched") })
+        store.notice = nil
+        service.request([link.id])
+        XCTAssertNil(store.notice)
+        service.request([link.id], force: true)
+        XCTAssertEqual(store.notice, L("Turn on Fetch link titles and thumbnails in Settings to refresh link previews"))
+        XCTAssertEqual(calls, 0)
+    }
     func testMetadataCancellationDoesNotWriteLateResultOrRevealShelf() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let id = try store.captureLink(URL(string: "https://example.com/cancel")!).id; var enabled = true, calls = 0

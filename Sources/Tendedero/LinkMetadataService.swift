@@ -27,7 +27,11 @@ struct LinkMetadata: Equatable {
     /// The newest visible requests replace queued work. At most two network
     /// operations run, so a fling cannot queue every link it passes.
     func request(_ ids: [UUID], force: Bool = false) {
-        guard enabled() else { stop(); return }
+        guard enabled() else {
+            stop()
+            if force { store.notice = L("Turn on Fetch link titles and thumbnails in Settings to refresh link previews") }
+            return
+        }
         if force {
             stop()
             for id in ids {
