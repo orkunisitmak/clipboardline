@@ -148,7 +148,7 @@ import SwiftUI
         menu.items.last?.state = model.showingPinnedOnly ? .on : .off
         if !model.collections.isEmpty {
             let folders = NSMenu()
-            for folder in model.collections { folders.addItem(ClosureMenuItem(folder.name) { [weak model] in model?.assign(folder.id) }) }
+            for folder in model.collections { folders.addItem(ClosureMenuItem(model.folderPath(folder.id) ?? folder.name) { [weak model] in model?.assign(folder.id) }) }
             let item = NSMenuItem(title: L("Add to folder"), action: nil, keyEquivalent: ""); item.submenu = folders; item.isEnabled = hasSelection; menu.addItem(item)
         }
         add(L("Add tag…"), enabled: hasSelection) { [weak actions] in actions?.promptTag() }

@@ -49,6 +49,22 @@ import XCTest
         let titles = submenu.items.map(\.title)
         XCTAssertTrue(titles.contains("Work / 2024")); XCTAssertTrue(titles.contains("Personal / 2024")); XCTAssertFalse(titles.contains("2024"))
     }
+    func testToolbarAddToFolderMenuTellsSameNamedSubfoldersApart() throws {
+        _ = NSApplication.shared
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox)
+        let work = try store.createCollection("Work"), personal = try store.createCollection("Personal")
+        _ = try store.createCollection("2024", parent: work); _ = try store.createCollection("2024", parent: personal)
+        let note = try XCTUnwrap(store.captureText("Quarterly plan")); try store.retain([note.id])
+        let controller = LibraryWindowController(store: store, line: Line(defaults: f.defaults, inbox: f.inbox, breeze: false, library: store))
+        let model = controller.model, window = try XCTUnwrap(controller.window)
+        defer { window.contentViewController = nil }
+        wait { model.ids == [note.id] && model.collections.count == 4 && !model.loading }
+        XCTAssertTrue(model.select(note.id)); controller.toolbarController.refresh()
+        let item = try XCTUnwrap(window.toolbar?.items.first { $0.itemIdentifier == LibraryToolbarController.actionsID } as? NSMenuToolbarItem)
+        let titles = try XCTUnwrap(item.menu.items.first { $0.title == L("Add to folder") }?.submenu).items.map(\.title)
+        XCTAssertTrue(titles.contains("Work / 2024")); XCTAssertTrue(titles.contains("Personal / 2024")); XCTAssertFalse(titles.contains("2024"))
+    }
     func testClosedLibraryDefersCaptureQueriesAndRefreshesOnceOnReopen() throws {
         _ = NSApplication.shared
         let f = try SyntheticFixture(); defer { f.cleanup() }
