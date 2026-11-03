@@ -33,3 +33,11 @@ test('a textarea tag inside a script or an attribute is not read as a textarea',
  assert.equal((await page(`<script>const t = '<textarea>';</script><title>real</title>`)).title,'real');
  assert.equal((await page(`<textarea data-x="> </textarea>"><meta property="og:title" content="injected"></textarea><title>real</title>`)).title,'real');
 });
+
+test('a custom element named like a textarea is not a textarea and a pile of broken tags stays fast',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page('<textarea-x></textarea-x><title>real</title>')).title,'real');
+ const started=Date.now();
+ await page('<textarea "'.repeat(40000)+'<title>real</title>');
+ assert.ok(Date.now()-started<2000);
+});

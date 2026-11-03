@@ -359,7 +359,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         guard data.count <= 512 * 1024 else { throw PublicLinkError.tooLarge }
         let source = Self.decode(data, contentType: contentType)
         // A textarea holds text, so a meta or title inside it is not page metadata; an unclosed one hides the rest, as in a browser.
-        let html = Self.replacing(#"(?is)<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>|<textarea\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:.*?</textarea\s*>|.*)"#, in: source, with: "")
+        let html = Self.replacing(#"(?is)<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>|<textarea(?=[\s/>])(?:[^>"']|"[^"]*"|'[^']*'){0,1024}>(?:.*?</textarea\s*>|.*)"#, in: source, with: "")
         let tags = try NSRegularExpression(pattern: #"(?is)<meta\b([^>]{0,8192})>"#)
         let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)
         var metadata: [String: String] = [:]

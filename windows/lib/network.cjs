@@ -117,7 +117,7 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   }
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
   // As on macOS, comments, scripts and styles are not page metadata. A textarea holds text, so a meta or title inside it isn't either; an unclosed one hides the rest, as in a browser.
-  const html = decodeHTML(response.bytes, response.type).replace(/<!--[\s\S]*?-->|<script\b[^>]*>[\s\S]*?<\/script\s*>|<style\b[^>]*>[\s\S]*?<\/style\s*>|<textarea\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:[\s\S]*?<\/textarea\s*>|[\s\S]*)/gi, '');
+  const html = decodeHTML(response.bytes, response.type).replace(/<!--[\s\S]*?-->|<script\b[^>]*>[\s\S]*?<\/script\s*>|<style\b[^>]*>[\s\S]*?<\/style\s*>|<textarea(?=[\s/>])(?:[^>"']|"[^"]*"|'[^']*'){0,1024}>(?:[\s\S]*?<\/textarea\s*>|[\s\S]*)/gi, '');
   // Collapse layout whitespace only in display text; og:image stays a URL.
   const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
   // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
