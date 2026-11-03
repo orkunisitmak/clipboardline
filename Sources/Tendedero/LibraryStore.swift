@@ -460,7 +460,7 @@ extension String {
         var moved: LibraryRecord?
         try db.transaction {
             if let match = try identicalImage(to: url), var existing = try item(match.id), existing.deletedAt == nil {
-                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.captureRevision = UUID()
+                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.lastCopiedAt = date; existing.captureRevision = UUID()
                 try put(existing); moved = existing
             } else { try put(fresh) }
         }
