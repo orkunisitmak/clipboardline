@@ -45,6 +45,18 @@ import XCTest
         let focused = try XCTUnwrap(model.focusedID)
         XCTAssertTrue(model.ids.contains(focused)); XCTAssertEqual(model.selectedIDs, [focused]); wait { model.inspected?.id == focused }
     }
+    func testPickingAnotherItemWhilePinningReloadsKeepsThatPick() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        var ids = [UUID](); for n in 1...3 { f.date += 60; ids.append(try XCTUnwrap(store.captureText("Copy \(n)")).id) }
+        let model = LibraryModel(store: store)
+        model.changeScope(.recent); wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        XCTAssertTrue(model.select(order[1])); wait { model.inspected?.id == order[1] }
+        model.favorite()
+        XCTAssertTrue(model.select(order[0]))
+        wait { model.ids.count == 2 && !model.loading }
+        XCTAssertEqual(model.focusedID, order[0]); XCTAssertEqual(model.selectedIDs, [order[0]])
+    }
     func testPagedTagSummariesRefreshAfterRenameAndRemovalWithoutChangingSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let plain = try XCTUnwrap(store.captureText("plain note")), tagged = try XCTUnwrap(store.captureText("tagged note İstanbul 中文"))
