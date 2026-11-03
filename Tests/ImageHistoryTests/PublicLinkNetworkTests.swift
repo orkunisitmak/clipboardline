@@ -177,6 +177,8 @@ import XCTest
         let parsed = try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url)
         XCTAssertEqual(parsed.title, "Tips > Tricks")
         XCTAssertEqual(parsed.thumbnailURL?.absoluteString, "https://public.example.org/a.png")
+        let single = "<meta property='og:title' content='Tips > Tricks'><title>Page</title>"
+        XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(single.utf8), url: url).title, "Tips > Tricks")
     }
 }
 

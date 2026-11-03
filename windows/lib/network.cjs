@@ -97,7 +97,7 @@ function decodeHTML(bytes, type = '') {
 // As on macOS, drop control characters except whitespace (U+0085 counts as whitespace).
 const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
 function meta(html, name) {
-  for (const match of html.matchAll(/<meta\b([^>]{0,4096})>/gi)) {
+  for (const match of html.matchAll(/<meta\b((?:"[^"]{0,4096}"|'[^']{0,4096}'|[^<>"']){0,4096})>/gi)) {
     const attributes = {};
     for (const attr of match[1].matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) attributes[attr[1].toLowerCase()] = attr[2] ?? attr[3] ?? attr[4];
     if ([attributes.property, attributes.name].some(key => String(key).toLowerCase() === name)) return entities(attributes.content || '');
