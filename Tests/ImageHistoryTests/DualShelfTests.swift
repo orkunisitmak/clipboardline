@@ -286,6 +286,14 @@ final class DualShelfTests: HistoryTestCase {
             let other = try XCTUnwrap(line.texts.entries.first { $0.id != textID }?.id)
             line.pinFromMenu(other, shelf: .texts)
             XCTAssertEqual(line.texts.entries.filter(\.pinned).map(\.id), [other])
+            line.texts.select(textID, width: line.viewportWidth)
+            line.texts.select(other, toggle: true, width: line.viewportWidth)
+            let outside = try XCTUnwrap(line.texts.entries.first { $0.id != textID && $0.id != other }?.id)
+            let selection = line.texts.selectedIDs
+            XCTAssertEqual(selection.count, 2); XCTAssertFalse(selection.contains(outside))
+            line.pinFromMenu(outside, shelf: .texts)
+            XCTAssertEqual(Set(line.texts.entries.filter(\.pinned).map(\.id)), Set([other, outside]))
+            XCTAssertEqual(line.texts.selectedIDs, selection)
         }
     }
 }
