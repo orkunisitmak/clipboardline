@@ -256,9 +256,10 @@ test('a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS',
 test('an item can get a 51st tag, like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello');for(let i=1;i<=51;i++)s.modify('tag',{ids:[item.id],tags:[...s.item(item.id).tags,'tag'+i]});assert.equal(s.item(item.id).tags.length,51);}));
 
 test('renaming a tag to the name it already has changes nothing and keeps Trash undo',()=>fixture(s=>{
- const item=s.insert('text','tagged');s.modify('tag',{ids:[item.id],tags:['urgent']});
+ const item=s.insert('text','tagged');s.modify('tag',{ids:[item.id],tags:['urgent']});s.modify('trashUndoably',{ids:[item.id]});
  let persisted=0;const persist=s.persist.bind(s);s.persist=()=>{persisted++;return persist();};
  s.modify('renameTag',{tag:'urgent',name:'#urgent'});s.modify('renameTag',{tag:'urgent',name:'urgent'});
  assert.equal(persisted,0);assert.deepEqual(s.item(item.id).tags,['urgent']);
+ s.modify('undoTrash');assert.equal(s.item(item.id).trashedAt,null);persisted=0;
  s.modify('renameTag',{tag:'urgent',name:'Urgent'});assert.equal(persisted,1);assert.deepEqual(s.item(item.id).tags,['Urgent']);
 }));
