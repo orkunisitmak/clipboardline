@@ -76,6 +76,7 @@ import Combine
     private var feedbackGeneration = 0
     private(set) var contentFocusPending = false
     private var pendingKeyboardSelection: (id: UUID?, query: LibraryQuery)?
+    private var restoringIDs = Set<UUID>()
     private struct PendingDetailsSelection {
         let id: UUID
         let query: LibraryQuery
@@ -140,6 +141,7 @@ import Combine
         else if let focus = onContentFocus { contentFocusPending = false; focus() }
     }
     private func finishKeyboardSelection() {
+        restoringIDs = []
         guard let pending = pendingKeyboardSelection else { return }
         pendingKeyboardSelection = nil
         var expected = pending.query, actual = query
@@ -325,7 +327,9 @@ import Combine
     }
     @discardableResult func select(_ id: UUID, toggle: Bool = false, extending: Bool = false, preservingSelection: Bool = false) -> Bool {
         guard let target = indices[id], id == focusedID || flushEdits() else { return false }
-        pendingDetailsSelection = nil; pendingKeyboardSelection = nil
+        pendingDetailsSelection = nil
+        // Picking an item that stays after Restore replaces the pending pick; one that is leaving Trash keeps it, so focus lands on the first item left.
+        if !restoringIDs.contains(id) { pendingKeyboardSelection = nil }
         if extending, let anchor, let start = indices[anchor] { selectedIDs = Set(ids[min(start,target)...max(start,target)]) }
         else if toggle { if !selectedIDs.insert(id).inserted { selectedIDs.remove(id) }; anchor = id }
         else if !preservingSelection || !selectedIDs.contains(id) { selectedIDs = [id]; anchor = id }
@@ -410,9 +414,9 @@ import Combine
         let targets = ids ?? actionIDs
         guard !targets.isEmpty else { return }
         // The restored items leave Trash: select the first one that remains, as Windows does.
-        if query.scope == .trash { pendingKeyboardSelection = (nil, query) }
+        if query.scope == .trash { pendingKeyboardSelection = (nil, query); restoringIDs = Set(targets) }
         do { try store.restore(targets) }
-        catch { pendingKeyboardSelection = nil; report(error.localizedDescription) }
+        catch { pendingKeyboardSelection = nil; restoringIDs = []; report(error.localizedDescription) }
     }
     func assign(_ folder: UUID, moving: Bool = false) {
         guard flushEdits() else { return }
