@@ -512,6 +512,22 @@ final class Line: ObservableObject {
         }
     }
 
+    /// Right-click Pin favorite on a card inside a multi-selection acts on the whole selection, like the P key.
+    func pinFromMenu(_ id: UUID, shelf: Shelf) {
+        let selected: Set<UUID>
+        switch shelf {
+        case .texts: selected = texts.selectedIDs
+        case .links: selected = links.selectedIDs
+        case .images: selected = selectedIDs
+        }
+        if selected.count > 1, selected.contains(id) { focusShelf(shelf); pinActiveSelection(); return }
+        switch shelf {
+        case .texts: texts.togglePin(id)
+        case .links: links.togglePin(id)
+        case .images: pinFromUI(id)
+        }
+    }
+
     /// A mixed selection pins every item, as on Windows; only a fully pinned selection unpins.
     func pinActiveSelection() {
         func apply(_ ids: Set<UUID>, pinned: (UUID) -> Bool, toggle: (UUID) -> Void) {

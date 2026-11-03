@@ -263,4 +263,23 @@ final class DualShelfTests: HistoryTestCase {
         XCTAssertEqual(panel.frame.height, Layout.panelHeight * 2)
         XCTAssertEqual(panel.frame.maxY, screen.visibleFrame.maxY)
     }
+    @MainActor func testMenuPinOnSelectedCardPinsWholeSelectionOnTextAndImageShelves() throws {
+        try fixture { f in
+            let line = f.line()
+            for _ in 0..<3 { line.hang(try f.image(), quietly: true) }
+            for i in 0..<3 { line.texts.add("Synthetic \(i)") }
+            line.selectAll(); line.texts.selectAll()
+            let textID = try XCTUnwrap(line.texts.selectedEntries.first?.id), imageID = try XCTUnwrap(line.selectedItems.first?.id)
+            line.pinFromMenu(textID, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).count, 3)
+            line.pinFromMenu(imageID, shelf: .images)
+            XCTAssertEqual(line.items.filter(\.pinned).count, 3)
+            line.pinFromMenu(textID, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).count, 0)
+            line.texts.select(textID, width: line.viewportWidth)
+            let other = try XCTUnwrap(line.texts.entries.first { $0.id != textID }?.id)
+            line.pinFromMenu(other, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).map(\.id), [other])
+        }
+    }
 }
