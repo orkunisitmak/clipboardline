@@ -202,6 +202,8 @@ import XCTest
             XCTAssertEqual(try command(action, context: context, bindings: bindings).title, L(label) + ": Work / 2024")
         }
         XCTAssertEqual(try command(.assignFolder(personalYear.id), context: context, bindings: bindings).title, L("Add to folder") + ": Personal / 2024")
+        context.libraryScope = .collection(personalYear.id)
+        XCTAssertEqual(try command(.moveToFolder(workYear.id), context: context, bindings: bindings).title, L("Move to folder") + ": Work / 2024")
         XCTAssertEqual(entries.map { $0.command.title }.count, Set(entries.map { $0.command.title }).count)
     }
 
