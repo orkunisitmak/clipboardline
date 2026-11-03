@@ -21,3 +21,9 @@ test('meta tags with unquoted attribute values are read like macOS',async()=>{
  const metadata=await linkMetadata('https://example.com/post',async()=>({bytes:Buffer.from(html),url:'https://example.com/post',type:'text/html; charset=utf-8'}));
  assert.equal(metadata.title,'Real-Article-Title');assert.equal(metadata.thumbnail,'https://cdn.example.com/a.png');
 });
+
+test('markup inside a textarea is not the preview title',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page('<textarea><meta property="og:title" content="injected"></textarea><title>real</title>')).title,'real');
+ assert.equal((await page('<title>real</title><textarea><meta property="og:title" content="injected">')).title,'real');
+});
