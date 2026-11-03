@@ -1025,7 +1025,7 @@ extension String {
         }; changed()
     }
     func renameTag(_ id: UUID, name: String) throws {
-        let name = try cleanedName(name)
+        let name = try cleanedName(name.trimmingCharacters(in: CharacterSet(charactersIn: "#")))
         let existing = try tags()
         guard existing.contains(where: { $0.id == id }), !existing.contains(where: { $0.id != id && $0.name.libraryFolded == name.libraryFolded }) else { throw HistoryFiles.Failure.invalidDestination }
         let affected = try db.rows("SELECT item FROM item_tags WHERE tag=?", [.text(id.uuidString)]).compactMap { $0["item"]?.string.flatMap(UUID.init(uuidString:)) }

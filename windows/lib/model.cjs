@@ -441,7 +441,7 @@ class Store {
       if(!tag||!affected.length)fail('Tag unavailable');
       let name;
       if(action==='renameTag'){
-        name=text(payload.name,TAG_INPUT_LIMIT).trim();
+        name=text(payload.name,TAG_INPUT_LIMIT).trim().replace(/^#+|#+$/g,'').trim();
         if(!name||!validTagName(name))fail('Invalid tag name');
         if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&foldedName(value)===foldedName(name))))fail('A tag with this name already exists');
       }
