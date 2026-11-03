@@ -56,11 +56,29 @@ import XCTest
             environment.defaults.set(true, forKey: "inboxEnabled")
             environment.defaults.set(true, forKey: "capturePaused")
 
-            Inbox.reconcile(enabled: Inbox.isEnabled, paused: CapturePause.isPaused)
+            Inbox.reconcileIfEnabled(paused: CapturePause.isPaused)
 
             XCTAssertEqual(environment.preferences.value("location" as CFString) as? String, environment.userLocation)
             XCTAssertEqual(environment.preferences.value("show-thumbnail" as CFString) as? Bool, true)
             XCTAssertFalse(Inbox.isApplied)
+        }
+    }
+
+    /// A build with Inbox off shares the folder but not the saved settings, so
+    /// launch must leave a destination another build applied alone instead of
+    /// restoring from its own empty ones.
+    func testInboxOffLeavesAnotherBuildsAppliedDestinationAlone() throws {
+        try withInbox { environment in
+            environment.defaults.set(false, forKey: "inboxEnabled")
+            environment.preferences.set("location" as CFString, Inbox.folder.path)
+            environment.preferences.set("show-thumbnail" as CFString, false)
+
+            Inbox.reconcileIfEnabled(paused: false)
+            Inbox.reconcileIfEnabled(paused: true)
+
+            XCTAssertTrue(Inbox.isApplied)
+            XCTAssertEqual(environment.preferences.value("location" as CFString) as? String, Inbox.folder.path)
+            XCTAssertEqual(environment.preferences.value("show-thumbnail" as CFString) as? Bool, false)
         }
     }
 

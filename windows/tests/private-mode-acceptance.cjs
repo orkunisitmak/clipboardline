@@ -52,6 +52,14 @@ module.exports=async function privateModeAcceptance({application,check}){
    if(api.store.data.settings.paused)api.store.modify('setSettings',{patch:{paused:false}});
    out.captureSpannedPause=spanned;
 
+   // Two presses in a row must both count: the second decision has to wait for
+   // the first resume, or both would read the same target and only one applies.
+   api.store.modify('setSettings',{patch:{paused:true}});
+   await Promise.all([api.command('togglePause'),api.command('togglePause')]);
+   if(api.store.data.settings.paused!==true)throw new Error('The second private mode press during the resume was lost.');
+   api.store.modify('setSettings',{patch:{paused:false}});
+   out.doublePress=true;
+
    // A folder event whose 700 ms debounce is still pending when private mode
    // comes on must not import the file afterwards.
    api.store.modify('setSettings',{patch:{watchFolders:[watchedFolder],openAfterScreenshot:false}});
@@ -73,6 +81,18 @@ module.exports=async function privateModeAcceptance({application,check}){
    while(Date.now()<end&&count()===beforeWatch)await wait(50);
    if(count()!==beforeWatch+1)throw new Error('A watched-folder file was not imported after the resume.');
    out.watchedFolderDebounce=true;
+
+   // Adding or removing a folder reloads the watchers; a file whose 700 ms
+   // debounce is still pending must survive that reload and still be imported.
+   const beforeReload=count();
+   fs.writeFileSync(path.join(watchedFolder,'synthetic-reload.png'),png());
+   await wait(250);
+   api.store.modify('setSettings',{patch:{watchFolders:[watchedFolder]}});
+   api.configureWatchers();
+   const reloadEnd=Date.now()+6000;
+   while(Date.now()<reloadEnd&&count()===beforeReload)await wait(50);
+   if(count()!==beforeReload+1)throw new Error('Reloading the watched folders dropped a pending import.');
+   out.watchedFolderReload=true;
    return out;
   }finally{
    api.store.modify('setSettings',{patch:{paused:false,watchFolders:[],openAfterScreenshot:previousOpenAfterScreenshot}});
@@ -87,6 +107,6 @@ module.exports=async function privateModeAcceptance({application,check}){
   }
  },{});
  assert.ok(result.pauseResumeAdoption.after===result.pauseResumeAdoption.beforeResume+1);
- assert.ok(result.captureRacedPause&&result.captureSpannedPause&&result.watchedFolderDebounce);
- check('private mode adopts the paused clipboard generation on resume, drops a capture raced by the pause or spanned by it, and cancels pending watched-folder imports',result);
+ assert.ok(result.captureRacedPause&&result.captureSpannedPause&&result.doublePress&&result.watchedFolderDebounce&&result.watchedFolderReload);
+ check('private mode adopts the paused clipboard generation on resume, drops a capture raced by the pause or spanned by it, keeps both of two quick presses, and cancels only the debounces a pause must cancel',result);
 };

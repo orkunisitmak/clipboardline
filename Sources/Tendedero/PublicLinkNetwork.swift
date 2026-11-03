@@ -379,8 +379,13 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
             ?? Self.clean(metadata["twitter:title"], limit: 500)
             ?? Self.clean(titleMatch, limit: 500)
         author = Self.clean(metadata["author"] ?? metadata["og:site_name"], limit: 200)
-        let image = (metadata["og:image:secure_url"] ?? metadata["og:image"] ?? metadata["twitter:image"]).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
-        thumbnailURL = image.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }.flatMap { PublicLinkDestination($0)?.url }
+        thumbnailURL = ["og:image:secure_url", "og:image", "twitter:image"]
+            .compactMap { metadata[$0] }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .compactMap { URL(string: $0, relativeTo: url)?.absoluteURL }
+            .compactMap { PublicLinkDestination($0)?.url }
+            .first
     }
     /// Encoding sniffing order, as in windows/lib/network.cjs decodeHTML: UTF-8 BOM, Content-Type charset,
     /// XML declaration (XHTML only), early <meta charset>. Unknown labels fall through; undeclared bytes

@@ -74,6 +74,15 @@ async function main(){
   let state=await page.evaluate(()=>window.clipboardLine.state());const textItem=state.items.find(i=>i.text==='Windows clipboard text acceptance');assert.ok(textItem);check('real native text clipboard capture');
   await application.evaluate(async({clipboard})=>{await clipboard.writeText('A different copied text');await global.__clipboardLineTest.readClipboard();await clipboard.writeText('Windows clipboard text acceptance');await global.__clipboardLineTest.readClipboard();});
   state=await page.evaluate(()=>window.clipboardLine.state());assert.equal(state.items.filter(i=>i.text==='Windows clipboard text acceptance').length,1);assert.equal(state.items[0].id,textItem.id);check('exact text recopy deduplicates and moves newest first');
+  // A new note must be its own record even when its text matches a capture:
+  // resolving the merge with both sides put the old insert('text') branch back,
+  // which made createNote() unreachable and merged the note into the capture.
+  const note=await page.evaluate(text=>window.clipboardLine.command('newNote',{text}),textItem.text);
+  state=await page.evaluate(()=>window.clipboardLine.state());const noteItem=state.items.find(i=>i.id===note.result?.id);
+  assert.ok(noteItem&&noteItem.id!==textItem.id&&noteItem.createdAsNote===true&&state.items.filter(i=>i.text===textItem.text).length===2,JSON.stringify(note.result));
+  await page.evaluate(id=>window.clipboardLine.command('trash',{ids:[id]}),noteItem.id);
+  await page.evaluate(id=>window.clipboardLine.command('delete',{ids:[id]}),noteItem.id);
+  check('a new note with the text of an existing capture stays its own record');
   await page.evaluate(id=>window.clipboardLine.command('name',{id,name:'Named synthetic key'}),textItem.id);
   const folderState=await page.evaluate(()=>window.clipboardLine.command('createFolder',{name:'Acceptance'}));const folder=folderState.result;
   await page.evaluate(({id,folderId})=>window.clipboardLine.command('folder',{ids:[id],folderId}),{id:textItem.id,folderId:folder.id});

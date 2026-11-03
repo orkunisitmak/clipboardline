@@ -241,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateCapacity()
 
         if watchesFiles {
-            Inbox.reconcile(enabled: Inbox.isEnabled, paused: CapturePause.isPaused)
+            Inbox.reconcileIfEnabled(paused: CapturePause.isPaused)
             startWatcher()
         }
         restoreSettingsOnTermination()
@@ -1932,7 +1932,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard CapturePause.isPaused != on else { return }
         CapturePause.isPaused = on
         if watchesFiles {
-            Inbox.reconcile(enabled: Inbox.isEnabled, paused: on)
+            Inbox.reconcileIfEnabled(paused: on)
             startWatcher()
         }
         // Resuming starts with the next copy. Text is covered by

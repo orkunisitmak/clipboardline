@@ -54,3 +54,6 @@ test('adding a tag reuses the existing spelling and drops surrounding # like mac
  store.modify('tag',{id:third.id,tags:['Work','résumé','new']});assert.deepEqual(store.item(third.id).tags,['Work','résumé','new']);
  assert.throws(()=>store.modify('tag',{id:third.id,tags:['#'+'x'.repeat(65)]}),/Invalid tag name/);
 }));
+test('tag and folder names that differ by a kana, Devanagari or Thai mark stay distinct like on the Mac',()=>fixture(store=>{
+ for(const [a,b] of [['は','ば'],['क','कि'],['ก','กิ']]){const first=store.insert('text','one '+a+b),second=store.insert('text','two '+a+b);store.modify('tag',{ids:[first.id],tags:[a]});store.modify('tag',{ids:[second.id],tags:[b]});assert.deepEqual(store.item(second.id).tags,[b]);const folder=store.modify('createFolder',{name:a});store.modify('createFolder',{name:b});store.modify('removeFolder',{id:folder.id});}
+}));

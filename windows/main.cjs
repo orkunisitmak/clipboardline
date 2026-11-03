@@ -48,6 +48,9 @@ let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboa
 // A screenshot that started before private mode came on is invalid even when
 // capture is switched back on before its screen read returns.
 let pauseGeneration=0;
+// Two presses in a row must both count, so a toggle decides its target only
+// after the previous one has finished.
+let pauseToggles=Promise.resolve();
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
@@ -182,6 +185,20 @@ async function clipboardContent() {
 // pause — or just before it ended — is never imported when capture resumes.
 async function adoptClipboardGeneration(){
   try{const sequence=await native.clipboardSequence();if(Number.isInteger(sequence)&&sequence>0)lastGeneration.sequence=sequence;}catch{}
+}
+function togglePause(){
+  // Serialized: the target is read when this turn runs, so a press that lands
+  // while a previous resume is still adopting the board is not lost.
+  const run=pauseToggles.then(async()=>{
+    const paused=!store.data.settings.paused;
+    // Adopt the board before capture is allowed again. Adopting afterwards left
+    // a window in which the polling fallback could still import the paused copy.
+    if(!paused)await adoptClipboardGeneration();
+    store.modify('setSettings',{patch:{paused}});if(paused)pauseGeneration++;configureWatchers();
+    return paused;
+  });
+  pauseToggles=run.then(()=>{},()=>{});
+  return run;
 }
 async function readClipboard() {
   if(capturing){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;
@@ -321,15 +338,19 @@ async function recognize(id,quiet=false) {
 // them: a pause aborts them, while merely reloading the watchers keeps a running
 // import alive.
 const watcherTimers=new Map(),watcherImports=new Set();
-function stopWatcherJobs(cancel=false){
+// Only private mode cancels these: reloading the watched folders has to keep a
+// file whose debounce is still pending, or adding a folder would drop it.
+function stopWatcherJobs({pause=false}={}){
+  if(!pause)return;
   for(const timer of watcherTimers.values())clearTimeout(timer);
   watcherTimers.clear();
   // An import that already started has to be aborted: importFile saves the item
   // before it returns, so dropping the result afterwards cannot undo it.
-  if(cancel){for(const controller of watcherImports)controller.abort();watcherImports.clear();}
+  for(const controller of watcherImports)controller.abort();
+  watcherImports.clear();
 }
 function configureWatchers() {
-  stopWatcherJobs(store?.data.settings.paused===true);
+  stopWatcherJobs({pause:store?.data.settings.paused===true});
   for(const watcher of watchers)watcher.close();watchers=[];
   // Private mode skips new files from watched folders; existing files stay.
   if(store?.data.settings.paused)return;
@@ -435,14 +456,9 @@ async function command(action,payload={}) {
   }
   else if(action==='capture')result=await capture();
   else if(action==='togglePause'){
-    const paused=!store.data.settings.paused;
-    // Adopt the board before capture is allowed again. Adopting afterwards left
-    // a window in which the polling fallback could still import the paused copy.
-    if(!paused)await adoptClipboardGeneration();
-    store.modify('setSettings',{patch:{paused}});if(paused)pauseGeneration++;configureWatchers();
+    const paused=await togglePause();
     message=paused?'Private mode is on. New captures are paused.':'Private mode is off. Capture resumed.';result={paused};
   }
-  else if(action==='newNote'){const item=store.insert('text',payload.text||'New note');if(payload.title)store.modify('details',{id:item.id,name:payload.title});store.modify('retain',{ids:[item.id]});result={id:item.id};}
   else if(action==='newNote'){result={id:store.createNote(payload).id};}
   else if(action==='import'){const response=await dialog.showOpenDialog(window,{properties:['openFile','multiSelections'],filters:[{name:'Images, recordings and text',extensions:['png','jpg','jpeg','webp','bmp','mov','mp4','txt','md']}]});const imported=[],failures=[];for(const file of response.filePaths){try{const item=await importFile(file);imported.push(item.id);if(item.kind==='link')void enrich(item.id);}catch(error){failures.push(path.basename(file)+': '+error.message);}}result={ids:imported,failed:failures.length};if(failures.length)message=(imported.length?`Imported ${imported.length} · failed ${failures.length}. `:'')+failures[0];}
   else if(action==='searchImages'){if(!imageSearch)throw new Error('Offline image search is unavailable.');result=await imageSearch.search(payload.query,payload.eligibleIds);}
@@ -562,4 +578,4 @@ else app.whenReady().then(async()=>{
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
 app.on('second-instance',()=>{if(window)void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});
-app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();stopWatcherJobs(true);watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
+app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();stopWatcherJobs({pause:true});watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});

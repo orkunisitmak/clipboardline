@@ -86,6 +86,14 @@ enum Inbox {
         if enabled && !paused { apply() } else { restore() }
     }
 
+    /// Launch and the private mode switch only touch an enabled Inbox. The
+    /// folder is shared between builds, but the saved settings live in each
+    /// bundle's own defaults, so a build with Inbox off would otherwise restore
+    /// from empty settings and reset the user's screenshot destination.
+    static func reconcileIfEnabled(paused: Bool) {
+        if isEnabled { reconcile(enabled: true, paused: paused) }
+    }
+
     static func apply() {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // Never save our own values as the "previous" ones, for example after
