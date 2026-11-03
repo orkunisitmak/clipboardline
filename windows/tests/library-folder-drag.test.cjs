@@ -83,16 +83,17 @@ test('new folders have two levels while legacy deeper folders load and subtree r
  }finally{fs.rmSync(directory,{recursive:true,force:true});}
 });
 
-test('A plain shelf text or link drag says to hold Alt for the Desktop and folders, while Alt, images and the Library stay quiet',async()=>{
+test('A plain shelf text or link drag says to start the drag again with Alt for the Desktop and folders, while Alt, images and the Library stay quiet',async()=>{
  const f=renderer();await f.ready();const toast=()=>f.toastText();
  f.api.emit({view:'shelves'});await f.ready();
- for(const id of [f.ids[1],f.ids[2]]){await f.dispatch('dragend');f.clearToast();const drag=await f.drag(id);assert.equal(drag.prevented,undefined);assert.equal(toast(),'Hold Alt while dragging to drop on the Desktop or a folder as a file');assert.equal(f.commands.some(value=>value.action==='startDrag'),false);}
+ for(const id of [f.ids[1],f.ids[2]]){await f.dispatch('dragend');f.clearToast();const drag=await f.drag(id);assert.equal(drag.prevented,undefined);assert.equal(toast(),'To drop on the Desktop or a folder as a file, start the drag again while holding Alt');assert.equal(f.commands.some(value=>value.action==='startDrag'),false);}
  f.clearToast();await f.drag(f.ids[1],{alt:true});assert.equal(toast(),'');assert.equal(f.commands.at(-1).action,'startDrag');
  f.clearToast();await f.drag(f.ids[0]);assert.equal(toast(),'');
  f.api.emit({view:'library'});await f.ready();f.clearToast();await f.drag(f.ids[1]);assert.equal(toast(),'');
 });
 
-test('Turkish Desktop drag hint says to keep Alt held',()=>{
- const source=fs.readFileSync(path.join(__dirname,'../renderer.js'),'utf8');
- assert.match(source,/'Hold Alt while dragging to drop on the Desktop or a folder as a file':'[^']*Alt tuşunu basılı tut'/);
+test('A plain shelf drag shows the Turkish Desktop hint when the language is Turkish',async()=>{
+ const f=renderer();await f.ready();
+ f.api.emit({view:'shelves',settings:{...f.state.settings,language:'tr'}});await f.ready();f.clearToast();
+ await f.drag(f.ids[1]);assert.equal(f.toastText(),'Masaüstüne veya klasöre dosya olarak bırakmak için sürüklemeyi Alt tuşu basılıyken yeniden başlat');
 });
