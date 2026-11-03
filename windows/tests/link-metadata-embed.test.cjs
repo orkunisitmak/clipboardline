@@ -41,3 +41,12 @@ test('a custom element named like a textarea is not a textarea and a pile of bro
  await page('<textarea "'.repeat(40000)+'<title>real</title>');
  assert.ok(Date.now()-started<2000);
 });
+
+test('textarea start tags are read whole whatever their length, and only ASCII spacing ends the name',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page('<textarea data='+'x'.repeat(3000)+'><meta property="og:title" content="injected"></textarea><title>real</title>')).title,'real');
+ assert.equal((await page('<textarea\u00a0x><meta property="og:title" content="real">')).title,'real');
+ const started=Date.now();
+ await page('<script>'.repeat(60000)+'<!--'.repeat(60000)+'<title>real</title>');
+ assert.ok(Date.now()-started<2000);
+});

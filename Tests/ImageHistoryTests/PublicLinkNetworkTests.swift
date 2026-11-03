@@ -150,6 +150,8 @@ import XCTest
             "<title>real</title><textarea><meta property='og:title' content='injected'>",
             "<script>const t = '<textarea>';</script><title>real</title>",
             "<textarea-x></textarea-x><meta property='og:title' content='real'>",
+            "<textarea data=\(String(repeating: "x", count: 3000))><meta property='og:title' content='injected'></textarea><title>real</title>",
+            "<textarea\u{A0}x><meta property='og:title' content='real'>",
             "<textarea data-x=\"> </textarea>\"><meta property='og:title' content='injected'></textarea><title>real</title>",
         ]
         for page in pages {

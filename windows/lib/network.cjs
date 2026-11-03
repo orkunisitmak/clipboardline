@@ -104,6 +104,27 @@ function meta(html, name) {
   }
   return '';
 }
+// As on macOS, comments, scripts and styles are not page metadata. A textarea holds text, so a meta or title inside it isn't either; its start tag may hold quoted ">" and an unclosed one hides the rest, as in a browser.
+// One left-to-right scan: every search starts where the last one ended, and a missing closer is looked up once, so cost stays linear.
+function withoutNonMetadata(html) {
+  const opener = /<!--|<script\b|<style\b|<textarea(?=[ \t\n\f\r\/>])/gi, closers = {}, missing = new Set();
+  let out = '', last = 0, match;
+  while ((match = opener.exec(html))) {
+    const name = match[0].slice(1).toLowerCase(), skip = match.index + match[0].length; let from = skip, end = -1;
+    if (name === 'textarea') {
+      for (let quote = ''; from < html.length; from++) { const c = html[from]; if (quote) { if (c === quote) quote = ''; } else if (c === '"' || c === "'") quote = c; else if (c === '>') break; }
+      if (from >= html.length) end = html.length;
+    } else if (name !== '!--') { from = html.indexOf('>', from); if (from < 0) { opener.lastIndex = html.length; continue; } }
+    if (end < 0 && !missing.has(name)) {
+      const closer = closers[name] ??= name === '!--' ? /-->/g : new RegExp('</' + name + '[ \\t\\n\\f\\r]*>', 'gi'); closer.lastIndex = name === '!--' ? from : from + 1;
+      const close = closer.exec(html); if (close) end = close.index + close[0].length; else missing.add(name);
+    }
+    if (end < 0 && name === 'textarea') end = html.length;
+    if (end < 0) { opener.lastIndex = skip; continue; }
+    out += html.slice(last, match.index); last = end; opener.lastIndex = end;
+  }
+  return out + html.slice(last);
+}
 async function linkMetadata(input, fetcher = metadataFetch) {
   metadataGuard(new URL(input));
   const url = new URL(input); const youtube = /^(www\.|m\.|music\.)?youtube\.com$/.test(url.hostname) || url.hostname === 'youtu.be';
@@ -116,8 +137,7 @@ async function linkMetadata(input, fetcher = metadataFetch) {
     return {title: String(data.title || '').trim().slice(0, 500)||url.hostname, author: String(data.author_name || '').slice(0, 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
   }
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
-  // As on macOS, comments, scripts and styles are not page metadata. A textarea holds text, so a meta or title inside it isn't either; an unclosed one hides the rest, as in a browser.
-  const html = decodeHTML(response.bytes, response.type).replace(/<!--[\s\S]*?-->|<script\b[^>]*>[\s\S]*?<\/script\s*>|<style\b[^>]*>[\s\S]*?<\/style\s*>|<textarea(?=[\s/>])(?:[^>"']|"[^"]*"|'[^']*'){0,1024}>(?:[\s\S]*?<\/textarea\s*>|[\s\S]*)/gi, '');
+  const html = withoutNonMetadata(decodeHTML(response.bytes, response.type));
   // Collapse layout whitespace only in display text; og:image stays a URL.
   const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
   // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
