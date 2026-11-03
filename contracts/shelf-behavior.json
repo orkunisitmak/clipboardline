@@ -114,6 +114,12 @@
         "windows": "The confirm handler sets activeFolderRemoved from folderSubtreeContains() and resets the scope only then; library-ui.test.cjs covers an unrelated folder and the active ancestor."
       },
       {
+        "id": "tag-removal-view",
+        "behavior": "Removing a tag returns the Library to My library only when the open view is that tag; removing any other tag leaves the current view, filters and selection as they are.",
+        "macos": "LibraryModel.deleteTag(_:) calls changeScope(.saved) only after a successful removal of the tag whose view is open; LibraryInteractionTests.testRemovingAnotherTagKeepsTheOpenViewLikeFolders covers it.",
+        "windows": "The confirm handler sets activeTagRemoved from the open tag scope and resets the scope only then; library-ui.test.cjs covers removing a tag that is not open."
+      },
+      {
         "id": "item-display-title",
         "behavior": "An item without a name is titled by its content: a text by its first line that is not blank, with surrounding spaces and tabs removed and at most 120 grapheme clusters (lines end at LF or CRLF) and the localized \"Untitled note\" when every line is blank, a link by its fetched page title or else its host name and the localized \"Link\" when the stored URL does not parse, so an indented snippet or a long copied URL reads the same on both platforms.",
         "macos": "LibraryRecord.displayTitle returns the first non-blank line, trimmed and capped at 120 characters (Characters are grapheme clusters), or L(\"Untitled note\") for an all-blank text, and the metadata title, the URL host or L(\"Link\") for a link; LibraryInteractionTests.testUnnamedItemTitlesAreTheTrimmedFirstLineAndLinkHostLikeWindows covers it.",
