@@ -189,6 +189,22 @@ import XCTest
         XCTAssertFalse(try command(.unassignFolder(folder.id), context: context, bindings: bindings).isEnabled)
     }
 
+    func testSameNamedSubfoldersGetDistinctFolderRows() throws {
+        let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
+        let bindings = KeyboardBindings(defaults: fixture.defaults)
+        let work = LibraryCollection(id: UUID(), name: "Work", parentID: nil), personal = LibraryCollection(id: UUID(), name: "Personal", parentID: nil)
+        let workYear = LibraryCollection(id: UUID(), name: "2024", parentID: work.id), personalYear = LibraryCollection(id: UUID(), name: "2024", parentID: personal.id)
+        var context = ActionBarCatalog.Context()
+        context.origin = .library; context.selectedCount = 1; context.kind = .text
+        context.collections = [work, personal, workYear, personalYear]; context.itemFolders = [workYear, personalYear]
+        let entries = ActionBarCatalog.entries(context: context, bindings: bindings)
+        for (action, label) in [(ActionBarAction.openFolder(workYear.id), "Open folder"), (.assignFolder(workYear.id), "Add to folder"), (.unassignFolder(workYear.id), "Remove from folder")] {
+            XCTAssertEqual(try command(action, context: context, bindings: bindings).title, L(label) + ": Work / 2024")
+        }
+        XCTAssertEqual(try command(.assignFolder(personalYear.id), context: context, bindings: bindings).title, L("Add to folder") + ": Personal / 2024")
+        XCTAssertEqual(entries.map { $0.command.title }.count, Set(entries.map { $0.command.title }).count)
+    }
+
     func testCatalogBilingualKeywordsAreExplicitAndNeverIncludeOpaqueIdentifiers() throws {
         _ = NSApplication.shared
         let fixture = try SyntheticFixture(); defer { fixture.cleanup() }

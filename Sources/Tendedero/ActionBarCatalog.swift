@@ -124,13 +124,13 @@ enum ActionBarMenuAction: String, CaseIterable {
         }
         for folder in c.collections {
             let action = ActionBarAction.openFolder(folder.id)
-            result.append(Entry(action: action, command: .init(id: action.id, title: L("Open folder") + ": " + folder.name,
+            result.append(Entry(action: action, command: .init(id: action.id, title: L("Open folder") + ": " + folderPath(folder, c),
                 subtitle: L("Library"), systemImage: "folder", isEnabled: c.libraryAvailable,
                 group: L("Folders"), keywords: ["folder", "klasör", "open", "aç"],
                 disabledReason: c.libraryAvailable ? "" : L("Library unavailable"), isActive: c.libraryScope == .collection(folder.id))))
             let assign = ActionBarAction.assignFolder(folder.id)
             let canAssign = c.hasSelection && !c.isDeleted
-            result.append(Entry(action: assign, command: .init(id: assign.id, title: L("Add to folder") + ": " + folder.name,
+            result.append(Entry(action: assign, command: .init(id: assign.id, title: L("Add to folder") + ": " + folderPath(folder, c),
                 subtitle: L("Selected item"), systemImage: "folder.badge.plus", isEnabled: canAssign,
                 group: L("Organization"), keywords: ["add", "folder", "organize", "ekle", "klasör", "düzenle"],
                 disabledReason: canAssign ? "" : L("Select an item first"))))
@@ -138,7 +138,7 @@ enum ActionBarMenuAction: String, CaseIterable {
             let canMove: Bool
             if case let .collection(source) = c.libraryScope { canMove = c.isLibrary && canAssign && source != folder.id }
             else { canMove = false }
-            result.append(Entry(action: move, command: .init(id: move.id, title: L("Move to folder") + ": " + folder.name,
+            result.append(Entry(action: move, command: .init(id: move.id, title: L("Move to folder") + ": " + folderPath(folder, c),
                 subtitle: L("Selected item"), systemImage: "folder", isEnabled: canMove,
                 group: L("Organization"), keywords: ["move", "folder", "taşı", "klasör"],
                 disabledReason: canMove ? "" : L("Select items in a different folder first"))))
@@ -153,7 +153,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         for folder in c.itemFolders {
             let action = ActionBarAction.unassignFolder(folder.id)
             let enabled = c.singleSelection && !c.isDeleted
-            result.append(Entry(action: action, command: .init(id: action.id, title: L("Remove from folder") + ": " + folder.name,
+            result.append(Entry(action: action, command: .init(id: action.id, title: L("Remove from folder") + ": " + folderPath(folder, c),
                 subtitle: L("Selected item"), systemImage: "folder.badge.minus", isEnabled: enabled,
                 group: L("Organization"), keywords: ["remove", "folder", "klasörden", "çıkar"],
                 disabledReason: enabled ? "" : L("Select one item first"))))
@@ -366,6 +366,12 @@ enum ActionBarMenuAction: String, CaseIterable {
         }
     }
 
+    /// A subfolder reads "Parent / Child" (the whole parent chain, cycle-safe), as in the Library window and on Windows.
+    private static func folderPath(_ folder: LibraryCollection, _ c: Context) -> String {
+        var names = [folder.name], visited: Set<UUID> = [folder.id], next = folder.parentID
+        while let id = next, visited.insert(id).inserted, let parent = c.collections.first(where: { $0.id == id }) { names.insert(parent.name, at: 0); next = parent.parentID }
+        return names.joined(separator: " / ")
+    }
     private static func menuAvailability(_ action: ActionBarMenuAction, _ c: Context) -> (Bool, String) {
         func require(_ enabled: Bool, _ reason: String) -> (Bool, String) { (enabled, enabled ? "" : reason) }
         switch action {
