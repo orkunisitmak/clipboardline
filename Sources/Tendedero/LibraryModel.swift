@@ -383,7 +383,7 @@ import Combine
         }
     }
     /// True when favorite() would unpin: every acted-on item is already pinned.
-    var actionsArePinned: Bool { let records = (try? store.records(actionIDs)) ?? []; return !records.isEmpty && records.allSatisfy(\.favorite) }
+    var actionsArePinned: Bool { (try? store.allPinned(actionIDs)) ?? false }
     func favorite() { guard flushEdits() else { return }; perform { try store.toggleFavorite(actionIDs) } }
     func retain() { guard flushEdits() else { return }; perform { try store.retain(actionIDs) } }
     func trash() { trashSelection() }
