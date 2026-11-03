@@ -414,9 +414,18 @@ import Combine
         let targets = ids ?? actionIDs
         guard !targets.isEmpty else { return }
         // The restored items leave Trash: select the first one that remains, as Windows does.
-        if query.scope == .trash { pendingKeyboardSelection = (nil, query); restoringIDs = Set(targets) }
+        if query.scope == .trash { pendingKeyboardSelection = (nil, query); restoringIDs.formUnion(targets) }
         do { try store.restore(targets) }
-        catch { pendingKeyboardSelection = nil; restoringIDs = []; report(error.localizedDescription) }
+        catch {
+            if query.scope == .trash {
+                restoringIDs.subtract(targets)
+                if restoringIDs.isEmpty { pendingKeyboardSelection = nil }
+            } else {
+                pendingKeyboardSelection = nil
+                restoringIDs = []
+            }
+            report(error.localizedDescription)
+        }
     }
     func assign(_ folder: UUID, moving: Bool = false) {
         guard flushEdits() else { return }
