@@ -195,6 +195,22 @@ final class PublicLinkNetworkAsyncTests: XCTestCase {
         catch { XCTAssertEqual(error as? PublicLinkError, .blockedAddress) }
         let count = await probe.plans.count; XCTAssertEqual(count, 0)
     }
+    func testDeadlineSpansRedirectsInsteadOfRestartingPerHop() async throws {
+        let probe = PublicLinkProbe(answers: Array(repeating: [PublicLinkAddress("93.184.216.34")!], count: 4),
+            responses: Array(repeating: PublicLinkHTTPResponse(status: 302, headers: ["location": "/next"], body: Data()), count: 4))
+        let slow = PublicLinkNetwork(resolve: { try await probe.resolve($0) }, exchange: { plan, _ in
+            try await Task.sleep(for: .milliseconds(200)); return try await probe.exchange(plan) })
+        let started = ContinuousClock.now
+        do { _ = try await slow.fetch(URL(string: "https://public.example.org/a")!, limit: 100, deadline: .milliseconds(300)); XCTFail("Chain outlived its deadline") }
+        catch { XCTAssertEqual(error as? PublicLinkError, .timeout) }
+        XCTAssertLessThan(ContinuousClock.now - started, .milliseconds(700))
+        let plans = await probe.plans; XCTAssertLessThanOrEqual(plans.count, 2)
+    }
+    func testFetchWithinTheDeadlineStillReturnsTheResponse() async throws {
+        let probe = PublicLinkProbe(answers: [[PublicLinkAddress("93.184.216.34")!]], responses: [PublicLinkHTTPResponse(status: 200, headers: [:], body: Data("ok".utf8))])
+        let result = try await client(probe).fetch(URL(string: "https://public.example.org/a")!, limit: 100, deadline: .seconds(5))
+        XCTAssertEqual(result.body, Data("ok".utf8))
+    }
     func testRedirectRebindingRevalidatesDNSBeforeSendingAnotherHTTPRequest() async throws {
         let probe = PublicLinkProbe(answers: [[PublicLinkAddress("93.184.216.34")!], [PublicLinkAddress("127.0.0.1")!]],
             responses: [PublicLinkHTTPResponse(status: 302, headers: ["location": "/next"], body: Data())])
