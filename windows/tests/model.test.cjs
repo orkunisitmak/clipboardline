@@ -333,9 +333,10 @@ test('an item can get a 51st tag, like on the Mac',()=>fixture(s=>{const item=s.
 test('a Library inspector title over 200 characters is saved like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello'),title='Quarterly planning notes '.repeat(10).trim();assert.equal(title.length,249);s.modify('details',{ids:[item.id],id:item.id,name:title});assert.equal(s.item(item.id).name,title);assert.throws(()=>s.modify('details',{ids:[item.id],id:item.id,name:'ş'.repeat(600000)}),/Invalid text/);assert.equal(s.item(item.id).name,title);}));
 
 test('renaming a tag to the name it already has changes nothing and keeps Trash undo',()=>fixture(s=>{
- const item=s.insert('text','tagged');s.modify('tag',{ids:[item.id],tags:['urgent']});
+ const item=s.insert('text','tagged');s.modify('tag',{ids:[item.id],tags:['urgent']});s.modify('trashUndoably',{ids:[item.id]});
  let persisted=0;const persist=s.persist.bind(s);s.persist=()=>{persisted++;return persist();};
  s.modify('renameTag',{tag:'urgent',name:'#urgent'});s.modify('renameTag',{tag:'urgent',name:'urgent'});
  assert.equal(persisted,0);assert.deepEqual(s.item(item.id).tags,['urgent']);
+ s.modify('undoTrash');assert.equal(s.item(item.id).trashedAt,null);persisted=0;
  s.modify('renameTag',{tag:'urgent',name:'Urgent'});assert.equal(persisted,1);assert.deepEqual(s.item(item.id).tags,['Urgent']);
 }));
