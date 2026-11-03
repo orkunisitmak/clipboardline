@@ -40,6 +40,24 @@ final class DualShelfTests: HistoryTestCase {
             _ = keyboard.handle(key(123, flags: .shift)); XCTAssertEqual(line.selectedItems.count, 2)
         }
     }
+    @MainActor func testImageTakeDownOnAMultiSelectionKeepsPinnedImagesInTheLibrary() throws {
+        try fixture { f in
+            let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+            let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, copyImage: { _ in }, library: store)
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            for item in line.items { try line.togglePin(item.id) }
+            line.selectAll()
+            var trashRequested = false; line.onTrashRequested = { trashRequested = true }
+            let image = try XCTUnwrap(line.items.first), view = GrabView()
+            GrabArea(item: image, line: line).configure(view)
+            let item = try XCTUnwrap(view.menuProvider().items.first { [L("Take down"), L("Discard")].contains($0.title) })
+            _ = item.target?.perform(item.action, with: item)
+            XCTAssertFalse(trashRequested)
+            XCTAssertTrue(line.items.isEmpty)
+            let records = try store.query(LibraryQuery(scope: .saved))
+            XCTAssertEqual(records.count, 3); XCTAssertTrue(records.allSatisfy { $0.deletedAt == nil && !$0.onShelf })
+        }
+    }
     @MainActor func testTextRangeEnterCommandAAndDeleteAreSymmetric() throws {
         try fixture { f in
             var copied = ""; var trashed: [UUID] = []
