@@ -111,6 +111,11 @@ import XCTest
         try library.addTag("#urgent", to: [second.id])
         XCTAssertEqual(try library.tags().map(\.name), ["urgent"])
         XCTAssertThrowsError(try library.renameTag(tag.id, name: "##"))
+        let revision = library.revision
+        try library.renameTag(tag.id, name: "#urgent"); try library.renameTag(tag.id, name: "urgent")
+        XCTAssertEqual(library.revision, revision)
+        try library.renameTag(tag.id, name: "Urgent")
+        XCTAssertEqual(try library.tags().map(\.name), ["Urgent"]); XCTAssertEqual(library.revision, revision + 1)
     }
     func testTagRenameSearchTurkishAndLiteralSQLCharacters() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
