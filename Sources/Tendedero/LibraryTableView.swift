@@ -193,14 +193,14 @@ private final class LibraryNativeTable: NSTableView {
         let menu = NSMenu()
         menu.addItem(ClosureMenuItem(L("Preview")) { [weak model] in model?.onPreview?(id) })
         menu.addItem(ClosureMenuItem(L("Copy")) { [weak model] in model?.copy() })
-        menu.addItem(ClosureMenuItem(L("Pin favorite")) { [weak model] in model?.favorite() })
         if model.query.scope != .trash {
+            menu.addItem(ClosureMenuItem(L("Pin favorite")) { [weak model] in model?.favorite() })
             menu.addItem(ClosureMenuItem(L("Name and pin…")) { [weak model] in model?.onNameAndPinRequested?(id) })
+            menu.addItem(ClosureMenuItem(L("Add tag…")) { [weak model] in model?.onTagRequested?() })
+            let folders = NSMenu()
+            for folder in model.collections { folders.addItem(ClosureMenuItem(folder.name) { [weak model] in model?.assign(folder.id) }) }
+            if !model.collections.isEmpty { let item = NSMenuItem(title: L("Add to folder"), action: nil, keyEquivalent: ""); item.submenu = folders; menu.addItem(item) }
         }
-        menu.addItem(ClosureMenuItem(L("Add tag…")) { [weak model] in model?.onTagRequested?() })
-        let folders = NSMenu()
-        for folder in model.collections { folders.addItem(ClosureMenuItem(folder.name) { [weak model] in model?.assign(folder.id) }) }
-        if !model.collections.isEmpty { let item = NSMenuItem(title: L("Add to folder"), action: nil, keyEquivalent: ""); item.submenu = folders; menu.addItem(item) }
         menu.addItem(ClosureMenuItem(L("Export copies…")) { [weak model] in model?.onExportRequested?() })
         menu.addItem(.separator())
         if model.query.scope == .trash { menu.addItem(ClosureMenuItem(L("Restore")) { [weak model] in model?.restore() }) }

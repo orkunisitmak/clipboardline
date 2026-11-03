@@ -31,6 +31,24 @@ import XCTest
         wait { preview.controls.pinButton.accessibilityLabel() == L("Unpin") && !model.loading }
         XCTAssertEqual(publications, 0); XCTAssertEqual(controller.currentID, record.id)
     }
+    func testTrashRowMenuOffersNoOrganizeActions() throws {
+        _ = NSApplication.shared
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, moveToTrash: { $0 })
+        let note = try XCTUnwrap(store.captureText("Quarterly plan")); _ = try store.createCollection("Work")
+        try store.trash([note.id])
+        let model = LibraryModel(store: store), controller = LibraryTableController(model: model)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentViewController = controller; defer { window.contentViewController = nil }
+        model.changeScope(.trash)
+        wait { model.ids == [note.id] && !model.loading && controller.table.numberOfRows == 1 }
+        controller.table.layoutSubtreeIfNeeded()
+        let rect = controller.table.rect(ofRow: 0), point = controller.table.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        let titles = try XCTUnwrap(controller.table.menu(for: event)).items.map(\.title)
+        for title in [L("Pin favorite"), L("Add tag…"), L("Add to folder"), L("Name and pin…")] { XCTAssertFalse(titles.contains(title), title) }
+        XCTAssertTrue(titles.contains(L("Copy")))
+    }
     func testClosedLibraryDefersCaptureQueriesAndRefreshesOnceOnReopen() throws {
         _ = NSApplication.shared
         let f = try SyntheticFixture(); defer { f.cleanup() }
