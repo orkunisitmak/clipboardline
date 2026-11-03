@@ -136,6 +136,12 @@
         "behavior": "Clear filters is available in the action list only while the Library has a filter to clear (favorites only, a search, a type, a date range, a domain, a tag or a search mode other than all); with no filter it is disabled with the reason \"No filters to clear\", and with the Library closed it keeps the Library reason.",
         "macos": "ActionBarMenuAction.clearFilters requires libraryAvailable and hasLibraryFilters and otherwise names \"No filters to clear\"; ActionBarCatalogTests covers it.",
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
+      },
+      {
+        "id": "domain-filter-parses-only-non-ascii",
+        "behavior": "The Library domain filter ignores case, surrounding dots and a leading www, and matches the host and its subdomains. A typed name is converted to its host form only when it has non-ASCII characters and no path, query, fragment, port, credentials, backslash or space, so bücher.de finds xn--bcher-kva.de; an ASCII entry such as 0x7f.1 is compared as typed and is not rewritten to 127.0.0.1.",
+        "macos": "LibraryStore.query builds the domain match from the typed name and calls URL(string:) only when it has a non-ASCII scalar; LibraryStoreTests.testDomainFilterMatchesATypedNumberLiterallyInsteadOfAnIPAddress and testDomainFilterMatchesAnInternationalizedNameTypedAsWritten cover it.",
+        "windows": "libraryBaseItems() in renderer.js runs new URL on the typed name only when it has a non-ASCII character; library-ui.test.cjs 'Library domain filter matches a typed number literally and does not rewrite it to an IP address' and 'Library domain filter finds an internationalized link typed as written' cover it."
       }
     ]
   },

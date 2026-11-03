@@ -114,7 +114,7 @@ private enum LibrarySQL {
         if !query.domain.isEmpty {
             var domain = query.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
             // Stored hosts are ASCII (punycode), so an internationalized name typed as written is converted first; anything with a path, query, port or credentials is not a host name and stays as typed.
-            if domain.rangeOfCharacter(from: CharacterSet(charactersIn: "/?#@:\\").union(.whitespaces)) == nil, let host = URL(string: "https://" + domain)?.host { domain = host }
+            if domain.unicodeScalars.contains(where: { !$0.isASCII }), domain.rangeOfCharacter(from: CharacterSet(charactersIn: "/?#@:\\").union(.whitespaces)) == nil, let host = URL(string: "https://" + domain)?.host { domain = host }
             if domain.hasPrefix("www.") { domain.removeFirst(4) }
             let suffix = "." + domain
             // Literal host boundaries include subdomains without wildcard or
