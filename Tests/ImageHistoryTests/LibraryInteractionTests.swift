@@ -242,8 +242,10 @@ import XCTest
         wait { model.tags.count == 2 && !model.loading }
         let draft = try XCTUnwrap(model.tags.first { $0.name == "draft" }), open = try XCTUnwrap(model.tags.first { $0.name == "open" })
         model.changeScope(.collection(keep)); wait { model.query.scope == .collection(keep) && model.ids == [first.id] && !model.loading }
+        model.select(first.id); wait { model.selectedIDs == [first.id] && model.focusedID == first.id }
         model.deleteTag(draft.id); wait { model.tags.count == 1 && !model.loading }
         XCTAssertEqual(model.query.scope, .collection(keep)); XCTAssertEqual(model.ids, [first.id])
+        XCTAssertEqual(model.selectedIDs, [first.id]); XCTAssertEqual(model.focusedID, first.id)
         model.changeScope(.tag(open.id)); wait { model.query.scope == .tag(open.id) && !model.loading }
         model.deleteTag(open.id); wait { model.tags.isEmpty && model.query.scope == .saved && !model.loading }
     }

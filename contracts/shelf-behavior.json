@@ -115,7 +115,7 @@
       },
       {
         "id": "tag-removal-view",
-        "behavior": "Removing a tag returns the Library to My library only when the open view is that tag; removing any other tag leaves the current view, filters and selection as they are.",
+        "behavior": "Removing a tag returns the Library to My library only when the open view is that tag; removing any other tag leaves the current view and selection as they are, and only drops that tag from the active filters.",
         "macos": "LibraryModel.deleteTag(_:) calls changeScope(.saved) only after a successful removal of the tag whose view is open; LibraryInteractionTests.testRemovingAnotherTagKeepsTheOpenViewLikeFolders covers it.",
         "windows": "The confirm handler sets activeTagRemoved from the open tag scope and resets the scope only then; library-ui.test.cjs covers removing a tag that is not open."
       },
