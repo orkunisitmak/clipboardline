@@ -109,9 +109,9 @@
       },
       {
         "id": "undo-take-down-no-duplicate",
-        "behavior": "Undo take down does not bring back a text or link when the same content was copied again after it was taken down, so the shelf never shows the same text or link twice.",
-        "macos": "LibraryStore.undoShelfRemoval skips a record that has a live twin on the shelf (hasLiveTwin); LibraryStoreTests.testUndoTakeDownDoesNotHangATextOrLinkTwiceAfterItWasCopiedAgain covers it.",
-        "windows": "Store.modify('undo') leaves a trashed text or link in Trash when a live item of the same kind and content exists; model.test.cjs covers it."
+        "behavior": "Undo take down does not bring back a text or link when the same content is on the shelf again because it was copied after the take down, so that Undo never hangs the same text or link twice. Images and a copy that is off the shelf do not block it, and restoring from Trash by hand is not limited.",
+        "macos": "LibraryStore.undoShelfRemoval skips a text or link record that has a live twin on the shelf (hasLiveTwin, which repairs the text index first and never matches images); LibraryStoreTests.testUndoTakeDownDoesNotHangATextOrLinkTwiceAfterItWasCopiedAgain and testUndoTakeDownSeesATextEditedByAnOlderAppWhileOpen cover it.",
+        "windows": "Store.modify('undo') leaves a trashed text or link in Trash when a live item of the same kind and content is on the shelf, and ignores images and copies hidden from the shelf; model.test.cjs covers it."
       },
       {
         "id": "item-name-trimming",
