@@ -109,7 +109,7 @@ import Combine
         }
     }
     /// A subfolder reads "Parent / Middle / Child" (the whole parent chain, cycle-safe), as on Windows.
-    private func folderPath(_ id: UUID) -> String? {
+    func folderPath(_ id: UUID) -> String? {
         guard collections.contains(where: { $0.id == id }) else { return nil }
         var names: [String] = [], visited = Set<UUID>(), next: UUID? = id
         while let current = next, visited.insert(current).inserted, let folder = collections.first(where: { $0.id == current }) {

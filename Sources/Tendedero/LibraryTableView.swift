@@ -199,7 +199,7 @@ private final class LibraryNativeTable: NSTableView {
         }
         menu.addItem(ClosureMenuItem(L("Add tag…")) { [weak model] in model?.onTagRequested?() })
         let folders = NSMenu()
-        for folder in model.collections { folders.addItem(ClosureMenuItem(folder.name) { [weak model] in model?.assign(folder.id) }) }
+        for folder in model.collections { folders.addItem(ClosureMenuItem(model.folderPath(folder.id) ?? folder.name) { [weak model] in model?.assign(folder.id) }) }
         if !model.collections.isEmpty { let item = NSMenuItem(title: L("Add to folder"), action: nil, keyEquivalent: ""); item.submenu = folders; menu.addItem(item) }
         menu.addItem(ClosureMenuItem(L("Export copies…")) { [weak model] in model?.onExportRequested?() })
         menu.addItem(.separator())
