@@ -452,7 +452,7 @@ class Store {
     }
     if (action === 'undo') {
       const batch = this.undoStack.pop(); if (!batch) return;
-      for (const before of batch) { const item = this.data.items.find(i => i.id === before.id); if (item) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; } }
+      for (const before of batch) { const item = this.data.items.find(i => i.id === before.id); if (item&&item.trashedAt&&before.trashedAt==null&&this.data.items.some(other=>other!==item&&!other.trashedAt&&!other.createdAsNote&&!item.createdAsNote&&other.kind===item.kind&&(item.kind==='text'?this.textIdentity(other)===this.textIdentity(item):item.kind==='link'?other.url===item.url:!item.recording&&!other.recording&&other.imageFile===item.imageFile)))continue; if (item) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; } }
       this.persist(); return;
     }
     const items = this.selected(payload.ids || (payload.id ? [payload.id] : []));

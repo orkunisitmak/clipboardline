@@ -799,11 +799,27 @@ extension String {
                 return !record.onShelf && record.deletedAt == entry.removedAt
             }
             guard !values.isEmpty else { shelfRemovalUndo.removeLast(); continue }
-            let ids = values.map(\.id)
+            // Copying the same text or link again while it was off the shelf made a new card; Undo must not hang it twice.
+            let restorable = try values.filter { entry in try item(entry.id).map { try !hasLiveTwin($0) } ?? false }
+            guard !restorable.isEmpty else { shelfRemovalUndo.removeLast(); return [] }
+            let ids = restorable.map(\.id)
             try mutate(ids, owning: false) { $0.onShelf = true; $0.deletedAt = nil; $0.trashRevision = nil }
             shelfRemovalUndo.removeLast(); return ids
         }
         return []
+    }
+    private func hasLiveTwin(_ record: LibraryRecord) throws -> Bool {
+        guard record.deletedAt != nil else { return false }
+        let id = [SQLValue.text(record.id.uuidString)]
+        if record.kind == .link, let normalized = record.normalizedURL {
+            return try !db.rows("SELECT 1 FROM items WHERE normalized=? AND kind='link' AND deleted IS NULL AND shelf=1 AND id<>?", [.text(normalized)] + id).isEmpty
+        }
+        guard record.kind == .text, let text = record.text else { return false }
+        let key = TextIdentity.key(text)
+        for row in try db.rows("SELECT i.id FROM text_identity t JOIN items i ON i.id=t.item WHERE t.digest=? AND i.kind='text' AND i.deleted IS NULL AND i.shelf=1 AND i.id<>?", [.blob(Self.textDigest(text))] + id) {
+            if let other = row["id"]?.string.flatMap(UUID.init(uuidString:)), let candidate = try item(other)?.text, TextIdentity.key(candidate).utf8.elementsEqual(key.utf8) { return true }
+        }
+        return false
     }
     private func invalidateShelfUndo(_ ids: [UUID]) {
         let affected = Set(ids)
