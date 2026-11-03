@@ -311,6 +311,12 @@ import XCTest
         let untrusted = try LinkMetadataService.youtubeMetadata(Data(#"{"thumbnail_url":"http://127.0.0.1/private"}"#.utf8)); XCTAssertNil(untrusted.1)
         var failed = false; do { _ = try LinkMetadataService.youtubeMetadata(Data("not json".utf8)) } catch { failed = true }; XCTAssertTrue(failed)
     }
+    func testYouTubeWhitespaceOnlyTitleAndAuthorAreDroppedLikeWindows() throws {
+        let blank = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"   ","author_name":" \n "}"#.utf8))
+        XCTAssertNil(blank.0.title); XCTAssertNil(blank.0.author)
+        let padded = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"  Synthetic title ","author_name":"  Synthetic channel "}"#.utf8))
+        XCTAssertEqual(padded.0.title, "Synthetic title"); XCTAssertEqual(padded.0.author, "Synthetic channel")
+    }
     func testMetadataConcurrencyBackoffPrivateLinksAndUserTitle() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         var calls = 0

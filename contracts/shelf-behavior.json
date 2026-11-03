@@ -60,6 +60,12 @@
         "windows": "linkMetadata in lib/network.cjs treats a whitespace-only og:image as missing; security.test.cjs covers it."
       },
       {
+        "id": "link-youtube-blank-author",
+        "behavior": "A YouTube link preview trims the oEmbed author name; a blank or whitespace-only author is dropped, so the preview shows the host instead of an empty line.",
+        "macos": "LinkMetadataService.youtubeMetadata trims the author and returns nil when it is blank; LibraryInteractionTests covers a blank and a padded author.",
+        "windows": "linkMetadata in lib/network.cjs trims author_name before it is stored, and the renderer falls back to the host for an empty author; link-metadata-embed.test.cjs covers a blank and a padded author."
+      },
+      {
         "id": "link-shelf-copied-order",
         "behavior": "The Link shelf lists links by when they were last copied, falling back to when they were captured, so copying an older link moves it to the first slot; Text and Image shelves stay in capture order. Copying a stored link again records the copy time and keeps its date added, so Newest first and Date added do not change, and it still counts as freshly captured for retention.",
         "macos": "LibraryStore.shelfItems orders the .link kind by COALESCE(copied,created) DESC; LibraryStoreTests.testRecapturedLinkMovesLeftAndRenewsTemporaryCaptureWithoutResettingOriginalDate covers a recaptured link.",
