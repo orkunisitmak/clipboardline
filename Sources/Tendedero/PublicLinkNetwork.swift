@@ -359,7 +359,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         guard data.count <= 512 * 1024 else { throw PublicLinkError.tooLarge }
         let source = Self.decode(data, contentType: contentType)
         let html = Self.replacing(#"(?is)<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>"#, in: source, with: "")
-        let tags = try NSRegularExpression(pattern: #"(?is)<meta\b([^>]{0,8192})>"#)
+        let tags = try NSRegularExpression(pattern: #"(?is)<meta\b((?:"[^"]{0,8192}"|'[^']{0,8192}'|[^<>"']){0,8192})>"#)
         let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)
         var metadata: [String: String] = [:]
         for tag in tags.matches(in: html, range: NSRange(html.startIndex..., in: html)).prefix(256) {
