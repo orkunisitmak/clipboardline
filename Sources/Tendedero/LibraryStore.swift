@@ -113,6 +113,8 @@ private enum LibrarySQL {
         if let days = query.days { whereParts.append("i.created>=?"); values.append(.real(now.addingTimeInterval(-Double(days) * 86400).timeIntervalSince1970)) }
         if !query.domain.isEmpty {
             var domain = query.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            // Stored hosts are ASCII (punycode), so an internationalized name typed as written is converted first.
+            if let host = URL(string: "https://" + domain)?.host { domain = host }
             if domain.hasPrefix("www.") { domain.removeFirst(4) }
             let suffix = "." + domain
             // Literal host boundaries include subdomains without wildcard or

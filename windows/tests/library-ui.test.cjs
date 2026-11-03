@@ -442,3 +442,8 @@ test('Library domain filter ignores case, surrounding spaces and dots, www and a
  await f.input('domain-filter','other.org');assert.deepEqual(cards(f),[]);
  await f.input('domain-filter','  ');assert.deepEqual(cards(f),[f.image,f.link]);
 });
+test('Library domain filter finds an internationalized link typed as written',async()=>{
+ const f=fixture();await f.ready();const link=f.state.items.find(item=>item.id===f.link);link.url='https://bücher.de/katalog';link.retainedAt=1;f.state.items[0].tags=['x'];f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('toggle-filters');
+ for(const value of ['bücher.de','BÜCHER.de','www.bücher.de','xn--bcher-kva.de'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[f.link],value);
+ await f.input('domain-filter','bücher.org');assert.deepEqual(cards(f),[]);
+});
