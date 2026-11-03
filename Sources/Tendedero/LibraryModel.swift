@@ -382,6 +382,8 @@ import Combine
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in if self?.feedbackGeneration == generation { self?.copiedIDs.removeAll() } }
         }
     }
+    /// True when favorite() would unpin: every acted-on item is already pinned.
+    var actionsArePinned: Bool { let records = (try? store.records(actionIDs)) ?? []; return !records.isEmpty && records.allSatisfy(\.favorite) }
     func favorite() { guard flushEdits() else { return }; perform { try store.toggleFavorite(actionIDs) } }
     func retain() { guard flushEdits() else { return }; perform { try store.retain(actionIDs) } }
     func trash() { trashSelection() }
