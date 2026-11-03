@@ -50,3 +50,9 @@ test('long YouTube oEmbed title and author are cut on whole characters',async()=
  const metadata=await linkMetadata('https://youtu.be/synthetic',async()=>({bytes:Buffer.from(JSON.stringify({title,author_name:author})),type:'application/json'}));
  assert.equal(metadata.title,'a'.repeat(499)+emoji);assert.equal(metadata.author,'b'.repeat(199)+emoji);
 });
+
+test('a greater-than sign inside a quoted meta value keeps the title',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page(`<meta property="og:title" content="Tips > Tricks"><title>Page</title>`)).title,'Tips > Tricks');
+ assert.equal((await page(`<meta property='og:title' content='Tips > Tricks'><title>Page</title>`)).title,'Tips > Tricks');
+});
