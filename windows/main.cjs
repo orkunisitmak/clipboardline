@@ -261,7 +261,7 @@ async function importFile(file) {
   }
   if(stat.size>64*1024*1024)throw new Error('File exceeds import limit');
   if(['.txt','.md'].includes(extension)) {if(stat.size>1024*1024)throw new Error('Text file exceeds import limit');const value=decodeTextFile(fs.readFileSync(file));return store.insert(plainURL(value)?'link':'text',value);}
-  const image=nativeImage.createFromPath(file);if(image.isEmpty())throw new Error('Unsupported image file');const item=store.insert('image',image.toPNG());queueOCR(item.id);refreshImageSearch();return item;
+  const image=nativeImage.createFromPath(file);if(image.isEmpty())throw new Error('Unsupported image file');const item=store.insert('image',image.toPNG(),{fullSize:true});queueOCR(item.id);refreshImageSearch();return item;
 }
 async function capture() {
   const wasVisible=window.isVisible();visibilityGeneration++;desiredVisible=false;shelfMotion.cancel();if(wasVisible)window.hide();viewEvent=null;broadcast({surfaceOnly:true});await shelfMotion.request('reset');
@@ -271,7 +271,7 @@ async function capture() {
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
     const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw new Error('Screen capture is unavailable');
-    const item=store.insert('image',source.thumbnail.toPNG());queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});return{id:item.id};
+    const item=store.insert('image',source.thumbnail.toPNG(),{fullSize:true});queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});return{id:item.id};
   }catch(error){if(wasVisible)await show(view);throw error;}
 }
 async function ocr(id,quiet=false){if(ocrJobs.has(id))return ocrJobs.get(id);const promise=recognize(id,quiet);ocrJobs.set(id,promise);try{return await promise;}finally{ocrJobs.delete(id);}}

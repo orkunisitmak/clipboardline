@@ -130,6 +130,12 @@
         "behavior": "Clear filters is available in the action list only while the Library has a filter to clear (favorites only, a search, a type, a date range, a domain, a tag or a search mode other than all); with no filter it is disabled with the reason \"No filters to clear\", and with the Library closed it keeps the Library reason.",
         "macos": "ActionBarMenuAction.clearFilters requires libraryAvailable and hasLibraryFilters and otherwise names \"No filters to clear\"; ActionBarCatalogTests covers it.",
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
+        },
+        {
+        "id": "clipboard-image-limit",
+        "behavior": "A copied image larger than 40,000,000 pixels or 32 MB is not captured, and no notice is shown, so the same copy is skipped on both platforms; a copied image within both limits lands on the Image shelf.",
+        "macos": "ClipboardWatcher.validatedPNG rejects data over maximumDataBytes (32 MB) and images over maximumPixelCount (40,000,000); ClipboardWatcherTests.testValidationRejectsEmptyOversizedAndMislabeledData covers it.",
+        "windows": "readClipboardContent in lib/clipboard-policy.cjs skips a PNG over 32 MB or 40,000,000 pixels and Store.insert refuses one, while files imported from disk keep the larger limit; clipboard-admission.test.cjs and model.test.cjs cover it."
       }
     ]
   },

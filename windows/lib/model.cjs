@@ -4,6 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const {execFileSync}=require('node:child_process');
 const {windowsEnvironment}=require('./windows-environment.cjs');
+const {CAPTURED_IMAGE_BYTES,CAPTURED_IMAGE_PIXELS}=require('./clipboard-policy.cjs');
 const {textIdentity}=require('./text-identity.cjs');
 const {metadata:recordingMetadata,MAXIMUM_VIDEO_BYTES}=require('./media.cjs');
 const MANAGED_MEDIA=/^[a-f0-9]{64}\.(png|mp4|mov)$/;
@@ -240,10 +241,10 @@ class Store {
     let thumbnailFile='';if(thumbnail)try{thumbnailFile=this.putPNG(thumbnail);}catch{}
     item.title=title||new URL(url).hostname;item.author=author||'';if(thumbnailFile)item.thumbnailFile=thumbnailFile;this.persist();return true;
   }
-  putPNG(buffer) {
-    if (!Buffer.isBuffer(buffer) || buffer.length < 24 || buffer.length > 64 * 1024 * 1024 || buffer.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') fail('Invalid PNG image');
+  putPNG(buffer, maximumBytes = 64 * 1024 * 1024, maximumPixels = 80_000_000) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 24 || buffer.length > maximumBytes || buffer.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') fail('Invalid PNG image');
     const width = buffer.readUInt32BE(16), height = buffer.readUInt32BE(20);
-    if (!width || !height || width * height > 80_000_000) fail('Image is too large');
+    if (!width || !height || width * height > maximumPixels) fail('Image is too large');
     const filename = crypto.createHash('sha256').update(buffer).digest('hex') + '.png';
     const destination = path.join(this.mediaDirectory, filename);
     // Write beside the target and rename, so a failed or interrupted write never leaves a truncated file under the content hash.
@@ -319,7 +320,7 @@ class Store {
   insert(kind, value, extra = {}) {
     if (!KINDS.includes(kind)) fail('Invalid content kind');
     let textValue = '', url = '', imageFile = '';
-    if (kind === 'image') imageFile = this.putPNG(value);
+    if (kind === 'image') imageFile = extra.fullSize ? this.putPNG(value) : this.putPNG(value, CAPTURED_IMAGE_BYTES, CAPTURED_IMAGE_PIXELS);
     else if (kind === 'link') { url = plainURL(value) || fail('Invalid URL'); }
     else textValue = sizedText(value);
     const identity=kind==='text'?textIdentity(textValue):null;
