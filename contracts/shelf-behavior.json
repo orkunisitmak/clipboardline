@@ -36,6 +36,12 @@
         "windows": "The renderer looks main-process notices up in the shared catalog, refills numeric templates, and formats the conflict with the catalog key; renderer-ui.test.cjs runs the shipped export through the Export shortcut in Turkish."
       },
       {
+        "id": "refresh-link-preview-needs-fetching",
+        "behavior": "Refresh link preview with link fetching turned off does nothing to the item and tells the user to turn on the link fetching setting in Settings.",
+        "macos": "LinkMetadataService.request(force:) sets the Library notice when fetching is off; LibraryInteractionTests.testRefreshLinkPreviewTellsWhyWhenFetchingIsOff covers it.",
+        "windows": "The refreshLink action in main.cjs refuses with a notice naming the Sources setting when fetchLinkMetadata is off."
+      },
+      {
         "id": "localized-selection-count",
         "behavior": "The Library footer and the multi-selection details panel show the number of selected items with the shared \"%d selected\" catalog entry in the language selected in Settings.",
         "macos": "LibraryWindow uses String(format: L(\"%d selected\"), count) for the footer and the multi-selection title.",
