@@ -464,3 +464,9 @@ test('the multi-selection inspector says Unpin when every selected item is pinne
  await f.key('KeyA',{ctrl:true});assert.equal(pinLabel(),'Pin');
  f.state.items[2].pinned=true;f.api.emit({items:f.state.items});await f.ready();assert.equal(pinLabel(),'Unpin');
 });
+test('removing a tag that is not open keeps the open tag view',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client']});Object.assign(f.state.items[1],{retainedAt:900,tags:['client']});Object.assign(f.state.items[2],{retainedAt:800,tags:['other']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ await f.click('tag-scope',{tag:'client'});await f.click('tag-menu',{tag:'other'});await f.key('ArrowDown');await f.key('Enter');await f.click('confirm-modal');
+ assert.deepEqual(f.commands.findLast(command=>command.action==='deleteTag').payload,{tag:'other'});
+ assert.match(f.main,/data-action="tag-scope" data-tag="client" class="active"/);assert.deepEqual(cards(f),[f.image,f.text1]);
+});
