@@ -414,16 +414,13 @@ import Combine
         let targets = ids ?? actionIDs
         guard !targets.isEmpty else { return }
         // The restored items leave Trash: select the first one that remains, as Windows does.
+        let priorPending = pendingKeyboardSelection, priorRestoring = restoringIDs
         if query.scope == .trash { pendingKeyboardSelection = (nil, query); restoringIDs.formUnion(targets) }
         do { try store.restore(targets) }
         catch {
-            if query.scope == .trash {
-                restoringIDs.subtract(targets)
-                if restoringIDs.isEmpty { pendingKeyboardSelection = nil }
-            } else {
-                pendingKeyboardSelection = nil
-                restoringIDs = []
-            }
+            // A failed Restore leaves the pick and the earlier pending restores as they were.
+            pendingKeyboardSelection = priorPending
+            restoringIDs = priorRestoring
             report(error.localizedDescription)
         }
     }

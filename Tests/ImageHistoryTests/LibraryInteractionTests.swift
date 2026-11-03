@@ -309,6 +309,20 @@ import XCTest
         wait { model.ids.count == 1 && !model.loading }
         XCTAssertEqual(model.focusedID, order[0]); XCTAssertEqual(model.selectedIDs, [order[0]])
     }
+    func testFailedRestoreKeepsThePickMadeAfterAnEarlierRestore() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let records = try ["first trashed note", "second trashed note", "third trashed note"].map { try XCTUnwrap(store.captureText($0)) }
+        try store.trash(records.map(\.id))
+        let model = LibraryModel(store: store); model.changeScope(.trash)
+        wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        guard order.count == 3 else { return XCTFail("expected three trashed items, got \(order.count)") }
+        _ = model.select(order[1]); model.restore()
+        XCTAssertTrue(model.select(order[2]))
+        model.restore([UUID()])
+        wait { model.ids.count == 2 && !model.loading }
+        XCTAssertEqual(model.focusedID, order[2]); XCTAssertEqual(model.selectedIDs, [order[2]])
+    }
     func testInspectorEditsPersistAndFailedSaveKeepsDraftAndSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let a = try XCTUnwrap(store.captureText("first")), b = try XCTUnwrap(store.captureText("second")); try store.retain([a.id,b.id])
