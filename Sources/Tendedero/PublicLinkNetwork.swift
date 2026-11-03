@@ -373,7 +373,9 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
             if let key = values["property"] ?? values["name"], let value = values["content"], metadata[key.lowercased()] == nil { metadata[key.lowercased()] = String(value.prefix(2000)) }
         }
         let titleMatch = Self.title(in: html).map { Self.entities(Self.stripTags($0)) }
-        title = Self.clean(metadata["og:title"] ?? metadata["twitter:title"] ?? titleMatch, limit: 500)
+        title = Self.clean(metadata["og:title"], limit: 500)
+            ?? Self.clean(metadata["twitter:title"], limit: 500)
+            ?? Self.clean(titleMatch, limit: 500)
         author = Self.clean(metadata["author"] ?? metadata["og:site_name"], limit: 200)
         let image = (metadata["og:image:secure_url"] ?? metadata["og:image"] ?? metadata["twitter:image"]).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
         thumbnailURL = image.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }.flatMap { PublicLinkDestination($0)?.url }
