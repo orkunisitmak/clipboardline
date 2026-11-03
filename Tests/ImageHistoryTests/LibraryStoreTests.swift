@@ -53,6 +53,10 @@ import XCTest
         try library.toggleFavorite([second.id])
         XCTAssertTrue(try library.allPinned([first.id, second.id, first.id]))
         XCTAssertFalse(try library.allPinned([first.id, UUID()]))
+        let many = try (0..<501).map { try XCTUnwrap(library.captureText("note \($0)")).id }
+        try library.toggleFavorite(many)
+        XCTAssertTrue(try library.allPinned(many + [many[0]]))
+        XCTAssertFalse(try library.allPinned(many + [UUID()] + [many[0]]))
     }
     func testCollectionsAreManyToManyNestedAndRemovalDoesNotDeleteContent() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
