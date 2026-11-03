@@ -196,6 +196,15 @@ import XCTest
         f.date.addTimeInterval(10); let again = try library.captureImage(try f.image(owned: false, identicalPixels: true))
         XCTAssertEqual(again.id, first.id); XCTAssertEqual(try library.item(first.id)?.lastCopiedAt, f.date)
     }
+    func testLastCopiedViewLeadsWithAnImageCopiedAgain() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try library.captureImage(try f.image(owned: false, identicalPixels: true))
+        f.date.addTimeInterval(10); let second = try library.captureImage(try f.image(owned: false))
+        try library.markCopied([second.id])
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, sort: .copied)).map(\.id), [second.id, first.id])
+        f.date.addTimeInterval(10); _ = try library.captureImage(try f.image(owned: false, identicalPixels: true))
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, sort: .copied)).map(\.id), [first.id, second.id])
+    }
     func testRestoringOldCopyAfterRecapturePreservesBothRecordsAndPinsExactImageID() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let original = try f.image(owned: false), first = try library.captureImage(original), link = try library.captureLink(URL(string: "https://example.com/repeated")!)
