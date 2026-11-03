@@ -143,7 +143,7 @@ function libraryBaseItems() { return state.items.filter(value=>{
  if(ui.type!=='all'&&value.kind!==ui.type)return false;
  if(ui.filterTags.some(tag=>!value.tags?.includes(tag)))return false;
  if(ui.days&&value.createdAt<Date.now()-ui.days*86400000)return false;
- let wanted=ui.domain.trim().toLowerCase().replace(/^\.+|\.+$/g,'');try{wanted=new URL('https://'+wanted).hostname;}catch{}wanted=wanted.replace(/^www\./,'');
+ let wanted=ui.domain.trim().toLowerCase().replace(/^\.+|\.+$/g,'');if(!/[\/?#@:\\\s]/.test(wanted))try{wanted=new URL('https://'+wanted).hostname;}catch{}wanted=wanted.replace(/^www\./,'');
  if(wanted){try{const host=new URL(value.url).hostname.replace(/^www\./,'');if(host!==wanted&&!host.endsWith('.'+wanted))return false;}catch{return false;}}
  return true;
  }); }

@@ -90,6 +90,9 @@ import XCTest
             XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, domain: typed)).map(\.id), [link.id], typed)
         }
         XCTAssertTrue(try library.query(LibraryQuery(scope: .recent, domain: "b\u{FC}cher.org")).isEmpty)
+        for typed in ["b\u{FC}cher.de/katalog", "b\u{FC}cher.de?x", "b\u{FC}cher.de#x"] {
+            XCTAssertTrue(try library.query(LibraryQuery(scope: .recent, domain: typed)).isEmpty, typed)
+        }
     }
     func testDomainFilterIncludesSubdomainsWithLiteralHostBoundaries() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
