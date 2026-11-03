@@ -82,6 +82,18 @@ final class DualShelfTests: HistoryTestCase {
             XCTAssertTrue(urls.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
         }
     }
+    @MainActor func testRemovingASelectionWithoutALibraryStopsWhenThePreviewCannotBeSaved() throws {
+        try fixture { f in
+            let line = f.line()
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            _ = try line.togglePin(try XCTUnwrap(line.items.first).id)
+            line.selectAll()
+            line.onFlushPreview = { false }
+            line.removeActiveSelectionFromShelf()
+            XCTAssertEqual(line.items.count, 3)
+            XCTAssertTrue(line.items.allSatisfy { !$0.falling })
+        }
+    }
     @MainActor func testImageTakeDownOnAMultiSelectionKeepsPinnedImagesInTheLibrary() throws {
         try fixture { f in
             let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })

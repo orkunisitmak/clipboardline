@@ -371,6 +371,7 @@ final class Line: ObservableObject {
         } else {
             switch shelf {
             case .images:
+                guard onFlushPreview() else { return }
                 for id in ids {
                     if items.first(where: { $0.id == id })?.pinned == true { drop(id) } else { discard(id) }
                 }
