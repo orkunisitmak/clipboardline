@@ -46,6 +46,12 @@ final class AreaCapture {
            front.processIdentifier != ProcessInfo.processInfo.processIdentifier {
             previousApplication = front
         }
+        // A display added or removed while freezing or under the overlay would
+        // leave it covering the wrong area; cancel instead.
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.cancel() }
+            }
         task = Task { [weak self] in
             do {
                 let frozen = try await Self.freezeScreens()
@@ -94,12 +100,6 @@ final class AreaCapture {
             window.overlay.onFinish = { [weak self, weak window] output in self?.finish(output, from: window) }
             windows.append(window)
         }
-        // A display added or removed under the overlay would leave it covering
-        // the wrong area; start again instead.
-        screenObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.cancel() }
-            }
         let mouse = NSEvent.mouseLocation
         let key = windows.first { NSMouseInRect(mouse, $0.frame, false) } ?? windows.first
         for window in windows where window !== key { window.orderFrontRegardless() }
