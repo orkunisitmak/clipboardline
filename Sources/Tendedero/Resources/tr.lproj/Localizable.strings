@@ -536,3 +536,15 @@
 "This image could not be opened for markup." = "Bu görsel işaretleme için açılamadı.";
 "Markup supports images up to 80 megapixels." = "İşaretleme en fazla 80 megapiksellik görselleri destekler.";
 "The marked image could not be rendered." = "İşaretlenen görsel oluşturulamadı.";
+
+
+/* Permanent deletion from Trash. */
+"Delete %d items permanently?" = "%d öğe kalıcı olarak silinsin mi?";
+"Delete permanently" = "Kalıcı olarak sil";
+"Delete permanently…" = "Kalıcı olarak sil…";
+"Deleted %d items permanently" = "%d öğe kalıcı olarak silindi";
+"Empty Trash" = "Çöp Kutusu’nu boşalt";
+"Empty Trash and delete %d items permanently?" = "Çöp Kutusu boşaltılıp %d öğe kalıcı olarak silinsin mi?";
+"Empty Trash…" = "Çöp Kutusu’nu boşalt…";
+"They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are." = "Geri getirilemezler. Uygulamanın yaptığı kopyalar Mac’in Çöp Sepeti’ne gider; başka yerlerdeki orijinal dosyalar yerinde kalır.";
+"Trash is empty" = "Çöp Kutusu boş";

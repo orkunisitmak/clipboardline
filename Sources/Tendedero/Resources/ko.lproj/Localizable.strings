@@ -536,3 +536,15 @@
 "This image could not be opened for markup." = "이 이미지를 마크업용으로 열 수 없습니다.";
 "Markup supports images up to 80 megapixels." = "마크업은 최대 8천만 화소의 이미지를 지원합니다.";
 "The marked image could not be rendered." = "마크업한 이미지를 렌더링할 수 없습니다.";
+
+
+/* Permanent deletion from Trash. */
+"Delete %d items permanently?" = "%d개 항목을 영구적으로 삭제하겠습니까?";
+"Delete permanently" = "영구적으로 삭제";
+"Delete permanently…" = "영구적으로 삭제…";
+"Deleted %d items permanently" = "%d개 항목을 영구적으로 삭제했습니다";
+"Empty Trash" = "휴지통 비우기";
+"Empty Trash and delete %d items permanently?" = "휴지통을 비우고 %d개 항목을 영구적으로 삭제하겠습니까?";
+"Empty Trash…" = "휴지통 비우기…";
+"They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are." = "복구할 수 없습니다. 앱이 만든 사본은 Mac의 휴지통으로 이동하고, 다른 위치의 원본 파일은 그대로 유지됩니다.";
+"Trash is empty" = "휴지통이 비어 있습니다";

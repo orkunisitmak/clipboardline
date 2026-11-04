@@ -536,3 +536,15 @@
 "This image could not be opened for markup." = "This image could not be opened for markup.";
 "Markup supports images up to 80 megapixels." = "Markup supports images up to 80 megapixels.";
 "The marked image could not be rendered." = "The marked image could not be rendered.";
+
+
+/* Permanent deletion from Trash. */
+"Delete %d items permanently?" = "Delete %d items permanently?";
+"Delete permanently" = "Delete permanently";
+"Delete permanently…" = "Delete permanently…";
+"Deleted %d items permanently" = "Deleted %d items permanently";
+"Empty Trash" = "Empty Trash";
+"Empty Trash and delete %d items permanently?" = "Empty Trash and delete %d items permanently?";
+"Empty Trash…" = "Empty Trash…";
+"They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are." = "They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are.";
+"Trash is empty" = "Trash is empty";

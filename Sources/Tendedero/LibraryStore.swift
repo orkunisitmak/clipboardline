@@ -931,6 +931,54 @@ extension String {
         return eligible
     }
     func restore(_ ids: [UUID]) throws { try mutate(ids, owning: false) { $0.deletedAt = nil; $0.onShelf = true; $0.trashRevision = nil }; invalidateShelfUndo(ids) }
+    /// Every item currently in Trash, for Empty Trash.
+    func trashedIDs() throws -> [UUID] {
+        try db.rows("SELECT id FROM items WHERE deleted IS NOT NULL").compactMap { $0["id"]?.string.flatMap(UUID.init(uuidString:)) }
+    }
+    /// Erases items that are already in Trash: the record, its folders, tags and
+    /// search entries. The app's own copies (clipboard and favorite copies, the
+    /// unmarked base of an edit, a recording's first bytes) go to the system
+    /// Trash and link thumbnails are removed; original files elsewhere are never
+    /// touched, and a file another record still uses stays. Items not in Trash
+    /// are ignored. Returns how many items were erased.
+    @discardableResult func deletePermanently(_ ids: [UUID]) throws -> Int {
+        let targets = try Set(ids).compactMap { try item($0) }.filter { $0.deletedAt != nil }
+        guard !targets.isEmpty else { return 0 }
+        try db.transaction {
+            for value in targets {
+                let id = SQLValue.text(value.id.uuidString)
+                try db.execute("DELETE FROM item_collections WHERE item=?", [id])
+                try db.execute("DELETE FROM item_tags WHERE item=?", [id])
+                try db.execute("DELETE FROM search_fts WHERE id=?", [id])
+                try db.execute("DELETE FROM text_identity WHERE item=?", [id])
+                try db.execute("DELETE FROM image_analysis WHERE item=?", [id])
+                try db.execute("DELETE FROM items WHERE id=? AND deleted IS NOT NULL", [id])
+            }
+        }
+        let erased = targets.map(\.id)
+        invalidateTrashUndo(erased); invalidateShelfUndo(erased)
+        releaseFiles(of: targets)
+        changed()
+        return targets.count
+    }
+    /// Runs after the records are gone, so a failure here can only leave a
+    /// file behind, never a record pointing at a missing file.
+    private func releaseFiles(of erased: [LibraryRecord]) {
+        guard let remaining = try? LibrarySQL.decode(db.rows("SELECT payload FROM items")) else { return }
+        let referenced = Set(remaining.flatMap { [$0.path, $0.markupBasePath, $0.recordingOriginalPath, $0.thumbnailPath].compactMap { $0 } })
+            .union(recordingTrimPending)
+        for value in erased {
+            for path in Set([value.path, value.markupBasePath, value.recordingOriginalPath].compactMap { $0 }) where !referenced.contains(path) {
+                let url = URL(fileURLWithPath: path)
+                guard files.isAppCopy(url) else { continue }
+                do { _ = try files.trashAppCopy(url) } catch { log.error("A deleted item's copy could not be moved to the Trash") }
+            }
+            if let path = value.thumbnailPath, !referenced.contains(path) {
+                let file = URL(fileURLWithPath: path)
+                if file.deletingLastPathComponent() == thumbnailsFolder, file.resolvingSymlinksInPath() == file { try? FileManager.default.removeItem(at: file) }
+            }
+        }
+    }
     func markCopied(_ ids: [UUID]) throws { try mutate(ids) { $0.lastCopiedAt = self.now(); $0.captureRevision = UUID() } }
     func prune() throws {
         var expired = [LibraryRecord]()

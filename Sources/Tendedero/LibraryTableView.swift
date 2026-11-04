@@ -203,7 +203,10 @@ private final class LibraryNativeTable: NSTableView {
         if !model.collections.isEmpty { let item = NSMenuItem(title: L("Add to folder"), action: nil, keyEquivalent: ""); item.submenu = folders; menu.addItem(item) }
         menu.addItem(ClosureMenuItem(L("Export copies…")) { [weak model] in model?.onExportRequested?() })
         menu.addItem(.separator())
-        if model.query.scope == .trash { menu.addItem(ClosureMenuItem(L("Restore")) { [weak model] in model?.restore() }) }
+        if model.query.scope == .trash {
+            menu.addItem(ClosureMenuItem(L("Restore")) { [weak model] in model?.restore() })
+            menu.addItem(ClosureMenuItem(L("Delete permanently…")) { [weak model] in model?.onDeletePermanentlyRequested?() })
+        }
         else { menu.addItem(ClosureMenuItem(L("Move to Trash…")) { [weak model] in model?.onTrashRequested?() }) }
         return menu
     }

@@ -536,3 +536,15 @@
 "This image could not be opened for markup." = "Impossible d’ouvrir cette image pour la marquer.";
 "Markup supports images up to 80 megapixels." = "Le marquage prend en charge les images jusqu’à 80 mégapixels.";
 "The marked image could not be rendered." = "Impossible de générer l’image annotée.";
+
+
+/* Permanent deletion from Trash. */
+"Delete %d items permanently?" = "Supprimer définitivement %d éléments ?";
+"Delete permanently" = "Supprimer définitivement";
+"Delete permanently…" = "Supprimer définitivement…";
+"Deleted %d items permanently" = "%d éléments supprimés définitivement";
+"Empty Trash" = "Vider la corbeille";
+"Empty Trash and delete %d items permanently?" = "Vider la corbeille et supprimer définitivement %d éléments ?";
+"Empty Trash…" = "Vider la corbeille…";
+"They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are." = "Ils ne pourront pas être restaurés. Les copies créées par l’app vont dans la Corbeille du Mac ; les fichiers originaux situés ailleurs restent en place.";
+"Trash is empty" = "La corbeille est vide";

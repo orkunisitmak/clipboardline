@@ -536,3 +536,15 @@
 "This image could not be opened for markup." = "Bu şəkil işarələmə üçün açıla bilmədi.";
 "Markup supports images up to 80 megapixels." = "İşarələmə 80 meqapiksələ qədər şəkilləri dəstəkləyir.";
 "The marked image could not be rendered." = "İşarələnmiş şəkil hazırlana bilmədi.";
+
+
+/* Permanent deletion from Trash. */
+"Delete %d items permanently?" = "%d element birdəfəlik silinsin?";
+"Delete permanently" = "Birdəfəlik sil";
+"Delete permanently…" = "Birdəfəlik sil…";
+"Deleted %d items permanently" = "%d element birdəfəlik silindi";
+"Empty Trash" = "Zibil qutusunu boşalt";
+"Empty Trash and delete %d items permanently?" = "Zibil qutusu boşaldılıb %d element birdəfəlik silinsin?";
+"Empty Trash…" = "Zibil qutusunu boşalt…";
+"They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are." = "Onları bərpa etmək olmaz. Tətbiqin yaratdığı nüsxələr Mac-in Zibil qutusuna gedir; başqa yerlərdəki orijinal fayllar yerində qalır.";
+"Trash is empty" = "Zibil qutusu boşdur";

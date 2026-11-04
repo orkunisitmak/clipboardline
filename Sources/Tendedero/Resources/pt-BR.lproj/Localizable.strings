@@ -536,3 +536,15 @@
 "This image could not be opened for markup." = "Não foi possível abrir esta imagem para marcação.";
 "Markup supports images up to 80 megapixels." = "A marcação oferece suporte a imagens de até 80 megapixels.";
 "The marked image could not be rendered." = "Não foi possível renderizar a imagem marcada.";
+
+
+/* Permanent deletion from Trash. */
+"Delete %d items permanently?" = "Apagar %d itens permanentemente?";
+"Delete permanently" = "Apagar permanentemente";
+"Delete permanently…" = "Apagar permanentemente…";
+"Deleted %d items permanently" = "%d itens apagados permanentemente";
+"Empty Trash" = "Esvaziar Lixeira";
+"Empty Trash and delete %d items permanently?" = "Esvaziar a Lixeira e apagar %d itens permanentemente?";
+"Empty Trash…" = "Esvaziar Lixeira…";
+"They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are." = "Eles não poderão ser restaurados. As cópias feitas pelo app vão para o Lixo do Mac; os arquivos originais em outros locais continuam onde estão.";
+"Trash is empty" = "A Lixeira está vazia";
