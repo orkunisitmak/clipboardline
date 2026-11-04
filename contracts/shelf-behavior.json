@@ -60,6 +60,12 @@
         "windows": "linkMetadata in lib/network.cjs treats a whitespace-only og:image as missing; security.test.cjs covers it."
       },
       {
+        "id": "link-youtube-blank-author",
+        "behavior": "A YouTube link preview trims the oEmbed author name; a blank or whitespace-only author is dropped, so the preview shows the host instead of an empty line.",
+        "macos": "LinkMetadataService.youtubeMetadata trims the author and returns nil when it is blank; LibraryInteractionTests covers a blank and a padded author.",
+        "windows": "linkMetadata in lib/network.cjs trims author_name before it is stored, and the renderer falls back to the host for an empty author; link-metadata-embed.test.cjs covers a blank and a padded author."
+      },
+      {
         "id": "link-shelf-copied-order",
         "behavior": "The Link shelf lists links by when they were last copied, falling back to when they were captured, so copying an older link moves it to the first slot; Text and Image shelves stay in capture order. Copying a stored link again records the copy time and keeps its date added, so Newest first and Date added do not change, and it still counts as freshly captured for retention.",
         "macos": "LibraryStore.shelfItems orders the .link kind by COALESCE(copied,created) DESC; LibraryStoreTests.testRecapturedLinkMovesLeftAndRenewsTemporaryCaptureWithoutResettingOriginalDate covers a recaptured link.",
@@ -82,6 +88,12 @@
         "behavior": "The Library title of a subfolder is the names of all its ancestors and its own name, outermost first, joined with \" / \" (for example Parent / Child, or Parent / Middle / Child for imported deeper folders), so same-named subfolders of different parents can be told apart; a top-level folder shows only its name.",
         "macos": "LibraryModel.title builds the path by walking the whole LibraryCollection.parentID chain (cycle-safe) and shows it as the Library window title; LibraryInteractionTests.testSubfolderTitleIncludesItsParentLikeWindows covers it.",
         "windows": "libraryTitle() in renderer.js shows folderPath() for the folder scope; library-ui.test.cjs checks the toolbar title of a subfolder."
+      },
+      {
+        "id": "link-title-format-characters",
+        "behavior": "An HTML page title and its Open Graph text (not a YouTube oEmbed title) keep the zero-width joiner and non-joiner, so emoji sequences and Persian words are not split, and numeric references to them are decoded. Numeric references to control code points (C0, DEL, C1) stay literal. Bidirectional marks, embeddings, overrides and isolates (U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069) are removed, raw or as numeric references, so a title cannot be reordered to spoof another one.",
+        "macos": "PublicLinkHTMLMetadata.clean drops general category Cc and those bidirectional controls and marks, and entities only refuses Cc; PublicLinkNetworkTests.testHTMLTitleKeepsJoinersButDropsControlsAndBidirectionalOverrides covers it.",
+        "windows": "entities() in lib/network.cjs refuses the C0 and C1 controls and collapse() removes the bidirectional controls and marks; security.test.cjs covers joiners and bidirectional controls."
       },
       {
         "id": "trash-restore-selection",
@@ -118,12 +130,24 @@
         "behavior": "A text or a note is saved only while it is at most 1 MiB of UTF-8 bytes, so 600,000 Turkish or CJK characters are refused on both platforms and the edit reports an error.",
         "macos": "LibraryStore.update checks text.utf8.count and note.utf8.count against TextClipboardWatcher.maximumDataBytes and LibraryModel.flushEdits shows Changes could not be saved.",
         "windows": "Store.insert and Store.modify (note, editText, details) count Buffer.byteLength against 1 MiB through sizedText() in model.cjs; model.test.cjs 'a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS' covers it."
+        },
+        {
+        "id": "name-fold-keeps-script-marks",
+        "behavior": "Tag and folder names are compared without accents and case, but a kana voiced mark and a Devanagari or Thai vowel sign make a different word, so tag or folder は and ば, क and कि, ก and กิ are kept apart.",
+        "macos": "LibraryStore.libraryFolded folds with .diacriticInsensitive, which drops Latin-style accents and keeps these marks; addTag, createCollection and renameCollection compare that value; LibraryInteractionTests.testTagAndFolderNamesThatDifferByAKanaDevanagariOrThaiMarkStayDistinctLikeWindows covers it.",
+        "windows": "foldedName() in model.cjs strips only U+0300 to U+036F after NFD and recomposes, so tag, createFolder and renameFolder keep the marks; tag-model.test.cjs 'tag and folder names that differ by a kana, Devanagari or Thai mark stay distinct like on the Mac' covers it."
       },
       {
         "id": "clear-filters-needs-a-filter",
         "behavior": "Clear filters is available in the action list only while the Library has a filter to clear (favorites only, a search, a type, a date range, a domain, a tag or a search mode other than all); with no filter it is disabled with the reason \"No filters to clear\", and with the Library closed it keeps the Library reason.",
         "macos": "ActionBarMenuAction.clearFilters requires libraryAvailable and hasLibraryFilters and otherwise names \"No filters to clear\"; ActionBarCatalogTests covers it.",
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
+        },
+        {
+        "id": "disabled-undo-names-the-surface",
+        "behavior": "A disabled undo row first says where it is available: Undo trash on the shelves reads \"Available in Library\" and Undo take down in the Library reads \"Available on the shelves\"; \"Nothing to undo\" is shown only on the surface where the undo exists.",
+        "macos": "ActionBarMenuAction.undoRemoveFromLine and .undoTrash pick the surface reason before \"Nothing to undo\"; ActionBarCatalogTests.testDisabledRowsNameTheSurfaceOrSelectionThatIsMissing covers it.",
+        "windows": "actionCommands() in renderer.js runs the surface check before the \"Nothing to undo.\" branch; library-ui.test.cjs checks both rows on the shelves and in the Library."
       }
     ]
   },
