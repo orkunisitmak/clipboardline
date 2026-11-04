@@ -804,6 +804,9 @@ test('right-clicking a card inside a multi-selection keeps the selection for Act
 test('right-clicking inside a card resolves the card and keeps only its shelf in a mixed selection',async()=>{
  const f=fixture();await f.ready();await f.cardClick(f.text1,{ctrl:true});
  assert.deepEqual(selectedCards(f).sort(),[f.image,f.text1].sort());
+ // Leave the anchor on the image shelf, so the Shift-click below tests the cross-shelf anchor.
+ await f.cardClick(f.image,{ctrl:true});await f.cardClick(f.image,{ctrl:true});
+ assert.deepEqual(selectedCards(f).sort(),[f.image,f.text1].sort());
  const event=await f.cardContextMenu(f.text1,{child:true});assert.equal(event.prevented,true);
  assert.deepEqual(selectedCards(f),[f.text1]);
  await f.input('modal-query','pin');await f.key('Enter');
