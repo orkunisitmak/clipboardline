@@ -817,5 +817,7 @@ test('right-clicking inside a card resolves the card and keeps only its shelf in
 
 test('right-click does nothing while a preview is open',async()=>{
  const f=fixture();await f.ready();await f.key('Space');assert.match(f.overlay,/id="preview-dialog"/);
+ const before=selectedCards(f);
  const event=await f.cardContextMenu(f.text1);assert.equal(event.prevented,undefined);assert.match(f.overlay,/id="preview-dialog"/);
+ assert.deepEqual(selectedCards(f),before);
 });
