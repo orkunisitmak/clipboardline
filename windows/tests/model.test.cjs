@@ -129,6 +129,14 @@ test('a temporary library copy that cannot be removed is reported',()=>fixture((
   try{assert.match(new Store(dir,{clock:()=>1000}).privacyWarning,/temporary copy of the library/);}finally{fs.unlinkSync=unlink;}
   assert.ok(fs.existsSync(file));
 }));
+test('restoring one item of a Take down batch leaves Undo take down for the rest',()=>fixture(s=>{
+  const first=s.insert('text','First'),second=s.insert('text','Second');s.modify('remove',{ids:[first.id,second.id]});
+  s.modify('restore',{ids:[first.id]});assert.equal(s.publicState().canUndo,true);s.modify('undo');assert.equal(s.item(second.id).trashedAt,null);assert.equal(s.publicState().canUndo,false);
+}));
+test('deleting one item of a Take down batch leaves Undo take down for the rest',()=>fixture(s=>{
+  const first=s.insert('text','First'),second=s.insert('text','Second');s.modify('remove',{ids:[first.id,second.id]});
+  s.modify('delete',{ids:[first.id]});assert.equal(s.publicState().canUndo,true);s.modify('undo');assert.equal(s.item(second.id).trashedAt,null);
+}));
 test('ordinary removal and retention preserve managed images for undo and Trash recovery',()=>fixture((s,time)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('remove',{ids:[item.id]});assert.ok(fs.existsSync(file));s.modify('undo');assert.equal(item.trashedAt,null);
   time(32*86400000);s.expire();assert.ok(item.trashedAt);assert.ok(fs.existsSync(file));s.modify('restore',{ids:[item.id]});assert.ok(fs.existsSync(s.mediaPath(item.id)));
