@@ -87,15 +87,29 @@ final class ImageSearchWorker: @unchecked Sendable {
     private var generation = 0
     private var modelLoaded = false
     private var model: Clip?
+    private var idleUnloadWork: DispatchWorkItem?
     private var cachedQuery = ""
     private var cachedVector: [Float]?
     init(database: URL, modelFolder: URL?) { self.database = database; self.modelFolder = modelFolder }
-    func cancel() { stateLock.lock(); generation += 1; stateLock.unlock() }
+    func cancel() { stateLock.lock(); generation += 1; stateLock.unlock(); releaseModelMemory() }
     private func current(_ value: Int) -> Bool { stateLock.lock(); defer { stateLock.unlock() }; return generation == value }
     private func clip() -> Clip? {
         modelLock.lock(); defer { modelLock.unlock() }
+        idleUnloadWork?.cancel(); idleUnloadWork = nil
         if !modelLoaded { modelLoaded = true; model = modelFolder.flatMap(Clip.init(folder:)) }
         return model
+    }
+    private func releaseModelMemory() {
+        modelLock.lock(); defer { modelLock.unlock() }
+        idleUnloadWork?.cancel(); idleUnloadWork = nil
+        model?.unloadModels()
+    }
+    private func scheduleIdleModelRelease() {
+        modelLock.lock(); defer { modelLock.unlock() }
+        idleUnloadWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.releaseModelMemory() }
+        idleUnloadWork = work
+        queries.asyncAfter(deadline: .now() + 15, execute: work)
     }
     static func fingerprint(_ url: URL) -> String? {
         guard let value = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey]), value.isRegularFile == true, value.isSymbolicLink != true,
@@ -126,6 +140,7 @@ final class ImageSearchWorker: @unchecked Sendable {
                 if todo.isEmpty { DispatchQueue.main.async { if self.current(token) { progress(0, 0, false) } }; return }
                 DispatchQueue.main.async { if self.current(token) { progress(0, todo.count, false) } }
                 let model = clip(), version = model == nil ? "vision-ocr-v1" : Self.version
+                defer { scheduleIdleModelRelease() }
                 var dirty = false, lastReport = Date.distantPast
                 for (index, job) in todo.enumerated() {
                     guard current(token) else { return }
@@ -147,7 +162,7 @@ final class ImageSearchWorker: @unchecked Sendable {
     }
     func search(_ text: String, eligibleIDs: Set<UUID>, completion: @escaping @MainActor ([UUID]) -> Void) {
         queries.async { [self] in
-            if cachedQuery != text { cachedQuery = text; cachedVector = clip()?.embed(text: text) }
+            if cachedQuery != text { cachedQuery = text; cachedVector = clip()?.embed(text: text); scheduleIdleModelRelease() }
             var ids = [UUID]()
             if let vector = cachedVector, let db = try? LibraryDatabase(url: database, readOnly: true, verify: false),
                let rows = try? db.rows("SELECT a.item,a.vectors FROM image_analysis a JOIN items i ON i.id=a.item AND i.path=a.path WHERE a.version=?", [.text(Self.version)]) {

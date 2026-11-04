@@ -127,3 +127,29 @@ test('shared image cache miss reassigns indexing to the surviving duplicate reco
  assert.equal(f.search.state.indexing,false);
  await f.search.stop();
 });
+
+test('idle worker hibernates after ONNX inference to reclaim memory and respawns on demand',async()=>{
+ const workers=[];
+ const records=[{id,kind:'image',imageFile:key+'.png'}];
+ const search=new ImageSearch({
+  modelDirectory:'unused',
+  cacheDirectory:'unused',
+  idleTimeoutMs:20,
+  items:()=>records,
+  readImage:()=>({bitmap:new Uint8Array(128*128*4),width:128,height:128}),
+  workerFactory:()=>{const w=new FakeWorker();w.response=m=>m.action==='has'?false:m.action==='search'?{ids:[id],scores:[{id,score:.91}]}:true;workers.push(w);return w;}
+ });
+ await search.ready;
+ assert.equal(workers.length,1);
+ search.refresh();
+ for(let i=0;i<10;i++)await tick();
+ assert.equal(search.known.has(key),true);
+ await new Promise(resolve=>setTimeout(resolve,45));
+ assert.equal(workers[0].terminated,true,'idle worker must terminate to release WASM memory');
+ assert.equal(search.worker,null);
+ assert.equal(search.state.available,true);
+ const result=await search.search('red square',[id]);
+ assert.equal(workers.length,2,'search must transparently respawn worker');
+ assert.deepEqual(result.ids,[id]);
+ await search.stop();
+});
