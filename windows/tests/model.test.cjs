@@ -129,6 +129,9 @@ test('a temporary library copy that cannot be removed is reported',()=>fixture((
   try{assert.match(new Store(dir,{clock:()=>1000}).privacyWarning,/temporary copy of the library/);}finally{fs.unlinkSync=unlink;}
   assert.ok(fs.existsSync(file));
 }));
+test('copying text that is not a stored item, like text from an image, raises no error',()=>fixture(s=>{
+  assert.doesNotThrow(()=>s.markCopied([]));
+}));
 test('ordinary removal and retention preserve managed images for undo and Trash recovery',()=>fixture((s,time)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('remove',{ids:[item.id]});assert.ok(fs.existsSync(file));s.modify('undo');assert.equal(item.trashedAt,null);
   time(32*86400000);s.expire();assert.ok(item.trashedAt);assert.ok(fs.existsSync(file));s.modify('restore',{ids:[item.id]});assert.ok(fs.existsSync(s.mediaPath(item.id)));
