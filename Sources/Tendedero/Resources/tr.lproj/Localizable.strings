@@ -449,6 +449,7 @@
 /* Searchable action bar. */
 "Actions" = "Eylemler";
 "Available on the shelves" = "Askılarda kullanılabilir";
+"Available in Library" = "Kütüphanede kullanılabilir";
 "Available on the shelves or in Library" = "Askılarda veya Kütüphane’de kullanılabilir";
 "Edit item details" = "Öğe ayrıntılarını düzenle";
 "Finish editing first" = "Önce düzenlemeyi tamamla";

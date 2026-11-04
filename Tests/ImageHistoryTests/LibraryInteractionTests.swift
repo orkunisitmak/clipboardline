@@ -25,6 +25,15 @@ import XCTest
     private func key(_ code: UInt16, _ character: String = "", _ flags: NSEvent.ModifierFlags = []) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil, characters: character, charactersIgnoringModifiers: character, isARepeat: false, keyCode: code)!
     }
+    func testTagAndFolderNamesThatDifferByAKanaDevanagariOrThaiMarkStayDistinctLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let record = try XCTUnwrap(store.captureText("marks")); try store.retain([record.id])
+        for (plain, marked) in [("は", "ば"), ("क", "कि"), ("ก", "กิ")] {
+            try store.addTag(plain, to: [record.id]); try store.addTag(marked, to: [record.id])
+            try store.createCollection(plain); let folder = try store.createCollection(marked + "x"); try store.renameCollection(folder, name: marked)
+        }
+        XCTAssertEqual(try store.tags().count, 6); XCTAssertEqual(try store.collections().count, 6)
+    }
     func testPagedTagSummariesRefreshAfterRenameAndRemovalWithoutChangingSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let plain = try XCTUnwrap(store.captureText("plain note")), tagged = try XCTUnwrap(store.captureText("tagged note İstanbul 中文"))
@@ -301,6 +310,12 @@ import XCTest
         let parsed = try LinkMetadataService.youtubeMetadata(data); XCTAssertEqual(parsed.0.title, "Synthetic title"); XCTAssertEqual(parsed.0.author, "Synthetic channel"); XCTAssertEqual(parsed.1?.host, "i.ytimg.com")
         let untrusted = try LinkMetadataService.youtubeMetadata(Data(#"{"thumbnail_url":"http://127.0.0.1/private"}"#.utf8)); XCTAssertNil(untrusted.1)
         var failed = false; do { _ = try LinkMetadataService.youtubeMetadata(Data("not json".utf8)) } catch { failed = true }; XCTAssertTrue(failed)
+    }
+    func testYouTubeWhitespaceOnlyTitleAndAuthorAreDroppedLikeWindows() throws {
+        let blank = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"   ","author_name":" \n "}"#.utf8))
+        XCTAssertNil(blank.0.title); XCTAssertNil(blank.0.author)
+        let padded = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"  Synthetic title ","author_name":"  Synthetic channel "}"#.utf8))
+        XCTAssertEqual(padded.0.title, "Synthetic title"); XCTAssertEqual(padded.0.author, "Synthetic channel")
     }
     func testMetadataConcurrencyBackoffPrivateLinksAndUserTitle() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)

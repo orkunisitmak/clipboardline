@@ -23,6 +23,12 @@ test('sibling folder names are unique ignoring case and diacritics like macOS',(
  const other=s.modify('createFolder',{name:'Personal'});assert.throws(()=>s.modify('renameFolder',{id:other.id,name:'WORK'}),/already exists/);assert.equal(s.data.folders.find(folder=>folder.id===other.id).name,'Personal');
  s.modify('renameFolder',{id:work.id,name:'work'});assert.equal(s.data.folders.find(folder=>folder.id===work.id).name,'work');
 }));
+test('a failed PNG write never leaves a truncated file under the content hash',()=>fixture(s=>{
+ const original=fs.writeFileSync;let failed=false;
+ fs.writeFileSync=function(target,data,...rest){if(!failed&&typeof target==='string'&&target.startsWith(s.mediaDirectory)){failed=true;original.call(fs,target,data.subarray(0,10),...rest);throw Object.assign(new Error('synthetic disk full'),{code:'ENOSPC'});}return original.call(fs,target,data,...rest);};
+ try{assert.throws(()=>s.insert('image',png),/disk full/);}finally{fs.writeFileSync=original;}
+ const item=s.insert('image',png);assert.deepEqual(fs.readFileSync(s.mediaPath(item.id)),png);assert.deepEqual(fs.readdirSync(s.mediaDirectory),[item.imageFile]);
+}));
 test('folder names share the macOS 64-grapheme and control-character rule',()=>fixture(s=>{
  const limit='f'.repeat(64),flags='\u{1F1F9}\u{1F1F7}'.repeat(64),folder=s.modify('createFolder',{name:limit});assert.equal(folder.name,limit);
  assert.equal(s.modify('createFolder',{name:flags}).name,flags);
@@ -112,6 +118,18 @@ test('permanent deletion keeps rasters referenced by live items or recoverable T
   const second=s.insert('image',png);s.modify('delete',{ids:[first.id]});assert.ok(fs.existsSync(file));
   s.modify('trash',{ids:[second.id]});const third=s.insert('image',png);s.modify('trash',{ids:[third.id]});
   s.modify('delete',{ids:[second.id]});assert.ok(fs.existsSync(file));s.modify('restore',{ids:[third.id]});assert.deepEqual(fs.readFileSync(s.mediaPath(third.id)),png);
+}));
+test('opening the library removes temporary copies a killed process left behind',()=>fixture((_s,_time,dir)=>{
+  const id='12345678-1234-4234-8234-123456789abc',left=['library.json.tmp-'+id,'library.json.backup.tmp-'+id],other='library.json.tmp-notes';
+  for(const name of [...left,other])fs.writeFileSync(path.join(dir,name),'deleted text');
+  new Store(dir,{clock:()=>1000});
+  for(const name of left)assert.equal(fs.existsSync(path.join(dir,name)),false);assert.ok(fs.existsSync(path.join(dir,other)));
+}));
+test('a temporary library copy that cannot be removed is reported',()=>fixture((_s,_time,dir)=>{
+  const file=path.join(dir,'library.json.tmp-12345678-1234-4234-8234-123456789abc'),unlink=fs.unlinkSync;fs.writeFileSync(file,'deleted text');
+  fs.unlinkSync=target=>{if(target===file)throw Object.assign(new Error('Synthetic lock'),{code:'EPERM'});return unlink(target);};
+  try{assert.match(new Store(dir,{clock:()=>1000}).privacyWarning,/temporary copy of the library/);}finally{fs.unlinkSync=unlink;}
+  assert.ok(fs.existsSync(file));
 }));
 test('ordinary removal and retention preserve managed images for undo and Trash recovery',()=>fixture((s,time)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('remove',{ids:[item.id]});assert.ok(fs.existsSync(file));s.modify('undo');assert.equal(item.trashedAt,null);
@@ -226,6 +244,15 @@ test('selection lookups keep request order and reject missing items',()=>fixture
  assert.throws(()=>s.selected([first.id,'00000000-0000-4000-8000-000000000000']),/no longer exists/);
  s.modify('trash',{ids:[first.id]});s.modify('delete',{ids:[first.id]});assert.deepEqual(s.data.items.map(item=>item.id),[second.id]);
 }));
+test('opening the Store removes stale .png-/.video- temporaries from a killed process and leaves everything else',()=>fixture((s,_time,dir)=>{
+ const id='0f8fad5b-d9cb-469f-a165-70867728950e',media=s.mediaDirectory,stale=['.png-'+id,'.video-'+id],keep=['.png-'+id+'.x','.png-nope','x.png-'+id,'.video-'+id.slice(1)];
+ for(const name of [...stale,...keep])fs.writeFileSync(path.join(media,name),'x');
+ const dirLike='.png-'+id.replace(/^0/,'1');fs.mkdirSync(path.join(media,dirLike));fs.writeFileSync(path.join(media,dirLike,'inner'),'x');
+ let link='';try{fs.symlinkSync(path.join(dir,'library.json'),path.join(media,link='.video-'+id.replace(/^0/,'2')));}catch{link='';}
+ const item=s.insert('image',png),reopened=new Store(dir);
+ assert.deepEqual(fs.readdirSync(media).sort(),[...keep,dirLike,...(link?[link]:[]),item.imageFile].sort());
+ assert.ok(fs.existsSync(path.join(media,dirLike,'inner')));assert.deepEqual(fs.readFileSync(reopened.mediaPath(item.id)),png);
+}));
 test('link preview metadata stores its thumbnail only while the link still exists',()=>fixture((s,time,dir)=>{
  const files=()=>fs.readdirSync(path.join(dir,'media')),url='https://example.com/a';
  const gone=s.insert('link',url);s.modify('trash',{ids:[gone.id]});assert.equal(s.setLinkMetadata(gone,url,{title:'T',thumbnail:png}),false);assert.deepEqual(files(),[]);assert.equal(gone.title,'');
@@ -240,3 +267,4 @@ test('pin on a mixed selection pins every item and only a fully pinned selection
  s.modify('pin',{ids:[a.id,b.id]});assert.deepEqual(pinned(),[false,false]);
 }));
 test('a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS',()=>fixture(s=>{const item=s.insert('text','x');const big='ş'.repeat(600000);assert.throws(()=>s.modify('note',{ids:[item.id],note:big}),/Invalid text/);assert.throws(()=>s.modify('editText',{ids:[item.id],text:big}),/Invalid text/);assert.throws(()=>s.insert('text',big),/Invalid text/);s.modify('note',{ids:[item.id],note:'ş'.repeat(500000)});assert.equal(s.data.items[0].note.length,500000);}));
+test('an item can get a 51st tag, like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello');for(let i=1;i<=51;i++)s.modify('tag',{ids:[item.id],tags:[...s.item(item.id).tags,'tag'+i]});assert.equal(s.item(item.id).tags.length,51);}));

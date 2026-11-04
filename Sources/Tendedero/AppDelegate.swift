@@ -1475,7 +1475,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }, completion: { [weak self] result in
                 guard let self else { return }; self.isPasting = false
                 switch result {
-                case .pasted: self.reportActionStatus(L("Pasted"))
+                case .pasted:
+                    try? store.markCopied(ids)
+                    self.reportActionStatus(L("Pasted"))
                 case .permissionRequired:
                     self.reportActionStatus(L("Accessibility permission is needed to paste into another app."))
                     let alert = NSAlert()
