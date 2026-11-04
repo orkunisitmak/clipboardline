@@ -204,7 +204,7 @@ test('image actions need exactly one selected item',async()=>{
 });
 test('the Open key acts on the focused link of a multi-selection like macOS',async()=>{
  const f=fixture();await f.ready();const other='00000000-0000-4000-8000-000000000006',source=f.state.items.find(value=>value.kind==='link');f.state.items.push({...structuredClone(source),id:other,url:'https://example.com/other'});f.api.emit({items:f.state.items});await f.ready();await recent(f);await f.key('Digit3',{ctrl:true});await f.key('ArrowRight',{shift:true});
- await f.key('KeyO',{ctrl:true});assert.equal(f.commands.at(-1).action,'openLink');
+ await f.key('KeyO',{ctrl:true});assert.equal(f.commands.at(-1).action,'openLink');assert.equal(f.commands.at(-1).payload.id,other);
 });
 test('the action list disables Move to Trash for an item already in Trash',async()=>{
  const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
