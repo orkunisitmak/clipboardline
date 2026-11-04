@@ -5,6 +5,7 @@ import Combine
 import Quartz
 import ServiceManagement
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Monotonic timings for the native presentation boundary. Contains no app
 /// identifiers, field values or clipboard data; the isolated UI harness can
@@ -77,6 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var copyHotKey: HotKey?
     private var libraryHotKey: HotKey?
     private var searchHotKey: HotKey?
+    private var captureHotKey: HotKey?
+    private(set) var areaCapture: AreaCapture?
     private let directPaste: DirectPasteCoordinator
     private var pasteFocusHandoffDepth = 0
     private lazy var imageTextCopy: ImageTextCopy? = line.library.map { store in
@@ -253,6 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         registerCopyShortcut(line.copyLatestShortcut, persist: false)
         registerLibraryShortcut(line.libraryShortcut, persist: false)
         if watchesFiles { registerSearchShortcut(line.globalSearchShortcut, persist: false) }
+        if watchesFiles { registerCaptureShortcut(line.captureAreaShortcut, persist: false) }
         setUpStatusItem()
         watchMenuBarClicks()
         setUpAutomaticUpdates()
@@ -490,19 +494,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// A new screenshot lifts off from where it was taken and flies to its
     /// place on the line. Without a known capture area it simply drops in.
-    private func hangCapture(_ url: URL) {
+    /// An area capture passes `takesFocus: false`: it is usually pasted
+    /// straight away, so the app it came from keeps the keyboard.
+    private func hangCapture(_ url: URL, takesFocus: Bool = true) {
         guard line.presentation.shelves.contains(.images) else {
             line.hang(url)
             return
         }
-        if !isRevealed && Self.peeksAtNew && !isPasting {
+        if takesFocus && !isRevealed && Self.peeksAtNew && !isPasting {
             withPasteTargetForFocusHandoff { presentCapture(url) }
         } else {
-            presentCapture(url)
+            presentCapture(url, takesFocus: takesFocus)
         }
     }
 
-    private func presentCapture(_ url: URL) {
+    private func presentCapture(_ url: URL, takesFocus: Bool = true) {
         let from = captureRect(of: url)
         let screen = from.flatMap { from in
             NSScreen.screens.first { NSMouseInRect(CGPoint(x: from.midX, y: from.midY), $0.frame, false) }
@@ -522,7 +528,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // the user's selection on a line that was already open.
         if !wasRevealed {
             line.selectFirstShelfItems(line.presentation.shelves)
-            if isRevealed && !ownsKeyboardFocus() && !isPasting {
+            if takesFocus && isRevealed && !ownsKeyboardFocus() && !isPasting {
                 focusLine()
                 // Keep the timed peek until a browsing key is used. Enter or
                 // Space then promotes it to the normal keyboard session.
@@ -830,7 +836,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
               Shortcut.current == nil || hotKey?.isRegistered == true,
               line.globalSearchShortcut == nil || searchHotKey?.isRegistered == true,
               line.libraryShortcut == nil || libraryHotKey?.isRegistered == true,
-              line.copyLatestShortcut == nil || copyHotKey?.isRegistered == true else { return }
+              line.copyLatestShortcut == nil || copyHotKey?.isRegistered == true,
+              line.captureAreaShortcut == nil || captureHotKey?.isRegistered == true else { return }
         if line.notice == shortcutRestoreWarning { line.notice = nil }
         shortcutRestoreWarning = nil; settingsController?.model.shortcutWarning = nil
     }
@@ -962,6 +969,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         actions.image = NSImage(systemSymbolName: "command", accessibilityDescription: nil)
         actions.isEnabled = startupError == nil
         menu.addItem(actions)
+        let capture = ClosureMenuItem(L("Capture area")) { [weak self] in self?.captureAreaAfterMenu() }
+        capture.isEnabled = startupError == nil
+        if let shortcut = line.captureAreaShortcut, shortcut.keyLabel.count == 1 {
+            capture.keyEquivalent = shortcut.keyLabel.lowercased()
+            capture.keyEquivalentModifierMask = Self.menuModifiers(shortcut.modifiers)
+        }
+        menu.addItem(capture)
         let copy = ClosureMenuItem(L("Copy latest image")) { [weak self] in self?.copyLatest() }
         copy.isEnabled = line.newestID != nil
         menu.addItem(copy)
@@ -1017,6 +1031,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             model.recordLibraryShortcut = { [weak self] in self?.recordLibraryShortcut() }
             model.setSearchShortcut = { [weak self] in self?.registerSearchShortcut($0) }
             model.recordSearchShortcut = { [weak self] in self?.recordSearchShortcut() }
+            model.setCaptureShortcut = { [weak self] in self?.registerCaptureShortcut($0) }
+            model.recordCaptureShortcut = { [weak self] in self?.recordCaptureShortcut() }
+            model.captureShortcutRegistered = { [weak self] in self?.captureHotKey?.isRegistered == true }
+            model.openScreenRecordingSettings = { AreaCapture.openPermissionSettings() }
             model.requestPastePermission = { [weak self] in self?.showPastePermission() }
             model.recordContextShortcut = { [weak self] in self?.recordContextShortcut($0) }
             model.openLibrary = { [weak self] in self?.showLibrary() }
@@ -1443,6 +1461,125 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         recorder.show()
     }
+
+    // MARK: Area capture
+
+    /// Freezes and dims every display so an area can be dragged out. Pressing
+    /// the shortcut again while the overlay is up cancels it.
+    func captureArea() {
+        if let areaCapture, !areaCapture.finished { areaCapture.cancel(); return }
+        guard startupError == nil, AreaCapture.ensurePermission() else { return }
+        let capture = AreaCapture()
+        areaCapture = capture
+        capture.start { [weak self, weak capture] result in
+            guard let self else { return }
+            if self.areaCapture === capture { self.areaCapture = nil }
+            guard let result else { return }
+            switch result.output {
+            case .copy: self.copyCapture(result)
+            case .save: self.saveCapture(result)
+            }
+        }
+    }
+
+    /// From a menu or the Actions bar: wait for it to fade, so it is not frozen
+    /// into the capture.
+    private func captureAreaAfterMenu() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.captureArea() }
+    }
+
+    /// The area goes on the clipboard as a PNG image and hangs on the line
+    /// like any other screenshot, as a temporary copy.
+    private func copyCapture(_ result: AreaCapture.Result) {
+        guard let png = AreaCapture.pngData(result.image) else { captureFailed(); return }
+        let item = NSPasteboardItem()
+        item.setData(png, forType: .png)
+        guard ClipboardTransfer.write([item], to: isolatedCopyBoard ?? .general) else { captureFailed(); return }
+        guard let url = try? AreaCapture.writeAppCopy(png, rect: result.screenRect, folder: line.historyFiles.inbox) else { captureFailed(); return }
+        // Let the previous app take the keyboard back first: ⌘V there pastes
+        // the capture while it flies to the line.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.hangCapture(url, takesFocus: false) }
+    }
+
+    /// Asks where to save the area as a PNG file, then hangs that file.
+    private func saveCapture(_ result: AreaCapture.Result) {
+        defer { result.previousApplication?.activate(options: []) }
+        guard let png = AreaCapture.pngData(result.image) else { captureFailed(); return }
+        let panel = NSSavePanel()
+        panel.title = L("Save capture")
+        panel.allowedContentTypes = [.png]
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.nameFieldStringValue = AreaCapture.suggestedFileName()
+        panel.directoryURL = AreaCapture.lastSaveFolder
+            ?? FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try png.write(to: url, options: .atomic) } catch {
+            let alert = NSAlert(); alert.messageText = L("The capture could not be saved")
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+            return
+        }
+        AreaCapture.markAsScreenCapture(url, rect: result.screenRect)
+        AreaCapture.lastSaveFolder = url.deletingLastPathComponent()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.hangCapture(url, takesFocus: false) }
+    }
+
+    private func captureFailed() {
+        line.notice = L("The capture could not be saved")
+        NSSound.beep()
+    }
+
+    private func registerCaptureShortcut(_ value: KeyShortcut?, persist: Bool = true) {
+        defer { clearResolvedShortcutWarning() }
+        guard let value else {
+            captureHotKey?.invalidate(); captureHotKey = nil
+            if persist { line.saveCaptureAreaShortcut(nil) }
+            settingsController?.model.refresh()
+            return
+        }
+        guard value.isValid else { return }
+        if captureHotKey?.isRegistered == true && value == line.captureAreaShortcut { return }
+        let replacement = HotKey(keyCode: value.keyCode, modifiers: value.modifiers) { [weak self] in self?.captureArea() }
+        guard replacement.isRegistered else {
+            if persist {
+                let alert = NSAlert(); alert.messageText = L("Shortcut unavailable; the previous shortcut is kept")
+                alert.informativeText = L("Another app may be using it, for example another screenshot tool.")
+                alert.runModal()
+            } else {
+                log.notice("Area capture shortcut is in use by another app")
+            }
+            settingsController?.model.refresh()
+            return
+        }
+        captureHotKey?.invalidate(); captureHotKey = replacement
+        if persist { line.saveCaptureAreaShortcut(value) }
+        settingsController?.model.refresh()
+    }
+
+    private func recordCaptureShortcut() {
+        shortcutRecorder?.window.close(); let recorder = ShortcutRecorder(); shortcutRecorder = recorder
+        recorder.onRestoreFailure = { [weak self] in self?.reportShortcutRestoreFailure() }
+        recorder.window.title = L("Capture an area")
+        recorder.onFinish = { [weak self] value in
+            self?.shortcutRecorder = nil
+            if let value { self?.registerCaptureShortcut(value) }
+            self?.settingsController?.model.refresh()
+        }
+        recorder.show()
+    }
+
+    /// Carbon modifier bits as menu key equivalent flags.
+    private static func menuModifiers(_ carbon: Int) -> NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if carbon & cmdKey != 0 { flags.insert(.command) }
+        if carbon & controlKey != 0 { flags.insert(.control) }
+        if carbon & optionKey != 0 { flags.insert(.option) }
+        if carbon & shiftKey != 0 { flags.insert(.shift) }
+        return flags
+    }
+
     private func showPastePermission() {
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) }
@@ -1636,6 +1773,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         value.allPinned = !records.isEmpty && records.allSatisfy(\.favorite)
         value.hasLatestImage = line.newestID != nil
         value.globalToggleHint = Shortcut.current?.display ?? ""; value.copyLatestHint = line.copyLatestShortcut?.title ?? ""
+        value.captureAreaHint = line.captureAreaShortcut?.title ?? ""
         value.canUndoShelfRemoval = line.library?.canUndoShelfRemoval == true
         value.canUndoLibraryTrash = line.library?.canUndoTrash == true
         value.activeFavorites = snapshot.inLibrary ? libraryController?.model.showingPinnedOnly == true : line.activeFavoritesOnly
@@ -1877,6 +2015,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .markupStyles: markup(.styles)
         case .toggleLine: toggle()
         case .copyLatestImage: copyLatest()
+        case .captureArea: captureAreaAfterMenu()
         case .openScreenshotsFolder: NSWorkspace.shared.open(watcher?.folder ?? line.historyFiles.inbox)
         case .checkUpdates: showUpdateSettings(); appUpdates.manualCheck()
         case .installUpdate:

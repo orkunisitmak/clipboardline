@@ -536,3 +536,23 @@
 "This image could not be opened for markup." = "Impossible d’ouvrir cette image pour la marquer.";
 "Markup supports images up to 80 megapixels." = "Le marquage prend en charge les images jusqu’à 80 mégapixels.";
 "The marked image could not be rendered." = "Impossible de générer l’image annotée.";
+
+/* Area capture. */
+"Adjust area" = "Ajuster la zone";
+"Color" = "Couleur";
+"Allow screen recording to capture an area" = "Autorisez l’enregistrement de l’écran pour capturer une zone";
+"Another app is using this shortcut. Quit it or record a different one." = "Une autre app utilise ce raccourci. Quittez-la ou enregistrez-en un autre.";
+"Another app may be using it, for example another screenshot tool." = "Une autre app l’utilise peut-être, par exemple un autre outil de capture.";
+"Capture an area" = "Capturer une zone";
+"Capture area" = "Capturer une zone";
+"Dims the screen so you can drag out an area. Return or ⌘C copies it, ⌘S saves it as a PNG file, Esc cancels. Every capture also hangs on the line." = "Assombrit l’écran pour que vous tiriez une zone. Retour ou ⌘C la copie, ⌘S l’enregistre en PNG, Échap annule. Chaque capture est aussi accrochée à la corde.";
+"Drag to capture an area. Esc cancels." = "Faites glisser pour capturer une zone. Échap annule.";
+"Open Screen Recording Settings" = "Ouvrir les réglages d’enregistrement de l’écran";
+"Open System Settings" = "Ouvrir les Réglages Système";
+"Save capture" = "Enregistrer la capture";
+"Save…" = "Enregistrer…";
+"Screenshot" = "Capture d’écran";
+"The capture could not be saved" = "La capture n’a pas pu être enregistrée";
+"Turn on %@ in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen it." = "Activez %@ dans Réglages Système → Confidentialité et sécurité → Enregistrement de l’écran et de l’audio système, puis quittez-la et rouvrez-la.";
+"Use ⌘9" = "Utiliser ⌘9";
+

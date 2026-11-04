@@ -536,3 +536,23 @@
 "This image could not be opened for markup." = "이 이미지를 마크업용으로 열 수 없습니다.";
 "Markup supports images up to 80 megapixels." = "마크업은 최대 8천만 화소의 이미지를 지원합니다.";
 "The marked image could not be rendered." = "마크업한 이미지를 렌더링할 수 없습니다.";
+
+/* Area capture. */
+"Adjust area" = "영역 조정";
+"Color" = "색상";
+"Allow screen recording to capture an area" = "영역을 캡처하려면 화면 기록을 허용하세요";
+"Another app is using this shortcut. Quit it or record a different one." = "다른 앱이 이 단축키를 사용 중입니다. 해당 앱을 종료하거나 다른 단축키를 기록하세요.";
+"Another app may be using it, for example another screenshot tool." = "다른 앱(예: 다른 스크린샷 도구)이 사용 중일 수 있습니다.";
+"Capture an area" = "영역 캡처";
+"Capture area" = "영역 캡처";
+"Dims the screen so you can drag out an area. Return or ⌘C copies it, ⌘S saves it as a PNG file, Esc cancels. Every capture also hangs on the line." = "화면을 어둡게 하여 영역을 드래그할 수 있습니다. Return 또는 ⌘C는 복사, ⌘S는 PNG 파일로 저장, Esc는 취소합니다. 캡처는 빨랫줄에도 걸립니다.";
+"Drag to capture an area. Esc cancels." = "드래그하여 영역을 캡처하세요. Esc로 취소합니다.";
+"Open Screen Recording Settings" = "화면 기록 설정 열기";
+"Open System Settings" = "시스템 설정 열기";
+"Save capture" = "캡처 저장";
+"Save…" = "저장…";
+"Screenshot" = "스크린샷";
+"The capture could not be saved" = "캡처를 저장할 수 없습니다";
+"Turn on %@ in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen it." = "시스템 설정 → 개인정보 보호 및 보안 → 화면 및 시스템 오디오 기록에서 %@을(를) 켠 다음, 앱을 종료하고 다시 여세요.";
+"Use ⌘9" = "⌘9 사용";
+

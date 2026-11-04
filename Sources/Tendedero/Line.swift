@@ -840,6 +840,19 @@ final class Line: ObservableObject {
         else if value == nil { defaults.removeObject(forKey: "libraryShortcut") }
     }
 
+    /// Off until chosen: a global key would otherwise shadow it in every app
+    /// (⌘9 is the last tab in browsers). Settings offers ⌘9 with one click.
+    static let standardCaptureAreaShortcut = KeyShortcut(keyCode: kVK_ANSI_9, modifiers: cmdKey, keyLabel: "9")
+    var captureAreaShortcut: KeyShortcut? {
+        guard let data = defaults.data(forKey: "captureAreaShortcut"),
+              let value = try? JSONDecoder().decode(KeyShortcut.self, from: data), value.isValid else { return nil }
+        return value
+    }
+    func saveCaptureAreaShortcut(_ value: KeyShortcut?) {
+        if let value, value.isValid, let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: "captureAreaShortcut") }
+        else if value == nil { defaults.removeObject(forKey: "captureAreaShortcut") }
+    }
+
     var soundOn: Bool {
         get { !defaults.bool(forKey: "soundOff") }
         set { defaults.set(!newValue, forKey: "soundOff") }

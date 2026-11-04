@@ -158,6 +158,7 @@ enum HistoryTestRunner {
         let shelfPresentation = ShelfPresentationTests()
         let textIdentityParity = TextIdentityParityTests()
         let keyboardSpeedTests = KeyboardSpeedTests()
+        let areaCaptureTests = AreaCaptureTests()
         let shelfPaging = ShelfPagingTests()
         let markupPersistence = ImageMarkupPersistenceTests()
         let markupRenderer = ImageMarkupTests()
@@ -448,6 +449,12 @@ enum HistoryTestRunner {
             ("testQuickNumbersDoNotCompressImageColumnsWhileAnItemIsFalling", keyboardSpeedTests.testQuickNumbersDoNotCompressImageColumnsWhileAnItemIsFalling),
             ("testSpeedActionsAndQuickSelectionRemapAndUseOnlyTheActiveRow", keyboardSpeedTests.testSpeedActionsAndQuickSelectionRemapAndUseOnlyTheActiveRow),
             ("testGlobalSearchShortcutDefaultDisableAndCustomPersistenceRejectInvalidValues", keyboardSpeedTests.testGlobalSearchShortcutDefaultDisableAndCustomPersistenceRejectInvalidValues),
+            ("testCaptureAreaShortcutIsOffUntilChosenAndPersistsOffAndCustomValues", areaCaptureTests.testCaptureAreaShortcutIsOffUntilChosenAndPersistsOffAndCustomValues),
+            ("testPixelRectFlipsToImageOriginScalesAndRoundsOutwards", areaCaptureTests.testPixelRectFlipsToImageOriginScalesAndRoundsOutwards),
+            ("testPixelRectStaysInsideTheImageAndRejectsEmptyAreas", areaCaptureTests.testPixelRectStaysInsideTheImageAndRejectsEmptyAreas),
+            ("testCopiedCaptureIsATemporaryAppCopyThatFliesFromWhereItWasTaken", areaCaptureTests.testCopiedCaptureIsATemporaryAppCopyThatFliesFromWhereItWasTaken),
+            ("testMarksAreDrawnIntoTheKeptPixelsAtFullResolution", areaCaptureTests.testMarksAreDrawnIntoTheKeptPixelsAtFullResolution),
+            ("testSuggestedSaveNameIsReadableAndSortable", areaCaptureTests.testSuggestedSaveNameIsReadableAndSortable),
             ("testUnreadableImageAfterRemovalOrUndoKeepsUndoablePanelWithoutStaleActions", previewRemoval.testUnreadableImageAfterRemovalOrUndoKeepsUndoablePanelWithoutStaleActions),
             ("testSessionRemovalActsOnCurrentItemOnlyAndSelectsNextThenPrevious", previewRemoval.testSessionRemovalActsOnCurrentItemOnlyAndSelectsNextThenPrevious),
             ("testPreviewRemoveAndUndoReuseVisiblePanelForEveryKind", previewRemoval.testPreviewRemoveAndUndoReuseVisiblePanelForEveryKind),

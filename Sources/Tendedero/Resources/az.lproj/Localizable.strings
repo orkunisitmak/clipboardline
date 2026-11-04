@@ -536,3 +536,23 @@
 "This image could not be opened for markup." = "Bu şəkil işarələmə üçün açıla bilmədi.";
 "Markup supports images up to 80 megapixels." = "İşarələmə 80 meqapiksələ qədər şəkilləri dəstəkləyir.";
 "The marked image could not be rendered." = "İşarələnmiş şəkil hazırlana bilmədi.";
+
+/* Area capture. */
+"Adjust area" = "Sahəni tənzimlə";
+"Color" = "Rəng";
+"Allow screen recording to capture an area" = "Sahəni çəkmək üçün ekran yazısına icazə verin";
+"Another app is using this shortcut. Quit it or record a different one." = "Bu qısayolu başqa tətbiq istifadə edir. Ondan çıxın və ya başqa qısayol yazın.";
+"Another app may be using it, for example another screenshot tool." = "Onu başqa tətbiq, məsələn, başqa ekran şəkli aləti istifadə edə bilər.";
+"Capture an area" = "Ekrandan sahə çək";
+"Capture area" = "Sahə çək";
+"Dims the screen so you can drag out an area. Return or ⌘C copies it, ⌘S saves it as a PNG file, Esc cancels. Every capture also hangs on the line." = "Ekranı qaraldır ki, siçanla sahə seçəsiniz. Return və ya ⌘C kopyalayır, ⌘S PNG faylı kimi saxlayır, Esc ləğv edir. Hər çəkiliş ipdə də asılır.";
+"Drag to capture an area. Esc cancels." = "Çəkmək istədiyiniz sahəni sürüşdürün. Esc ləğv edir.";
+"Open Screen Recording Settings" = "Ekran yazısı ayarlarını aç";
+"Open System Settings" = "Sistem ayarlarını aç";
+"Save capture" = "Çəkilişi saxla";
+"Save…" = "Saxla…";
+"Screenshot" = "Ekran şəkli";
+"The capture could not be saved" = "Çəkiliş saxlanıla bilmədi";
+"Turn on %@ in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen it." = "Sistem ayarları → Məxfilik və Təhlükəsizlik → Ekran və sistem səsinin yazılması bölməsində %@ tətbiqini aktiv edin, sonra ondan çıxıb yenidən açın.";
+"Use ⌘9" = "⌘9 istifadə et";
+
