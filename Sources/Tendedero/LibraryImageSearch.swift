@@ -109,6 +109,7 @@ final class ImageSearchWorker: @unchecked Sendable {
         idleUnloadWork?.cancel(); idleUnloadWork = nil
         if !modelLoaded { modelLoaded = true; model = modelFolder.flatMap(Clip.init(folder:)) }
         guard let current = model, current.prepareImageModel() else {
+            modelLoaded = false
             model = nil
             return nil
         }
@@ -153,15 +154,22 @@ final class ImageSearchWorker: @unchecked Sendable {
         queue.async { [self] in
             guard current(token), let db = try? LibraryDatabase(url: database, verify: false) else { return }
             do {
+                let expectedVersion = modelFolder.flatMap(Clip.init(folder:)) != nil ? Self.version : "vision-ocr-v1"
+                let rows = try db.rows("SELECT i.id,i.path,a.fingerprint,a.version FROM items i LEFT JOIN image_analysis a ON a.item=i.id WHERE i.kind='image' AND i.deleted IS NULL ORDER BY i.created DESC")
+                let candidates = rows.compactMap { row -> (UUID, URL, String, String?, String?)? in
+                    guard let id = row["id"]?.string.flatMap(UUID.init(uuidString:)), let path = row["path"]?.string else { return nil }
+                    let url = URL(fileURLWithPath: path)
+                    let oldFingerprint = row["fingerprint"]?.string, oldVersion = row["version"]?.string
+                    guard ["png", "jpg", "jpeg", "heic", "tif", "tiff", "gif", "webp", "bmp"].contains(url.pathExtension.lowercased()), let key = Self.fingerprint(url), oldFingerprint != key || oldVersion != expectedVersion else { return nil }
+                    return (id, url, key, oldFingerprint, oldVersion)
+                }
+                if candidates.isEmpty { DispatchQueue.main.async { if self.current(token) { progress(0, 0, false) } }; return }
                 let model = beginScanModel()
                 defer { endScanModel() }
                 let version = model == nil ? "vision-ocr-v1" : Self.version
-                let rows = try db.rows("SELECT i.id,i.path,a.fingerprint,a.version FROM items i LEFT JOIN image_analysis a ON a.item=i.id WHERE i.kind='image' AND i.deleted IS NULL ORDER BY i.created DESC")
-                let todo = rows.compactMap { row -> (UUID, URL, String)? in
-                    guard let id = row["id"]?.string.flatMap(UUID.init(uuidString:)), let path = row["path"]?.string else { return nil }
-                    let url = URL(fileURLWithPath: path)
-                    guard ["png", "jpg", "jpeg", "heic", "tif", "tiff", "gif", "webp", "bmp"].contains(url.pathExtension.lowercased()), let key = Self.fingerprint(url), row["fingerprint"]?.string != key || row["version"]?.string != version else { return nil }
-                    return (id, url, key)
+                let todo = candidates.compactMap { candidate -> (UUID, URL, String)? in
+                    guard candidate.3 != candidate.2 || candidate.4 != version else { return nil }
+                    return (candidate.0, candidate.1, candidate.2)
                 }
                 if todo.isEmpty { DispatchQueue.main.async { if self.current(token) { progress(0, 0, false) } }; return }
                 DispatchQueue.main.async { if self.current(token) { progress(0, todo.count, false) } }
@@ -186,7 +194,10 @@ final class ImageSearchWorker: @unchecked Sendable {
     }
     func search(_ text: String, eligibleIDs: Set<UUID>, completion: @escaping @MainActor ([UUID]) -> Void) {
         queries.async { [self] in
-            if cachedQuery != text { cachedQuery = text; cachedVector = clip()?.embed(text: text); scheduleIdleModelRelease() }
+            if cachedQuery != text || cachedVector == nil {
+                if let vector = clip()?.embed(text: text) { cachedQuery = text; cachedVector = vector } else { cachedQuery = ""; cachedVector = nil }
+                scheduleIdleModelRelease()
+            }
             var ids = [UUID]()
             if let vector = cachedVector, let db = try? LibraryDatabase(url: database, readOnly: true, verify: false),
                let rows = try? db.rows("SELECT a.item,a.vectors FROM image_analysis a JOIN items i ON i.id=a.item AND i.path=a.path WHERE a.version=?", [.text(Self.version)]) {

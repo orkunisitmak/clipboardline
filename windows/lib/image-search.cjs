@@ -68,7 +68,7 @@ class ImageSearch{
   const queued=new Set(this.queue.map(job=>job.key));if(this.active)queued.add(this.active.key);
   for(const value of values){const key=this.key(value);if(!this.known.has(key)&&!this.failed.has(key)&&!queued.has(key)){this.queue.push({id:value.id,key});queued.add(key);}}
   this.updateStatus();void this.drain();
-  const needsPrune=!this.prunedKeys||[...this.prunedKeys].some(key=>!live.has(key))||!!this.worker;
+  const needsPrune=!this.prunedKeys||[...this.prunedKeys].some(key=>!live.has(key));
   if(needsPrune)void this.ready.then(available=>{if(available&&!this.closed){this.prunedKeys=new Set(live);return this.request('prune',{keys:[...live]}).catch(()=>{});}});
  }
  updateStatus(){const pending=this.queue.length+(this.active?1:0);if(pending!==this.state.pending||!!pending!==this.state.indexing){this.state.pending=pending;this.state.indexing=!!pending;this.changed({...this.state});}}
@@ -82,7 +82,7 @@ class ImageSearch{
      if(!this.current(job.id,job.key))continue;
      // Cached vectors can be reused without decoding the image a second time.
      let indexed=await this.request('has',{key:job.key});
-     if(!indexed){if(!this.current(job.id,job.key))continue;const image=await this.readImage(job.id);if(!image||!this.current(job.id,job.key))continue;const bitmap=new Uint8Array(image.bitmap);indexed=await this.request('index',{key:job.key,width:image.width,height:image.height,bitmap},[bitmap.buffer]);}
+     if(!indexed){if(!this.current(job.id,job.key))continue;const image=await this.readImage(job.id);if(!image||!this.current(job.id,job.key))continue;const bitmap=image.bitmap instanceof Uint8Array&&image.bitmap.byteOffset===0&&image.bitmap.byteLength===image.bitmap.buffer.byteLength?image.bitmap:new Uint8Array(image.bitmap);indexed=await this.request('index',{key:job.key,width:image.width,height:image.height,bitmap},[bitmap.buffer]);}
      if(indexed&&!this.current(job.id,job.key)){const keys=[...new Set(this.items().map(value=>this.key(value)).filter(Boolean))];this.prunedKeys=new Set(keys);await this.request('prune',{keys});}
      if(indexed&&this.current(job.id,job.key)){this.known.add(job.key);if(this.prunedKeys)this.prunedKeys.add(job.key);this.state.revision++;delete this.state.error;this.changed({...this.state});}
     }catch{if(this.current(job.id,job.key))this.failed.add(job.key);}
