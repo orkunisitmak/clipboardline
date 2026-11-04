@@ -291,7 +291,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         self.directPaste.recordActivation(app.processIdentifier)
                     }
                     self?.refresh()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self?.refresh() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        self?.refresh()
+                        if self?.isRevealed == true { self?.keepPanelOnActiveSpace() }
+                    }
                 }
             }
         }
@@ -641,6 +644,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             previousApplication = nil
         }
+        if on { keepPanelOnActiveSpace() }
         panel.setShelfRevealed(on) { [weak self] in
             guard let self, on == self.isRevealed else { return }
             if on { self.updateMousePassThrough(NSEvent.mouseLocation) }
@@ -649,6 +653,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Install the hidden-to-open transform before exposing the window;
         // otherwise its first committed frame can flash fully open.
         if on, isPresent { panel.orderFrontRegardless() }
+    }
+
+    /// Checked as the shelf comes down and after a Space switch while it is
+    /// down. The window server answers for an ordered-out window too, so a
+    /// window left on another Space is replaced before its reveal starts.
+    private func keepPanelOnActiveSpace() {
+        guard let old = panel, !old.isOnActiveSpace else { return }
+        log.notice("The shelf window was not on the active Space; making it again")
+        let wasVisible = old.isVisible, wasKey = old.isKeyWindow
+        panel = old.makeReplacement()
+        if wasKey { panel.makeKeyAndOrderFront(nil) } else if wasVisible { panel.orderFrontRegardless() }
     }
 
     @objc private func toggle() {

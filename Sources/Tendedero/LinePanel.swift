@@ -148,6 +148,29 @@ final class LinePanel: NSPanel {
     override var canBecomeKey: Bool { keyboardFocusAllowed }
     override var canBecomeMain: Bool { false }
 
+    /// The shelf is one window that joins every Space. After the app has run
+    /// for a while, macOS can leave that window bound to a single Space, and
+    /// ordering it in on any other desktop then does nothing. A relaunch
+    /// fixes it only because the window is new, so this makes the new window:
+    /// same content, callbacks, frame and shown or hidden state. This window
+    /// is ordered out and keeps an empty compositor.
+    func makeReplacement() -> LinePanel {
+        orderOut(nil)
+        let fresh = LinePanel(content: hostedContent, reduceMotion: reduceMotion)
+        fresh.keyboardFocusAllowed = keyboardFocusAllowed
+        fresh.onKey = onKey
+        fresh.onCommandKey = onCommandKey
+        fresh.onBeforeMouseKeyFocus = onBeforeMouseKeyFocus
+        fresh.onScroll = onScroll
+        fresh.onScrollLocation = onScrollLocation
+        fresh.searchEditorTarget = searchEditorTarget
+        fresh.contentHeight = contentHeight
+        fresh.setFrame(frame, display: false)
+        fresh.ignoresMouseEvents = ignoresMouseEvents
+        if shelfRevealed { fresh.setShelfRevealed(true, animated: false) }
+        return fresh
+    }
+
     private func setShelfOffset(_ offset: CGFloat) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
