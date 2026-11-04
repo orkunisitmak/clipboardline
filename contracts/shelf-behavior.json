@@ -151,9 +151,9 @@
       },
       {
         "id": "restored-item-retention",
-        "behavior": "Restoring an item from Trash gives it a full retention period from the restore, and copying it again later renews that period for text, images, links and recordings.",
-        "macos": "LibraryStore.restore sets lastCapturedAt, every capture path renews it and prune reads it first; LibraryStoreTests.testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain covers the restore.",
-        "windows": "Store 'restore', Store.insert and Store.insertRecording set lastCapturedAt on an existing item and expire reads it first; model.test.cjs and recording-model.test.cjs cover restore, copy again and expiry for every kind."
+        "behavior": "Restoring an item from Trash gives it a full retention period from the restore, and capturing it again from the clipboard later renews that period for text, images, links and recordings. Copying an item from inside the app records the copy but does not change retention.",
+        "macos": "LibraryStore.restore sets lastCapturedAt, every capture path renews it, markCopied leaves it alone and prune reads it first; LibraryStoreTests.testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain covers the restore.",
+        "windows": "Store 'restore', Store.insert and Store.insertRecording set lastCapturedAt on an existing item, markCopied leaves it alone and expire reads it first; model.test.cjs and recording-model.test.cjs cover restore, copy again and expiry for every kind."
       }
     ]
   },
