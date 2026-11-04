@@ -417,18 +417,16 @@ import Combine
         catch { pendingKeyboardSelection = nil; report(error.localizedDescription) }
     }
     /// Erases Trash items for good; the window confirms first.
-    func deletePermanently(_ explicitIDs: [UUID]? = nil) {
-        guard query.scope == .trash else { return }
-        let targets = explicitIDs ?? actionIDs
-        guard !targets.isEmpty else { return }
+    func deletePermanently(_ snapshot: [UUID: String]) {
+        guard query.scope == .trash, !snapshot.isEmpty else { return }
         pendingKeyboardSelection = (nil, query)
-        do { let count = try store.deletePermanently(targets); report(String(format: L("Deleted %d items permanently"), count)) }
+        do { let count = try store.deletePermanently(confirmed: snapshot); report(String(format: L("Deleted %d items permanently"), count)) }
         catch { pendingKeyboardSelection = nil; report(error.localizedDescription) }
     }
     /// Erases the Trash items the confirmation listed.
-    func emptyTrash(_ ids: [UUID]) {
+    func emptyTrash(_ snapshot: [UUID: String]) {
         do {
-            let count = try store.deletePermanently(ids)
+            let count = try store.deletePermanently(confirmed: snapshot)
             if query.scope == .trash { pendingKeyboardSelection = (nil, query) }
             report(count == 0 ? L("Trash is empty") : String(format: L("Deleted %d items permanently"), count))
         } catch { report(error.localizedDescription) }

@@ -941,11 +941,26 @@ extension String {
     /// Trash and link thumbnails are removed; original files elsewhere are never
     /// touched, and a file another record still uses stays. Items not in Trash
     /// are ignored. Returns how many items were erased.
-    @discardableResult func deletePermanently(_ ids: [UUID]) throws -> Int {
+    @discardableResult func deletePermanently(_ ids: [UUID]) throws -> Int { try deletePermanently(ids, generations: nil) }
+    /// The items among `ids` that are in Trash, each with its Trash generation,
+    /// for a confirmation to show and later erase exactly.
+    func trashSnapshot(_ ids: [UUID]) throws -> [UUID: String] {
+        try ids.reduce(into: [UUID: String]()) { result, id in
+            if let value = try item(id), value.deletedAt != nil { result[id] = value.trashRevision?.uuidString ?? "" }
+        }
+    }
+    /// Erases only what the user confirmed: an item restored and trashed
+    /// again in the meantime is a new generation and stays.
+    @discardableResult func deletePermanently(confirmed snapshot: [UUID: String]) throws -> Int {
+        try deletePermanently(Array(snapshot.keys), generations: snapshot)
+    }
+    private func deletePermanently(_ ids: [UUID], generations: [UUID: String]?) throws -> Int {
         // Read inside the write transaction: another instance may have restored
         // an item since the caller looked, and a live record keeps its rows.
         let targets = try db.transaction { () throws -> [LibraryRecord] in
-            let targets = try Set(ids).compactMap { try item($0) }.filter { $0.deletedAt != nil }
+            let targets = try Set(ids).compactMap { try item($0) }.filter { value in
+                value.deletedAt != nil && (generations.map { $0[value.id] == (value.trashRevision?.uuidString ?? "") } ?? true)
+            }
             for value in targets {
                 let id = SQLValue.text(value.id.uuidString)
                 try db.execute("DELETE FROM item_collections WHERE item=?", [id])
@@ -960,7 +975,9 @@ extension String {
         guard !targets.isEmpty else { return 0 }
         let erased = targets.map(\.id)
         invalidateTrashUndo(erased); invalidateShelfUndo(erased)
-        releaseFiles(of: targets)
+        // Under the writer lock, so no other instance can capture the same file
+        // between the reference check and the move.
+        try? db.transaction { releaseFiles(of: targets) }
         changed()
         return targets.count
     }
