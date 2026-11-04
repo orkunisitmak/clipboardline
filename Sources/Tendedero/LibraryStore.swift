@@ -942,9 +942,10 @@ extension String {
     /// touched, and a file another record still uses stays. Items not in Trash
     /// are ignored. Returns how many items were erased.
     @discardableResult func deletePermanently(_ ids: [UUID]) throws -> Int {
-        let targets = try Set(ids).compactMap { try item($0) }.filter { $0.deletedAt != nil }
-        guard !targets.isEmpty else { return 0 }
-        try db.transaction {
+        // Read inside the write transaction: another instance may have restored
+        // an item since the caller looked, and a live record keeps its rows.
+        let targets = try db.transaction { () throws -> [LibraryRecord] in
+            let targets = try Set(ids).compactMap { try item($0) }.filter { $0.deletedAt != nil }
             for value in targets {
                 let id = SQLValue.text(value.id.uuidString)
                 try db.execute("DELETE FROM item_collections WHERE item=?", [id])
@@ -954,7 +955,9 @@ extension String {
                 try db.execute("DELETE FROM image_analysis WHERE item=?", [id])
                 try db.execute("DELETE FROM items WHERE id=? AND deleted IS NOT NULL", [id])
             }
+            return targets
         }
+        guard !targets.isEmpty else { return 0 }
         let erased = targets.map(\.id)
         invalidateTrashUndo(erased); invalidateShelfUndo(erased)
         releaseFiles(of: targets)

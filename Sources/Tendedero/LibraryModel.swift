@@ -425,9 +425,10 @@ import Combine
         do { let count = try store.deletePermanently(targets); report(String(format: L("Deleted %d items permanently"), count)) }
         catch { pendingKeyboardSelection = nil; report(error.localizedDescription) }
     }
-    func emptyTrash() {
+    /// Erases the Trash items the confirmation listed.
+    func emptyTrash(_ ids: [UUID]) {
         do {
-            let count = try store.deletePermanently(store.trashedIDs())
+            let count = try store.deletePermanently(ids)
             if query.scope == .trash { pendingKeyboardSelection = (nil, query) }
             report(count == 0 ? L("Trash is empty") : String(format: L("Deleted %d items permanently"), count))
         } catch { report(error.localizedDescription) }
