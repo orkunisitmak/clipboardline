@@ -836,7 +836,10 @@ private final class AreaCaptureView: NSView, NSTextFieldDelegate {
             NSCursor.closedHand.set()
         } else {
             drag = .create(anchor: point)
+            // Marks belong to the area they were drawn on.
+            elements.removeAll(); drawing = nil
             selection = nil
+            refreshAnnotations()
             onBegin?()
         }
         toolbar.isHidden = true

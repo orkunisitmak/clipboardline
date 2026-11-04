@@ -80,6 +80,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var searchHotKey: HotKey?
     private var captureHotKey: HotKey?
     private(set) var areaCapture: AreaCapture?
+    /// Files written by area capture. A folder watcher can report one of them
+    /// first; it must then hang it without taking the keyboard, like the
+    /// capture flow itself. `Line.hang` already refuses a second item for the
+    /// same URL.
+    private var ownCaptureURLs = Set<URL>()
     private let directPaste: DirectPasteCoordinator
     private var pasteFocusHandoffDepth = 0
     private lazy var imageTextCopy: ImageTextCopy? = line.library.map { store in
@@ -496,7 +501,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// place on the line. Without a known capture area it simply drops in.
     /// An area capture passes `takesFocus: false`: it is usually pasted
     /// straight away, so the app it came from keeps the keyboard.
-    private func hangCapture(_ url: URL, takesFocus: Bool = true) {
+    private func hangCapture(_ url: URL, takesFocus requestedFocus: Bool = true) {
+        let takesFocus = requestedFocus && !ownCaptureURLs.contains(url.standardizedFileURL)
         guard line.presentation.shelves.contains(.images) else {
             line.hang(url)
             return
@@ -1496,9 +1502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         item.setData(png, forType: .png)
         guard ClipboardTransfer.write([item], to: isolatedCopyBoard ?? .general) else { captureFailed(); return }
         guard let url = try? AreaCapture.writeAppCopy(png, rect: result.screenRect, folder: line.historyFiles.inbox) else { captureFailed(); return }
-        // Let the previous app take the keyboard back first: ⌘V there pastes
-        // the capture while it flies to the line.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.hangCapture(url, takesFocus: false) }
+        hangOwnCapture(url)
     }
 
     /// Asks where to save the area as a PNG file, then hangs that file.
@@ -1523,7 +1527,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         AreaCapture.markAsScreenCapture(url, rect: result.screenRect)
         AreaCapture.lastSaveFolder = url.deletingLastPathComponent()
+        hangOwnCapture(url)
+    }
+
+    /// Hangs a file area capture just wrote. The previous app takes the
+    /// keyboard back first, so ⌘V there pastes the capture while it flies to
+    /// the line; a watcher that reports the file in the meantime does not
+    /// take the keyboard either.
+    private func hangOwnCapture(_ url: URL) {
+        let key = url.standardizedFileURL
+        ownCaptureURLs.insert(key)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.hangCapture(url, takesFocus: false) }
+        // Long after every watcher has listed the folder.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.ownCaptureURLs.remove(key) }
     }
 
     private func captureFailed() {

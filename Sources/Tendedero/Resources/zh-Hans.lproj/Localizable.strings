@@ -545,7 +545,7 @@
 "Another app may be using it, for example another screenshot tool." = "可能有其他应用（例如另一个截图工具）正在使用它。";
 "Capture an area" = "截取区域";
 "Capture area" = "截取区域";
-"Dims the screen so you can drag out an area. Return or ⌘C copies it, ⌘S saves it as a PNG file, Esc cancels. Every capture also hangs on the line." = "调暗屏幕，让你拖出一个区域。按 Return 或 ⌘C 拷贝，⌘S 存储为 PNG 文件，Esc 取消。每次截取也会挂到晾衣绳上。";
+"Dims the screen so you can drag out an area. Return or ⌘C copies it, ⌘S saves it as a PNG file, Esc cancels. Every capture also hangs on the line." = "调暗屏幕，让你拖出一个区域。按 Return 或 ⌘C 复制，⌘S 存储为 PNG 文件，Esc 取消。每次截取也会挂到晾衣绳上。";
 "Drag to capture an area. Esc cancels." = "拖动以截取区域。按 Esc 取消。";
 "Open Screen Recording Settings" = "打开屏幕录制设置";
 "Open System Settings" = "打开系统设置";
