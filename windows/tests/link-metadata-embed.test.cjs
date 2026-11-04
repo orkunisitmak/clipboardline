@@ -11,6 +11,12 @@ test('YouTube link previews retain a usable host title on missing or malformed o
  }
 });
 
+test('a blank or padded YouTube oEmbed author is trimmed',async()=>{
+ const author=async value=>(await linkMetadata('https://youtu.be/synthetic',async()=>({bytes:Buffer.from(JSON.stringify({title:'Example video',author_name:value})),type:'application/json'}))).author;
+ assert.equal(await author('  \t '),'');
+ assert.equal(await author('  Example author  '),'Example author');
+});
+
 test('a valid YouTube oEmbed title and author still render normally',async()=>{
  const response=await linkMetadata('https://music.youtube.com/watch?v=synthetic',async()=>({bytes:Buffer.from(JSON.stringify({title:'Example video',author_name:'Example author',thumbnail_url:'https://i.ytimg.com/vi/synthetic/default.jpg'}))}));
  assert.deepEqual(response,{title:'Example video',author:'Example author',thumbnail:'https://i.ytimg.com/vi/synthetic/default.jpg'});

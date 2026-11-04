@@ -60,6 +60,12 @@
         "windows": "linkMetadata in lib/network.cjs treats a whitespace-only og:image as missing; security.test.cjs covers it."
       },
       {
+        "id": "link-youtube-blank-author",
+        "behavior": "A YouTube link preview trims the oEmbed author name; a blank or whitespace-only author is dropped, so the preview shows the host instead of an empty line.",
+        "macos": "LinkMetadataService.youtubeMetadata trims the author and returns nil when it is blank; LibraryInteractionTests covers a blank and a padded author.",
+        "windows": "linkMetadata in lib/network.cjs trims author_name before it is stored, and the renderer falls back to the host for an empty author; link-metadata-embed.test.cjs covers a blank and a padded author."
+      },
+      {
         "id": "link-shelf-copied-order",
         "behavior": "The Link shelf lists links by when they were last copied, falling back to when they were captured, so copying an older link moves it to the first slot; Text and Image shelves stay in capture order. Copying a stored link again records the copy time and keeps its date added, so Newest first and Date added do not change, and it still counts as freshly captured for retention.",
         "macos": "LibraryStore.shelfItems orders the .link kind by COALESCE(copied,created) DESC; LibraryStoreTests.testRecapturedLinkMovesLeftAndRenewsTemporaryCaptureWithoutResettingOriginalDate covers a recaptured link.",
@@ -82,6 +88,12 @@
         "behavior": "The Library title of a subfolder is the names of all its ancestors and its own name, outermost first, joined with \" / \" (for example Parent / Child, or Parent / Middle / Child for imported deeper folders), so same-named subfolders of different parents can be told apart; a top-level folder shows only its name.",
         "macos": "LibraryModel.title builds the path by walking the whole LibraryCollection.parentID chain (cycle-safe) and shows it as the Library window title; LibraryInteractionTests.testSubfolderTitleIncludesItsParentLikeWindows covers it.",
         "windows": "libraryTitle() in renderer.js shows folderPath() for the folder scope; library-ui.test.cjs checks the toolbar title of a subfolder."
+      },
+      {
+        "id": "link-title-format-characters",
+        "behavior": "An HTML page title and its Open Graph text (not a YouTube oEmbed title) keep the zero-width joiner and non-joiner, so emoji sequences and Persian words are not split, and numeric references to them are decoded. Numeric references to control code points (C0, DEL, C1) stay literal. Bidirectional marks, embeddings, overrides and isolates (U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069) are removed, raw or as numeric references, so a title cannot be reordered to spoof another one.",
+        "macos": "PublicLinkHTMLMetadata.clean drops general category Cc and those bidirectional controls and marks, and entities only refuses Cc; PublicLinkNetworkTests.testHTMLTitleKeepsJoinersButDropsControlsAndBidirectionalOverrides covers it.",
+        "windows": "entities() in lib/network.cjs refuses the C0 and C1 controls and collapse() removes the bidirectional controls and marks; security.test.cjs covers joiners and bidirectional controls."
       },
       {
         "id": "trash-restore-selection",
@@ -136,6 +148,12 @@
         "behavior": "Name and pin trims the name and accepts 1 to 160 characters (grapheme clusters), at most 1024 UTF-8 bytes, with no control, line-separator or paragraph-separator characters. Any other name, including an empty one, is rejected with the shared \"Enter a name (1–160 characters)\" message and the item is left unchanged.",
         "macos": "LibraryStore.nameAndPin validates the trimmed name with these limits and throws the localized \"Enter a name (1–160 characters)\" error. The Library inspector is outside this rule: LibraryModel.flushEdits stores its title field as typed, so an empty field clears the name and a whitespace-only one is kept unvalidated.",
         "windows": "The Store 'name' action and a non-blank name in 'details' validate through itemName with the same limits and error; model.test.cjs checks accepted names at the limits and rejects empty, oversized, multi-line, control-character, NUL and non-string names with the exact message. A blank or whitespace-only name in 'details' clears the name instead."
+        },
+        {
+        "id": "disabled-undo-names-the-surface",
+        "behavior": "A disabled undo row first says where it is available: Undo trash on the shelves reads \"Available in Library\" and Undo take down in the Library reads \"Available on the shelves\"; \"Nothing to undo\" is shown only on the surface where the undo exists.",
+        "macos": "ActionBarMenuAction.undoRemoveFromLine and .undoTrash pick the surface reason before \"Nothing to undo\"; ActionBarCatalogTests.testDisabledRowsNameTheSurfaceOrSelectionThatIsMissing covers it.",
+        "windows": "actionCommands() in renderer.js runs the surface check before the \"Nothing to undo.\" branch; library-ui.test.cjs checks both rows on the shelves and in the Library."
       }
     ]
   },

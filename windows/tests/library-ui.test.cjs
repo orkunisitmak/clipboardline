@@ -111,6 +111,12 @@ test('inspector Add to folder preserves pin state and memberships while ShiftP s
  await f.key('KeyP',{shift:true});assert.match(f.overlay,/Pin without folder/);await f.click('choose-folder',{folder:b});assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:b,rememberRecent:true});assert.equal(f.state.items[0].pinned,true);
 });
 
+test('the action list Add to folder keeps an unpinned item unpinned',async()=>{
+ const f=fixture();await f.ready();const a='20000000-0000-4000-8000-000000000001';f.state.folders=[{id:a,name:'Work'}];Object.assign(f.state.items[0],{retainedAt:1000,folderIds:[],pinned:false});f.api.emit({folders:f.state.folders,items:f.state.items});await f.ready();await savedLibrary(f);await f.key('KeyK',{ctrl:true});await f.click('execute-command',{command:'folder.assign.'+a});
+ assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:a,pinning:false});
+ const value=f.state.items.find(entry=>entry.id===f.image);assert.deepEqual(value.folderIds,[a]);assert.equal(value.pinned,false);
+});
+
 test('ShiftP starts on the first real folder and keeps Pin without folder last like the native picker',async()=>{
  const f=fixture();await f.ready();const first='20000000-0000-4000-8000-000000000001',second='20000000-0000-4000-8000-000000000002';f.api.emit({folders:[{id:first,name:'References'},{id:second,name:'Video ideas'}]});await f.ready();await f.key('KeyP',{shift:true});assert.deepEqual([...f.overlay.matchAll(/data-action="choose-folder" data-folder="([^"]*)"/g)].map(match=>match[1]),[first,second,'']);await f.key('Enter');assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:first,rememberRecent:true});await f.key('KeyP',{shift:true});await f.key('ArrowDown');await f.key('ArrowDown');await f.key('Enter');assert.deepEqual(f.commands.at(-1),{action:'pin',payload:{ids:[f.image],value:true}});
 });
@@ -189,6 +195,10 @@ test('the action list keeps Copy enabled for Trash items while editing actions a
 test('Name and pin leaves the length of a name to the shared validation',async()=>{
  const f=fixture();await f.ready();await f.key('KeyP',{alt:true});assert.match(f.overlay,/id="name-input"/);assert.doesNotMatch(f.overlay,/id="name-input"[^>]*maxlength/);
 });
+test('the action list disables Move to Trash for an item already in Trash',async()=>{
+ const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="trash" disabled>/);
+});
 test('the action list disables Clear filters until a Library filter is set',async()=>{
  const f=fixture();await f.ready();await savedLibrary(f);
  const row=()=>f.overlay.match(/<button[^>]*data-command="clear-filters"[^>]*>[\s\S]*?<\/button>/)[0];
@@ -219,6 +229,13 @@ test('Title sort does not fold ligatures or circled digits, like the Mac',async(
  f.state.items.splice(0,f.state.items.length,...names.map((name,index)=>({id:'00000000-0000-4000-8000-0000000002'+String(index).padStart(2,'0'),kind:'text',createdAt:1000-index,updatedAt:1000-index,name,title:'',text:name,url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,crop:null,annotations:[],retainedAt:1})));
  f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'saved'});await f.change('sort-filter','title');
  assert.deepEqual(cards(f).map(id=>f.state.items.find(item=>item.id===id).name),['1','2','fj','fz','\u2460','\ufb01sh']);
+});
+test('disabled undo rows name the surface before saying there is nothing to undo',async()=>{
+ const f=fixture();await f.ready();
+ const detail=id=>f.overlay.match(new RegExp('<button[^>]*data-command="'+id+'"[^>]*>[\\s\\S]*?</button>'))[0].match(/<small>([^<]*)<\/small>/)[1];
+ await f.key('KeyK',{ctrl:true});assert.equal(detail('undoTrash'),'Available in Library');assert.equal(detail('undo'),'Nothing to undo.');
+ await f.key('Escape');await savedLibrary(f);await f.key('KeyK',{ctrl:true});
+ assert.equal(detail('undo'),'Available on the shelves');assert.equal(detail('undoTrash'),'Nothing to undo.');
 });
 test('restoring from Trash moves focus and selection to the first remaining item',async()=>{
  const f=fixture();await f.ready();for(const value of f.state.items.slice(0,3))value.trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);
