@@ -46,4 +46,17 @@ import XCTest
         XCTAssertTrue(FileManager.default.fileExists(atPath: copy.path), "A file another record uses stays")
         XCTAssertEqual(try library.deletePermanently(library.trashedIDs()), 0, "An empty Trash erases nothing")
     }
+
+    func testConfirmedSnapshotSparesAnItemTrashedAgainAfterConfirmation() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let record = try library.captureImage(try f.image())
+        try library.trash([record.id])
+        let snapshot = try library.trashSnapshot([record.id])
+        XCTAssertEqual(Set(snapshot.keys), [record.id])
+        // Restored and trashed again while the confirmation was open.
+        try library.restore([record.id]); try library.trash([record.id])
+        XCTAssertEqual(try library.deletePermanently(confirmed: snapshot), 0, "A new Trash generation was not confirmed")
+        XCTAssertNotNil(try library.item(record.id))
+        XCTAssertEqual(try library.deletePermanently(confirmed: library.trashSnapshot([record.id])), 1)
+    }
 }
