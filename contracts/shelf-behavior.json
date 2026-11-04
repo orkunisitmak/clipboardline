@@ -26,6 +26,12 @@
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
+      },
+      {
+        "id": "card-context-menu-form",
+        "macos": "Right-clicking a shelf card opens a native NSMenu built for that card (GrabArea/TextShelfView/LinkShelfView menuProvider).",
+        "windows": "Right-clicking a shelf card opens the shared Actions palette for the selection instead of a native menu.",
+        "reason": "Electron has no per-card native menu matching AppKit's; the Actions palette already lists the shelf's actions with their shortcuts and keeps keyboard focus inside the app. The card that is acted on follows the shared card-right-click behavior."
       }
     ],
     "sharedBehaviors": [
@@ -142,6 +148,12 @@
         "behavior": "Clear filters is available in the action list only while the Library has a filter to clear (favorites only, a search, a type, a date range, a domain, a tag or a search mode other than all); with no filter it is disabled with the reason \"No filters to clear\", and with the Library closed it keeps the Library reason.",
         "macos": "ActionBarMenuAction.clearFilters requires libraryAvailable and hasLibraryFilters and otherwise names \"No filters to clear\"; ActionBarCatalogTests covers it.",
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
+      },
+      {
+        "id": "card-right-click",
+        "behavior": "Right-clicking a shelf card offers that card's actions without a prior left-click. A card outside the selection becomes the only target; Move to Trash on a card already in the selection acts on the selection.",
+        "macos": "Each shelf card view's menuProvider builds the menu for its own item; Move to Trash selects the card first when it is not already selected (TextShelfView).",
+        "windows": "The renderer's contextmenu handler selects a card outside the selection alone, keeps a selection that contains the card (limited to that card's shelf, with the range anchor moved to the card) and opens the Actions palette; renderer-ui.test.cjs covers a single card, a selection, a mixed-shelf selection with a later Shift-click, and an open preview."
       }
     ]
   },
