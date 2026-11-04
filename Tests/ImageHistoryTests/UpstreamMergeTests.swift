@@ -14,7 +14,8 @@ import XCTest
         XCTAssertEqual(line.neighbours(of: order[2].id, toTheLeft: true).map(\.id), Array(order.prefix(2)).map(\.id))
         XCTAssertEqual(line.neighbours(of: order[2].id, toTheLeft: false).map(\.id), Array(order.suffix(2)).map(\.id))
         line.takeDown(order[2].id, toTheLeft: true)
-        XCTAssertEqual(line.items.filter { !$0.falling }.count, 3) // the two photos on the left come off the shelf at once
+        // the two photos on the left come off the shelf at once
+        XCTAssertEqual(line.items.filter { !$0.falling }.map(\.id).sorted { $0.uuidString < $1.uuidString }, order.suffix(3).map(\.id).sorted { $0.uuidString < $1.uuidString })
         line.hang(try f.image(), quietly: true)
         XCTAssertEqual(line.items.filter { !$0.falling }.count, 4)
         _ = try line.togglePin(order[3].id); _ = try line.togglePin(order[4].id)
