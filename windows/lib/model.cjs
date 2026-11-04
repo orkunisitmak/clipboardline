@@ -304,7 +304,7 @@ class Store {
       const before=clone(this.data),live=this.liveItems(),now=this.clock();
       try{
         const item=prior||{id:crypto.randomUUID(),kind:'image',recording:true,text:'',url:'',title:'',name:'',pinned:false,folderIds:[],tags:[],note:'',retainedAt:null,lastCopiedAt:null,createdAt:now,updatedAt:now,trashedAt:null,hiddenFromShelf:false,annotations:[],crop:null,ocrText:'',imageFile:assets.posterFile,renderedFile:'',videoFile:assets.videoFile,renderedVideoFile:'',...assets.details};
-        item.createdAt=now;item.updatedAt=now;item.hiddenFromShelf=false;item.captureRevision=crypto.randomUUID();
+        item.createdAt=now;if(prior)item.lastCapturedAt=now;item.updatedAt=now;item.hiddenFromShelf=false;item.captureRevision=crypto.randomUUID();
         this.data.items=[item,...this.data.items.filter(entry=>entry.id!==item.id)];this.expire(false);this.persist();return item;
       }catch(error){this.rollback(before,live);throw error;}
     }finally{this.releaseInFlightMedia(assets.inFlightMediaFiles);}
@@ -340,7 +340,7 @@ class Store {
     const now = this.clock();
     const item = prior || {id: crypto.randomUUID(), kind, text: textValue, url, title: '', name: '', pinned: false, folderIds: [], tags: [],
       imageFile, renderedFile: '', ocrText: '', annotations: [], crop: null, note:'', retainedAt:null, lastCopiedAt:null, createdAt: now, updatedAt: now, trashedAt: null, hiddenFromShelf: false};
-    if(kind==='link'&&prior){item.lastCopiedAt=now;item.lastCapturedAt=now;}else item.createdAt=now;
+    if(prior)item.lastCapturedAt=now;if(kind==='link'&&prior)item.lastCopiedAt=now;else item.createdAt=now;
     item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
     if(kind==='text')item.text=textValue;
     if (extra.title) item.title = text(extra.title, 500, true);
