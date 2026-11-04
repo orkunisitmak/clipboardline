@@ -53,6 +53,8 @@ import Combine
     var collectionStats: (() -> (configurations: Int, refreshes: Int)?)?
     var onExportRequested: (() -> Void)?
     var onTrashRequested: (() -> Void)?
+    /// Asks before erasing the selected Trash items for good.
+    var onDeletePermanentlyRequested: (() -> Void)?
     var onCloseRequested: (() -> Void)?
     var onFlushPreview: () -> Bool = { true }
     private var flushingPreview = false
@@ -446,6 +448,22 @@ import Combine
             report(error.localizedDescription)
         }
     }
+    /// Erases Trash items for good; the window confirms first.
+    func deletePermanently(_ explicitIDs: [UUID]? = nil) {
+        guard query.scope == .trash else { return }
+        let targets = explicitIDs ?? actionIDs
+        guard !targets.isEmpty else { return }
+        pendingKeyboardSelection = (nil, query)
+        do { let count = try store.deletePermanently(targets); report(String(format: L("Deleted %d items permanently"), count)) }
+        catch { pendingKeyboardSelection = nil; report(error.localizedDescription) }
+    }
+    func emptyTrash() {
+        do {
+            let count = try store.deletePermanently(store.trashedIDs())
+            if query.scope == .trash { pendingKeyboardSelection = (nil, query) }
+            report(count == 0 ? L("Trash is empty") : String(format: L("Deleted %d items permanently"), count))
+        } catch { report(error.localizedDescription) }
+    }
     func assign(_ folder: UUID, moving: Bool = false) {
         guard flushEdits() else { return }
         var source: UUID?; if moving, case let .collection(id) = query.scope { source = id }
@@ -547,7 +565,9 @@ import Combine
         case .links: setKind(.link); _ = focusContent()
         case .tag: if !selectionInTrash { onTagRequested?() }
         case .export: onExportRequested?()
-        case .trash: trashSelection()
+        case .trash:
+            // In Trash the delete keys erase for good, after a confirmation.
+            if query.scope == .trash { if !actionIDs.isEmpty { onDeletePermanentlyRequested?() } } else { trashSelection() }
         case .editText, .markup, .cropImage:
             if actionIDs.count == 1, let id = actionIDs.first, let record = try? store.item(id), record.deletedAt == nil,
                (action == .editText ? record.kind == .text : record.kind == .image) { onEditPreviewRequested?(action, id) }
