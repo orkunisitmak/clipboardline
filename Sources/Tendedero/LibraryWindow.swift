@@ -301,15 +301,17 @@ final class LibraryNativeWindow: NSWindow {
     }
     func confirmEmptyTrash() {
         guard model.flushEdits() else { return }
-        let count = (try? model.store.trashedIDs().count) ?? 0
-        guard count > 0 else { model.report(L("Trash is empty")); return }
+        // Only what the user sees and confirms is erased; an item that lands
+        // in Trash while the sheet is up is not.
+        let snapshot = (try? model.store.trashedIDs()) ?? []
+        guard !snapshot.isEmpty else { model.report(L("Trash is empty")); return }
         let alert = NSAlert(); alert.alertStyle = .warning
-        alert.messageText = String(format: L("Empty Trash and delete %d items permanently?"), count)
+        alert.messageText = String(format: L("Empty Trash and delete %d items permanently?"), snapshot.count)
         alert.informativeText = L("They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are.")
         alert.addButton(withTitle: L("Empty Trash")).hasDestructiveAction = true
         alert.addButton(withTitle: L("Cancel"))
         presentAlert(alert) { [weak self] response in
-            guard response == .alertFirstButtonReturn else { return }; self?.model.emptyTrash()
+            guard response == .alertFirstButtonReturn else { return }; self?.model.emptyTrash(snapshot)
         }
     }
     func exportSelection(ids: [UUID]? = nil) {
