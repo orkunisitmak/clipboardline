@@ -66,6 +66,19 @@ import XCTest
         XCTAssertTrue(try command(.menu(.refreshLink), context: context, bindings: bindings).isEnabled)
     }
 
+    func testDisabledRowsNameTheSurfaceOrSelectionThatIsMissing() throws {
+        let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
+        let bindings = KeyboardBindings(defaults: fixture.defaults)
+        var line = ActionBarCatalog.Context(); line.origin = .line; line.libraryAvailable = true
+        XCTAssertEqual(try command(.keyboard(.focusNextPane), context: line, bindings: bindings).disabledReason, L("Available in Library"))
+        line.canUndoLibraryTrash = true
+        XCTAssertEqual(try command(.keyboard(.undoTrash), context: line, bindings: bindings).disabledReason, L("Available in Library"))
+        line.selectedCount = 1; line.kind = .text; line.canTakeDownLeft = true
+        XCTAssertEqual(try command(.menu(.takeDownLeft), context: line, bindings: bindings).disabledReason, L("Select one image first"))
+        var library = ActionBarCatalog.Context(); library.origin = .library; library.libraryAvailable = true; library.canUndoShelfRemoval = true
+        XCTAssertEqual(try command(.keyboard(.undoRemoveFromLine), context: library, bindings: bindings).disabledReason, L("Available on the shelves"))
+    }
+
     func testCatalogReflectsRemappedDisabledAndContextSpecificShortcutHints() throws {
         let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
         let bindings = KeyboardBindings(defaults: fixture.defaults)

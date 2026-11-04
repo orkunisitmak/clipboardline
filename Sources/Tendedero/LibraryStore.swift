@@ -558,6 +558,8 @@ extension String {
         guard let normalized = LinkIdentity.normalized(url) else { throw HistoryFiles.Failure.unsafeFile }
         if var item = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE normalized=? AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1", [.text(normalized)])).first {
             item.onShelf = true; item.updatedAt = now(); item.lastCopiedAt = now(); item.lastCapturedAt = now(); item.captureRevision = UUID()
+            // Copying a link again asks for its preview again, so a failed attempt does not hold the retry back for an hour.
+            if item.metadataState == "failed" { item.metadataAttemptedAt = nil }
             try db.transaction { try put(item) }; changed([item.id]); return item
         }
         let date = now(); var item = LibraryRecord(id: UUID(), kind: .link, createdAt: date, updatedAt: date)
