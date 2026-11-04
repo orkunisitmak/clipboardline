@@ -93,7 +93,7 @@ async function handle(action,payload){
 try{
  if(fs.lstatSync(workerData.modelDirectory).isSymbolicLink())throw new Error('Unsafe image search models.');
  fs.mkdirSync(workerData.cacheDirectory,{recursive:true,mode:0o700});if(fs.lstatSync(workerData.cacheDirectory).isSymbolicLink())throw new Error('Unsafe image search cache.');
- if(!workerData.verified)verifyModels();
+ verifyModels();
  const metadata=fs.readFileSync(safeFile(workerData.modelDirectory,'model-source.json',1024*1024));modelID=crypto.createHash('sha256').update(metadata).digest('hex');
  for(const file of ['mobileclip-s2-image.onnx','mobileclip-s2-text.onnx','clip-vocab.json','clip-merges.txt'])safeFile(workerData.modelDirectory,file,600*1024*1024);
  available=true;

@@ -78,20 +78,24 @@ enum VisualRanking {
 }
 
 final class ImageSearchWorker: @unchecked Sendable {
-    static let version = "vision-mobileclip-s2-3e0a7bf-v1"
+    static let version = "vision-mobileclip-s2-3e0a7bf-v2"
     private let database: URL
     private let modelFolder: URL?
     private let queue = DispatchQueue(label: "local.clipboardline.image-search.index", qos: .utility)
     private let queries = DispatchQueue(label: "local.clipboardline.image-search.query", qos: .userInitiated)
     private let stateLock = NSLock(), modelLock = NSLock()
     private var generation = 0
+    private var activeScans = 0
     private var modelLoaded = false
     private var model: Clip?
     private var idleUnloadWork: DispatchWorkItem?
     private var cachedQuery = ""
     private var cachedVector: [Float]?
     init(database: URL, modelFolder: URL?) { self.database = database; self.modelFolder = modelFolder }
-    func cancel() { stateLock.lock(); generation += 1; stateLock.unlock(); releaseModelMemory() }
+    func cancel() {
+        stateLock.lock(); generation += 1; stateLock.unlock()
+        queries.async { [weak self] in self?.releaseModelMemory() }
+    }
     private func current(_ value: Int) -> Bool { stateLock.lock(); defer { stateLock.unlock() }; return generation == value }
     private func clip() -> Clip? {
         modelLock.lock(); defer { modelLock.unlock() }
@@ -99,14 +103,34 @@ final class ImageSearchWorker: @unchecked Sendable {
         if !modelLoaded { modelLoaded = true; model = modelFolder.flatMap(Clip.init(folder:)) }
         return model
     }
+    private func beginScanModel() -> Clip? {
+        modelLock.lock(); defer { modelLock.unlock() }
+        activeScans += 1
+        idleUnloadWork?.cancel(); idleUnloadWork = nil
+        if !modelLoaded { modelLoaded = true; model = modelFolder.flatMap(Clip.init(folder:)) }
+        guard let current = model, current.prepareImageModel() else {
+            model = nil
+            return nil
+        }
+        return current
+    }
+    private func endScanModel() {
+        modelLock.lock()
+        activeScans = max(0, activeScans - 1)
+        let shouldSchedule = activeScans == 0
+        modelLock.unlock()
+        if shouldSchedule { scheduleIdleModelRelease() }
+    }
     private func releaseModelMemory() {
         modelLock.lock(); defer { modelLock.unlock() }
         idleUnloadWork?.cancel(); idleUnloadWork = nil
+        guard activeScans == 0 else { return }
         model?.unloadModels()
     }
     private func scheduleIdleModelRelease() {
         modelLock.lock(); defer { modelLock.unlock() }
-        idleUnloadWork?.cancel()
+        idleUnloadWork?.cancel(); idleUnloadWork = nil
+        guard activeScans == 0 else { return }
         let work = DispatchWorkItem { [weak self] in self?.releaseModelMemory() }
         idleUnloadWork = work
         queries.asyncAfter(deadline: .now() + 15, execute: work)
@@ -129,18 +153,18 @@ final class ImageSearchWorker: @unchecked Sendable {
         queue.async { [self] in
             guard current(token), let db = try? LibraryDatabase(url: database, verify: false) else { return }
             do {
-                let expectedVersion = modelFolder.map { FileManager.default.fileExists(atPath: $0.appendingPathComponent("model-source.json").path) } == true ? Self.version : "vision-ocr-v1"
+                let model = beginScanModel()
+                defer { endScanModel() }
+                let version = model == nil ? "vision-ocr-v1" : Self.version
                 let rows = try db.rows("SELECT i.id,i.path,a.fingerprint,a.version FROM items i LEFT JOIN image_analysis a ON a.item=i.id WHERE i.kind='image' AND i.deleted IS NULL ORDER BY i.created DESC")
                 let todo = rows.compactMap { row -> (UUID, URL, String)? in
                     guard let id = row["id"]?.string.flatMap(UUID.init(uuidString:)), let path = row["path"]?.string else { return nil }
                     let url = URL(fileURLWithPath: path)
-                    guard ["png", "jpg", "jpeg", "heic", "tif", "tiff", "gif", "webp", "bmp"].contains(url.pathExtension.lowercased()), let key = Self.fingerprint(url), row["fingerprint"]?.string != key || row["version"]?.string != expectedVersion else { return nil }
+                    guard ["png", "jpg", "jpeg", "heic", "tif", "tiff", "gif", "webp", "bmp"].contains(url.pathExtension.lowercased()), let key = Self.fingerprint(url), row["fingerprint"]?.string != key || row["version"]?.string != version else { return nil }
                     return (id, url, key)
                 }
                 if todo.isEmpty { DispatchQueue.main.async { if self.current(token) { progress(0, 0, false) } }; return }
                 DispatchQueue.main.async { if self.current(token) { progress(0, todo.count, false) } }
-                let model = clip(), version = model == nil ? "vision-ocr-v1" : Self.version
-                defer { scheduleIdleModelRelease() }
                 var dirty = false, lastReport = Date.distantPast
                 for (index, job) in todo.enumerated() {
                     guard current(token) else { return }

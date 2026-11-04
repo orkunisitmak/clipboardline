@@ -37,9 +37,13 @@ final class Clip: @unchecked Sendable {
         tokenizer = nil
     }
 
+    func prepareImageModel() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return loadImageModelUnlocked() != nil
+    }
+
     private func loadImageModelUnlocked() -> MLModel? {
         if let imageModel { return imageModel }
-        textModel = nil
         let config = MLModelConfiguration()
         config.computeUnits = .all
         imageModel = try? MLModel(contentsOf: folder.appendingPathComponent("mobileclip_s2_image.mlmodelc"), configuration: config)
@@ -48,7 +52,6 @@ final class Clip: @unchecked Sendable {
 
     private func loadTextModelUnlocked() -> (MLModel, ClipTokenizer)? {
         if let textModel, let tokenizer { return (textModel, tokenizer) }
-        imageModel = nil
         let config = MLModelConfiguration()
         config.computeUnits = .all
         guard let text = textModel ?? (try? MLModel(contentsOf: folder.appendingPathComponent("mobileclip_s2_text.mlmodelc"), configuration: config)),

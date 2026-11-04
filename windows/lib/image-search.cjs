@@ -12,13 +12,12 @@ function workerFile(){const file=path.join(__dirname,'image-search-worker.cjs'),
 class ImageSearch{
  constructor({modelDirectory,cacheDirectory,items,readImage,changed=()=>{},workerFactory=options=>new Worker(workerFile(),options),runtimeDirectory=null,ortModule=null,idleTimeoutMs=15000}){
   this.items=items;this.readImage=readImage;this.changed=changed;this.sequence=0;this.requests=new Map();this.queue=[];this.known=new Set();this.failed=new Set();this.active=null;this.closed=false;this.state={available:false,indexing:false,pending:0,revision:0};
-  this.workerFactory=workerFactory;this.workerOptions={modelDirectory,cacheDirectory,runtimeDirectory,ortModule,modelConfig:MODEL_CONFIG};this.idleTimeoutMs=idleTimeoutMs;this.idleTimer=null;this.heavyWorkDone=false;this.verified=false;this.prunedKeys=null;
+  this.workerFactory=workerFactory;this.workerOptions={modelDirectory,cacheDirectory,runtimeDirectory,ortModule,modelConfig:MODEL_CONFIG};this.idleTimeoutMs=idleTimeoutMs;this.idleTimer=null;this.heavyWorkDone=false;this.prunedKeys=null;
   this.spawnWorker(true);
  }
  spawnWorker(initial=false){
   if(this.worker)return this.ready;
-  const workerData=this.verified?{...this.workerOptions,verified:true}:this.workerOptions;
-  const worker=this.workerFactory({workerData});this.worker=worker;this.heavyWorkDone=false;
+  const worker=this.workerFactory({workerData:this.workerOptions});this.worker=worker;this.heavyWorkDone=false;
   this.ready=new Promise(resolve=>{this.resolveReady=resolve;});
   worker.on('message',message=>{if(this.worker===worker)this.receive(message,initial);});
   worker.on('error',()=>{if(this.worker===worker)this.failure();});
@@ -42,7 +41,6 @@ class ImageSearch{
   if(message.event==='failed'){this.failure();return;}
   if(message.event==='ready'){
    const wasAvailable=this.state.available;this.state.available=message.available===true;
-   if(this.state.available)this.verified=true;
    if(!this.state.available){this.queue=[];this.active=null;this.updateStatus();this.state.error='Offline image search is unavailable. Reinstall the official application to restore its bundled models.';}
    this.resolveReady(this.state.available);
    if(initial||wasAvailable!==this.state.available||!this.state.available)this.changed({...this.state});
