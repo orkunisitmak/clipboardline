@@ -64,6 +64,11 @@ this on both platforms with an image, a text and a link selected.
 `subfolder-title` requires the Library title of a subfolder to list every
 ancestor, outermost first (`Parent / Child`, `Parent / Middle / Child`), so
 same-named subfolders of different parents can be told apart.
+`link-title-format-characters` requires a fetched page title to keep the
+zero-width joiner and non-joiner (emoji sequences, Persian words) while removing
+the bidirectional marks, embeddings, overrides and isolates that can spoof a title,
+whether written directly or as numeric references; numeric references to control
+code points stay literal.
 `trash-restore-selection` requires restoring items from Library Trash to move
 focus and selection to the first item that remains in Trash and to clear the
 details panel when none remain.
@@ -76,6 +81,8 @@ whitespace and a whitespace-only name to count as no name.
 library only when the open view is that folder or one of its subfolders.
 `text-and-note-size-limit` requires a text or a note over 1 MiB of UTF-8 bytes to be refused on both
 platforms, not 1 MiB of UTF-16 units on Windows.
+`name-fold-keeps-script-marks` requires tag and folder names that differ only by a kana voiced mark or a
+Devanagari or Thai vowel sign to stay distinct on both platforms.
 `item-display-title` requires an unnamed text to be titled by its first non-blank
 line, trimmed and capped at 120 grapheme clusters (Untitled note when every line is
 blank), and a link without a fetched title by its host name (Link when the stored URL

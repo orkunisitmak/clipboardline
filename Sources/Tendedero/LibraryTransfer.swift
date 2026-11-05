@@ -45,7 +45,7 @@ import AppKit
         return file
     }
     static func exportSources(_ records: [LibraryRecord], store: LibraryStore) throws -> [(url: URL, name: String)] {
-        try records.map { let file = try materialize($0, store: store); return (file, HistoryFiles.exportName(for: file, originalPath: $0.originalPath)) }
+        try records.map { let file = try materialize($0, store: store); return (file, HistoryFiles.exportName(for: file, originalPath: $0.originalPath, title: $0.title)) }
     }
     static func dragItems(_ records: [LibraryRecord], store: LibraryStore) throws -> [ShelfDragItem] {
         let plain = records.compactMap { $0.kind == .text ? $0.text : $0.originalURL }.joined(separator: "\n\n")
