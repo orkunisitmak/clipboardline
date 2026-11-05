@@ -128,7 +128,7 @@ private enum LibrarySQL {
         if !query.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             var searchParts = [String](), searchValues = [SQLValue]()
             if query.searchMode != .visual {
-                for term in query.search.libraryFolded.split(whereSeparator: \.isWhitespace) {
+                for term in query.search.searchFolded.split(whereSeparator: \.isWhitespace) {
                     searchParts.append("(instr(i.search,?)>0 OR EXISTS(SELECT 1 FROM image_analysis a WHERE a.item=i.id AND a.path=i.path AND instr(a.content,?)>0))")
                     searchValues += [.text(String(term)), .text(String(term))]
                 }
@@ -156,7 +156,10 @@ private enum LibrarySQL {
     }
 }
 extension String {
+    /// Identity of tags and folders: `kır` and `kir` stay different names.
     var libraryFolded: String { folding(options: [.diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "tr_TR")).lowercased() }
+    /// Search text: Turkish ı, I, İ and i all fold to i, so text typed with dotted or dotless letters matches.
+    var searchFolded: String { libraryFolded.replacingOccurrences(of: "ı", with: "i") }
 }
 
 /// The production source of truth. Existing history classes are adapters to
@@ -205,6 +208,7 @@ extension String {
     var canUndoShelfRemoval: Bool { !shelfRemovalUndo.isEmpty }
     var canUndoTrash: Bool { !trashRemovalUndo.isEmpty }
     private let readerQueue = DispatchQueue(label: "local.clipboardline.library.reader", qos: .userInitiated)
+    private let searchRefold = DispatchGroup()
     var retentionDays: Int { let days = defaults.integer(forKey: "historyRetentionDays"); return ImageHistory.dayChoices.contains(days) ? days : 30 }
     func retentionDays(for kind: LibraryKind) -> Int { HistoryRetention.days(kind, defaults: defaults) }
     var thumbnailsFolder: URL { root.appendingPathComponent("Thumbnails", isDirectory: true) }
@@ -262,6 +266,7 @@ extension String {
         try backfillTextIdentity()
         try db.execute("PRAGMA user_version=1")
         drainMarkupGarbage()
+        try refoldSearch()
     }
     private func migrateLegacy() throws {
         guard try db.rows("SELECT value FROM metadata WHERE key='migration-v1'").isEmpty else { return }
@@ -303,6 +308,74 @@ extension String {
         }
         try db.backup(to: backup.appendingPathComponent("library-after-migration.sqlite"))
     }
+    /// The search index stores folded text, so rows written before dotless ı folded to i are folded again.
+    /// Only the index changes (`items.search`, `search_fts`, `image_analysis.content`), in small
+    /// transactions on a private connection off the main thread, so launch is not held up. A relaunch
+    /// before the marker is written starts over; every step is repeatable.
+    private func refoldSearch() throws {
+        guard try db.rows("SELECT value FROM metadata WHERE key='search-fold-v2'").isEmpty else { return }
+        let url = databaseURL
+        searchRefold.enter()
+        // An open search ran against the old index; run it again once the re-fold is done.
+        Self.runSearchRefold(url, attempt: 1, group: searchRefold) { [weak self] in
+            Task { @MainActor [weak self] in self?.searchRevision += 1 }
+        }
+    }
+    /// A write lock held by a long migration or another app can time an attempt out; every step is
+    /// repeatable, so the next attempt is scheduled later instead of sleeping on a pool thread.
+    nonisolated private static func runSearchRefold(_ url: URL, attempt: Int, group: DispatchGroup, completed: @escaping @Sendable () -> Void) {
+        DispatchQueue.global(qos: .utility).async {
+            if (try? refoldSearchIndex(url)) != nil { completed(); group.leave(); return }
+            guard attempt < 5 else { group.leave(); return }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Double(attempt) * 5) {
+                runSearchRefold(url, attempt: attempt + 1, group: group, completed: completed)
+            }
+        }
+    }
+    /// Blocks until a started search re-fold finishes. Tests use it; the app does not.
+    func waitForSearchRefold() { searchRefold.wait() }
+    nonisolated private static func refoldSearchIndex(_ url: URL) throws {
+        let db = try LibraryDatabase(url: url, verify: false)
+        var cursor = ""
+        while true {
+            let done = try db.transaction { () throws -> Bool in
+                let rows = try db.rows("SELECT id,payload FROM items WHERE id>? ORDER BY id LIMIT 16", [.text(cursor)])
+                guard !rows.isEmpty else { return true }
+                var bytes = 0
+                for row in rows {
+                    guard let key = row["id"]?.string else { continue }
+                    // Each row costs a scan of `search_fts`, so a batch also stops at a size budget to stay far below the busy timeout.
+                    let size = row["payload"]?.string?.utf8.count ?? row["payload"]?.data?.count ?? 0
+                    if bytes > 0, bytes + size > 256 * 1024 { break }
+                    bytes += size
+                    cursor = key
+                    guard let item = try LibrarySQL.decode([row]).first else { continue }
+                    let names = try db.rows("SELECT t.name FROM tags t JOIN item_tags m ON m.tag=t.id WHERE m.item=? ORDER BY t.folded,t.id", [.text(key)]).compactMap { $0["name"]?.string }
+                    let content = searchContent(item, tagNames: names.joined(separator: " "))
+                    try db.execute("UPDATE items SET search=? WHERE id=?", [.text(content), .text(key)])
+                    try db.execute("DELETE FROM search_fts WHERE id=?", [.text(key)])
+                    try db.execute("INSERT INTO search_fts(id,content) VALUES(?,?)", [.text(key), .text(content)])
+                }
+                return false
+            }
+            if done { break }
+        }
+        cursor = ""
+        while true {
+            let done = try db.transaction { () throws -> Bool in
+                let rows = try db.rows("SELECT item,ocr FROM image_analysis WHERE item>? ORDER BY item LIMIT 64", [.text(cursor)])
+                guard !rows.isEmpty else { return true }
+                for row in rows {
+                    guard let key = row["item"]?.string else { continue }
+                    cursor = key
+                    try db.execute("UPDATE image_analysis SET content=? WHERE item=?", [.text((row["ocr"]?.string ?? "").searchFolded), .text(key)])
+                }
+                return false
+            }
+            if done { break }
+        }
+        try db.execute("INSERT OR IGNORE INTO metadata(key,value) VALUES('search-fold-v2','complete')")
+    }
     private static func textDigest(_ text: String) -> Data { Data(SHA256.hash(data: Data(TextIdentity.key(text).utf8))) }
     private func putTextIdentity(_ item: LibraryRecord) throws {
         if item.kind == .text, let text = item.text {
@@ -337,12 +410,15 @@ extension String {
         }
         try db.execute("INSERT OR IGNORE INTO metadata(key,value) VALUES('text-identity-v2','complete')")
     }
-    private func put(_ item: LibraryRecord) throws {
-        let tagNames = try tags(for: item.id).map(\.name).joined(separator: " ")
+    nonisolated private static func searchContent(_ item: LibraryRecord, tagNames: String) -> String {
         // A personal label supplements the recognizable source filename.
         // Index its basename only; private directory names are not content.
         let imageName = item.kind == .image ? (item.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? item.fileURL?.lastPathComponent ?? "") : ""
-        let content = [item.displayTitle,imageName,item.metadataTitle ?? "",item.text ?? "",item.note,item.originalURL ?? "",tagNames].joined(separator: " ").libraryFolded
+        return [item.displayTitle,imageName,item.metadataTitle ?? "",item.text ?? "",item.note,item.originalURL ?? "",tagNames].joined(separator: " ").searchFolded
+    }
+    private func put(_ item: LibraryRecord) throws {
+        let tagNames = try tags(for: item.id).map(\.name).joined(separator: " ")
+        let content = Self.searchContent(item, tagNames: tagNames)
         try db.execute("INSERT INTO items VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,created=excluded.created,updated=excluded.updated,copied=excluded.copied,retained=excluded.retained,favorite=excluded.favorite,shelf=excluded.shelf,deleted=excluded.deleted,path=excluded.path,normalized=excluded.normalized,domain=excluded.domain,sort_title=excluded.sort_title,search=excluded.search,payload=excluded.payload", [
             .text(item.id.uuidString), .text(item.kind.rawValue), .real(item.createdAt.timeIntervalSince1970), .real(item.updatedAt.timeIntervalSince1970),
             item.lastCopiedAt.map { .real($0.timeIntervalSince1970) } ?? .null, item.retainedAt.map { .real($0.timeIntervalSince1970) } ?? .null,
@@ -888,7 +964,8 @@ extension String {
             case .null: field(Data("null".utf8))
             }
         }
-        for key in row.keys.sorted() { field(Data(key.utf8)); value(row[key]!) }
+        // `search` is derived text that a background re-fold may rewrite; it is not part of what Undo must find unchanged.
+        for key in row.keys.sorted() where key != "search" { field(Data(key.utf8)); value(row[key]!) }
         let folders = try db.rows("SELECT c.id,c.name,c.parent FROM collections c JOIN item_collections m ON m.collection=c.id WHERE m.item=? ORDER BY c.id", [.text(id.uuidString)])
         let tags = try db.rows("SELECT t.id,t.name FROM tags t JOIN item_tags m ON m.tag=t.id WHERE m.item=? ORDER BY t.id", [.text(id.uuidString)])
         for (kind, rows) in [("folders", folders), ("tags", tags)] {

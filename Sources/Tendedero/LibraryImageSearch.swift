@@ -133,7 +133,7 @@ final class ImageSearchWorker: @unchecked Sendable {
                         do {
                             let text = try Self.recognize(job.1), vectors = VisualRanking.pack(model?.embed(imageAt: job.1) ?? [])
                             guard current(token), Self.fingerprint(job.1) == job.2 else { return }
-                            try db.execute("INSERT INTO image_analysis(item,path,fingerprint,version,content,ocr,vectors) SELECT id,path,?,?,?,?,? FROM items WHERE id=? AND path=? AND deleted IS NULL ON CONFLICT(item) DO UPDATE SET path=excluded.path,fingerprint=excluded.fingerprint,version=excluded.version,content=excluded.content,ocr=excluded.ocr,vectors=excluded.vectors", [.text(job.2), .text(version), .text(text.libraryFolded), .text(text), .blob(vectors), .text(job.0.uuidString), .text(job.1.path)])
+                            try db.execute("INSERT INTO image_analysis(item,path,fingerprint,version,content,ocr,vectors) SELECT id,path,?,?,?,?,? FROM items WHERE id=? AND path=? AND deleted IS NULL ON CONFLICT(item) DO UPDATE SET path=excluded.path,fingerprint=excluded.fingerprint,version=excluded.version,content=excluded.content,ocr=excluded.ocr,vectors=excluded.vectors", [.text(job.2), .text(version), .text(text.searchFolded), .text(text), .blob(vectors), .text(job.0.uuidString), .text(job.1.path)])
                             dirty = true
                         } catch { /* A bad image cannot block the remaining records. */ }
                     }

@@ -32,7 +32,7 @@ private final class ImageTextRecognitionGate: @unchecked Sendable {
     private func cached(_ text: String, for record: LibraryRecord, store: LibraryStore, fingerprint: String? = nil, path: String? = nil) throws {
         let url = try XCTUnwrap(record.fileURL), key = try XCTUnwrap(fingerprint ?? ImageSearchWorker.fingerprint(url))
         let connection = try LibraryDatabase(url: store.databaseURL, verify: false)
-        try connection.execute("INSERT OR REPLACE INTO image_analysis VALUES(?,?,?,?,?,?,?)", [.text(record.id.uuidString), .text(path ?? url.path), .text(key), .text("vision-ocr-v1"), .text(text.libraryFolded), .text(text), .blob(Data())])
+        try connection.execute("INSERT OR REPLACE INTO image_analysis VALUES(?,?,?,?,?,?,?)", [.text(record.id.uuidString), .text(path ?? url.path), .text(key), .text("vision-ocr-v1"), .text(text.searchFolded), .text(text), .blob(Data())])
     }
     private func pasteboard() -> NSPasteboard { NSPasteboard(name: .init("image-text-copy-tests-\(UUID())")) }
     private func copy(_ service: ImageTextCopy, id: UUID) -> ImageTextCopy.Outcome? {

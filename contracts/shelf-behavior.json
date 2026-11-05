@@ -44,8 +44,14 @@
       {
         "id": "width-insensitive-search",
         "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I.",
-        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift).",
+        "macos": "Search compares searchFolded strings: libraryFolded (folding with .diacriticInsensitive and .widthInsensitive, then lowercased) with ı folded to i (LibraryStore.swift).",
         "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac; shelf-render.test.cjs checks both through the shipped renderer."
+      },
+      {
+        "id": "dotless-i-search",
+        "behavior": "Shelf and Library text search treat I, İ, i and ı as the same letter, so Işık is found by typing ışık, isik or ISIK. Only search does this: tag and folder names keep their own identity, so kır and kir stay two names.",
+        "macos": "String.searchFolded folds ı to i and is used for the search index and the query; tags and folders keep libraryFolded. LibraryStoreTests.testSearchMatchesTurkishDotlessIAndRefoldsOlderRows and testDotlessITagAndFolderNamesStayDistinct cover it, and an index written the old way is re-folded in the background at launch.",
+        "windows": "The renderer's searchFold maps ı to i after fold and is used only by matches and relevance, so title and tag order keep the plain fold; shelf-render.test.cjs covers both, and tag and folder names are compared by the model's own name rules."
       },
       {
         "id": "link-title-charset",

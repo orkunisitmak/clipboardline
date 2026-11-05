@@ -6,7 +6,7 @@ function fixture(){
  const value=(n,kind,createdAt,extra={})=>({id:'60000000-0000-4000-8000-'+String(n).padStart(12,'0'),kind,createdAt,updatedAt:createdAt,text:'',name:'',title:'',url:'',note:'',ocrText:'',pinned:false,folderIds:[],tags:[],hiddenFromShelf:false,trashedAt:null,...extra});
  const initial={items:[value(1,'image',30,{name:'Café İstanbul',ocrText:'blue circle',pinned:true}),value(2,'text',20,{text:'First body'}),value(3,'text',10,{text:'Second body',pinned:true}),value(4,'link',40,{title:'Café reference',url:'https://example.com/reference'}),value(5,'text',20,{text:'Equal timestamp'}),value(6,'image',40,{name:'Hidden image',hiddenFromShelf:true}),value(7,'text',50,{text:'Deleted body',trashedAt:1})],folders:[],view:'shelves',windowVisible:true,settings:{visibleKinds:['image','text','link'],localShortcuts:{},shortcuts:{},language:'en',cardSize:'medium',theme:'soft'}};
  let raw=structuredClone(initial),subscriber;const context={window:{clipboardLine:{state:async()=>structuredClone(raw),subscribe:fn=>{subscriber=fn;},command:async()=>structuredClone(raw)},addEventListener(){}},document,HTMLElement:Element,HTMLTextAreaElement:class extends Element{},Image:class{},URL,console,structuredClone,setTimeout:()=>1,clearTimeout(){},requestAnimationFrame:fn=>fn()};vm.createContext(context);
- vm.runInContext(fs.readFileSync(path.join(__dirname,'../renderer.js'),'utf8').replace(/\}\)\(\);\s*$/,'window.__shelfCache={ui,rowItems,item,matches,selectedIds};})();'),context);
+ vm.runInContext(fs.readFileSync(path.join(__dirname,'../renderer.js'),'utf8').replace(/\}\)\(\);\s*$/,'window.__shelfCache={ui,rowItems,item,matches,selectedIds,compareFolded};})();'),context);
  return{initial,ready:()=>new Promise(setImmediate),get api(){return context.window.__shelfCache;},get raw(){return raw;},emit(items,settings={}){raw={...raw,items:structuredClone(items),settings:{...raw.settings,...settings}};subscriber(structuredClone(raw));}};
 }
 const plain=values=>Array.from(values,value=>value.id);
@@ -50,4 +50,13 @@ test('a link whose capture time is newer than its older copy time keeps its capt
  const f=fixture();await f.ready();const {api}=f,link=(n,createdAt,extra={})=>({...structuredClone(f.initial.items[3]),id:'62000000-0000-4000-8000-'+String(n).padStart(12,'0'),createdAt,updatedAt:createdAt,url:'https://m'+n+'.example.com/',...extra});
  f.emit([...f.raw.items.filter(value=>value.kind!=='link'),link(1,500,{lastCopiedAt:50}),link(2,300,{lastCopiedAt:400}),link(3,200)]);
  assert.deepEqual(api.rowItems('link').map(value=>value.url),['https://m1.example.com/','https://m2.example.com/','https://m3.example.com/']);
+});
+test('search treats dotless ı like i, so Işık is found by ışık and isik',async()=>{
+ const f=fixture();await f.ready();const {api}=f,item={...f.initial.items[1],text:'Işık raporu ISPARTA'};
+ for(const query of ['ışık','isik','ISIK','ısparta','Isparta'])assert.equal(api.matches(item,query),true,query);
+ assert.equal(api.matches(item,'ışıl'),false);
+});
+test('title and tag order keep ı apart from i, only search folds them together',async()=>{
+ const f=fixture();await f.ready();
+ assert.deepEqual(['ılık','zebra','sıra','sinek'].sort(f.api.compareFolded),['sinek','sıra','zebra','ılık']);
 });
