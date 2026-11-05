@@ -23,8 +23,11 @@ import XCTest
         for id in [owned.id, external.id, text.id] { XCTAssertNil(try library.item(id)) }
         XCTAssertTrue(try library.trashedIDs().isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: copy.path), "The app's own copy leaves its folder")
-        let systemTrash = f.folder.appendingPathComponent(".test-trash")
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: systemTrash.path).count, 1, "It goes to the system Trash")
+        // The fixture Trash names each arrival "<UUID>-<original name>"; other
+        // library housekeeping may also use it, so look for the files by name.
+        let trashed = try FileManager.default.contentsOfDirectory(atPath: f.folder.appendingPathComponent(".test-trash").path)
+        XCTAssertTrue(trashed.contains { $0.hasSuffix("-" + copy.lastPathComponent) }, "It goes to the system Trash")
+        XCTAssertFalse(trashed.contains { $0.hasSuffix("-" + original.lastPathComponent) })
         XCTAssertTrue(FileManager.default.fileExists(atPath: original.path), "Originals elsewhere are never touched")
         XCTAssertEqual(try library.collections().map(\.id), [folder], "The folder itself stays")
         XCTAssertEqual(try library.tags().count, 1, "The tag itself stays")
