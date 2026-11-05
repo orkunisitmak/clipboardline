@@ -39,6 +39,19 @@ Running `swift run` directly is not the packaged development workflow: it lacks 
 
 Windows has its own implementation and build instructions. A macOS build/test cannot certify a Windows installer, clipboard interaction or global keyboard hook. State which platform and package you actually exercised.
 
+### Linux development
+
+The Electron project in `windows/` also builds for Linux; the Linux desktop integration lives in separate `windows/lib/linux-*.cjs` files. Use Node.js 24 on Linux x64; see the [Linux guide](docs/linux.md) for optional packages.
+
+```sh
+cd windows
+npm ci
+npm test
+npm run dist:linux
+```
+
+`npm run test:linux` launches the real application and replaces the clipboard: run it only inside a disposable session (`xvfb-run`, headless Sway or a nested compositor), never on a desktop that holds personal clipboard data. A Linux run does not certify Windows or macOS behavior, and Windows acceptance on Linux is still rejected. Keep Linux-only behavior behind the Linux session or `state.platform === 'linux'` so the Windows build is unchanged; a fix to shared code reaches both editions.
+
 ## Türkçe
 
 Bu public repo, bağımsız ClipBoardLine projesinin incelenmiş kaynak kod kopyasıdır. Bir dalda çalışıp sorunu, yeni davranışı ve doğrulamayı anlatan PR açın. Klavye akışını, düzenlenebilir önizlemeleri, geçmiş sürelerini, geri alınabilir silmeyi ve gizlilik tercihlerini koruyun.
@@ -48,3 +61,5 @@ macOS geliştirmesi için seçilmiş bir Xcode/Swift araç zinciri ve Python 3 g
 Anlamsal arama modelleri isteğe bağlıdır: `CLIPBOARDLINE_BUNDLE_MODELS=1 bash scripts/build-community.sh`. Model olmadan yerel Vision OCR kullanılabilir. Çıplak `swift run` yerine, kaynakları ve ayrı veri alanı hazırlanan Dev paketini UI testi için kullanın.
 
 Testlerde yapay metin/görsel ve geçici dizin kullanın. Kişisel pano içeriği, hesap ekran görüntüsü, veritabanı, anahtar, özel URL veya imza dosyası commit etmeyin. Yeni kısayolları ve çevirileri güncel tutun. macOS'ta geçen testleri Windows'ta da geçmiş gibi sunmayın; gerçekten denediğiniz platformu ve paketi belirtin.
+
+`windows/` içindeki Electron projesi Linux için de derlenir; Linux masaüstü entegrasyonu ayrı `windows/lib/linux-*.cjs` dosyalarındadır. Orada `npm ci`, `npm test` ve `npm run dist:linux` çalıştırın. `npm run test:linux` gerçek uygulamayı açar ve panoyu değiştirir; yalnızca geçici bir oturumda (`xvfb-run`, başsız Sway veya iç içe compositor) çalıştırın. Yalnızca Linux’a özgü davranışı Linux oturumu veya `state.platform === 'linux'` koşuluna bağlayın, böylece Windows derlemesi değişmez; ortak koddaki bir düzeltme iki sürüme de ulaşır. Ayrıntılar için [Linux rehberine](docs/linux.md#türkçe) bakın.

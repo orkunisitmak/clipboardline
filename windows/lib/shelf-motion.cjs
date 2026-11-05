@@ -8,30 +8,57 @@
   cancel(){if(!this.pending)return;const pending=this.pending;this.pending=null;this.cancelTimer(pending.timer);pending.resolve({completed:false});}
   request(phase,details={}){
    this.cancel();const token=++this.serial;
-   return new Promise(resolve=>{const pending={token,phase,resolve,timer:null};this.pending=pending;pending.timer=this.schedule(()=>{if(this.pending!==pending)return;this.pending=null;resolve({completed:true,timedOut:true});},(phase==='open'?OPEN_MS:phase==='close'?CLOSE_MS:0)+1000);try{this.send({token,phase,...details});}catch{this.cancel();}});
+   return new Promise(resolve=>{const pending={token,phase,resolve,timer:null};this.pending=pending;pending.timer=this.schedule(()=>{if(this.pending!==pending)return;this.pending=null;resolve({completed:true,timedOut:true});},(phase==='open'?OPEN_MS:phase==='close'?CLOSE_MS:0)+(Number(details.after)||0)+1000);try{this.send({token,phase,...details});}catch{this.cancel();}});
   }
   acknowledge(value){if(!value||!this.pending||value.token!==this.pending.token||value.phase!==this.pending.phase||typeof value.completed!=='boolean')return false;const pending=this.pending;this.pending=null;this.cancelTimer(pending.timer);pending.resolve({completed:value.completed});return true;}
  }
  class ShelfMotion{
-  constructor({body,computed,height,motion}){this.body=body;this.computed=computed;this.height=height;this.motion=motion;this.animation=null;this.pending=null;this.serial=0;this.phase='idle';this.motion?.addEventListener?.('change',()=>{if(this.motion.matches&&this.pending)this.finish(this.pending);});}
+  constructor({body,computed,height,motion,frame=callback=>typeof requestAnimationFrame==='function'?requestAnimationFrame(callback):setTimeout(callback,16),wait=(callback,ms)=>setTimeout(callback,ms)}){this.body=body;this.computed=computed;this.height=height;this.motion=motion;this.frame=frame;this.wait=wait;this.animation=null;this.pending=null;this.serial=0;this.phase='idle';this.warm=false;this.lifted=false;this.motion?.addEventListener?.('change',()=>{if(this.motion.matches&&this.pending)this.finish(this.pending);});}
   offscreen(){return 'translate3d(0,'+(-Math.max(0,this.height())-12)+'px,0)';}
-  freeze(){const value=this.animation?this.computed(this.body).transform:this.body.style.transform||'none';this.animation?.cancel();this.animation=null;this.body.style.transform=value;return value;}
-  cancel(){this.freeze();if(this.pending){const pending=this.pending;this.pending=null;pending.resolve({completed:false});}}
-  finish(pending){if(this.pending!==pending)return;this.pending=null;this.body.style.transform=pending.target;this.animation?.cancel();this.animation=null;this.body.style.willChange='';this.phase=pending.phase==='open'?'shown':'hidden';if(pending.phase==='open')delete this.body.dataset.shelfMotion;else this.body.dataset.shelfMotion='hidden';pending.resolve({completed:true});}
+  freeze(){
+   // A warmed line sits invisibly at its endpoint; to motion it is still hidden.
+   if(this.warm){this.warm=false;this.body.style.opacity='1';this.body.style.transform=this.offscreen();return this.body.style.transform;}
+   const value=this.animation?this.computed(this.body).transform:this.body.style.transform||'none';this.animation?.cancel();this.animation=null;this.body.style.transform=value;
+   if(this.lifted){this.lifted=false;this.body.style.opacity='1';}
+   return value;
+  }
+  cancel({keepWarm=false}={}){if(!keepWarm)this.freeze();if(this.pending){const pending=this.pending;this.pending=null;pending.resolve({completed:false});}}
+  finish(pending){if(this.pending!==pending)return;this.pending=null;this.warm=false;this.lifted=false;this.body.style.transform=pending.target;this.animation?.cancel();this.animation=null;this.body.style.willChange='';this.body.style.opacity='';this.phase=pending.phase==='open'?'shown':'hidden';if(pending.phase==='open')delete this.body.dataset.shelfMotion;else this.body.dataset.shelfMotion='hidden';pending.resolve({completed:true});}
   run(value){
    if(!value||!['prepare','open','close','reset'].includes(value.phase))return Promise.resolve({completed:false});
-   this.cancel();const serial=++this.serial,phase=value.phase;
-   if(phase==='reset'){this.body.style.transform='';this.body.style.willChange='';delete this.body.dataset.shelfMotion;this.phase='idle';return Promise.resolve({completed:true});}
+   // A warmed reveal can wait for the desktop's own fade-in: the first frames
+   // mark the moment the window is shown, and the fade runs `after` ms from there.
+   const delayed=value.phase==='open'&&this.warm&&Number(value.after)>0&&!this.motion?.matches;
+   this.cancel({keepWarm:delayed});const serial=++this.serial,phase=value.phase;
+   if(phase==='reset'){this.warm=false;this.lifted=false;this.body.style.transform='';this.body.style.willChange='';this.body.style.opacity='';delete this.body.dataset.shelfMotion;this.phase='idle';return Promise.resolve({completed:true});}
+   // Warm: while the desktop maps the window, the line waits at its endpoint
+   // all but transparent so its tiles are rastered before it moves. Tiles first
+   // drawn mid-reveal cost several frames each on large displays.
+   if(phase==='prepare'&&value.warm===true&&value.hidden){this.body.style.transform='translate3d(0,0,0)';this.body.style.opacity='0.002';this.warm=true;this.body.dataset.shelfMotion='prepared';this.body.style.willChange='transform, opacity';this.phase='prepared';return Promise.resolve({completed:true});}
    if(phase==='prepare'){if(value.hidden)this.body.style.transform=this.offscreen();this.body.dataset.shelfMotion='prepared';this.body.style.willChange='transform';this.phase='prepared';return Promise.resolve({completed:true});}
-   const from=this.body.style.transform||'none',target=phase==='open'?'translate3d(0,0,0)':this.offscreen();
-   this.body.dataset.shelfMotion=phase==='open'?'opening':'closing';this.body.style.willChange='transform';this.phase=phase;
+   const target=phase==='open'?'translate3d(0,0,0)':this.offscreen();
    return new Promise(resolve=>{
     const pending={serial,phase,target,resolve};this.pending=pending;
-    if(this.motion?.matches||!this.body.animate){this.finish(pending);return;}
-    this.body.style.transform=target;
-    this.animation=this.body.animate([{transform:from},{transform:target}],{duration:phase==='open'?OPEN_MS:CLOSE_MS,easing:phase==='open'?OPEN_CURVE:CLOSE_CURVE,fill:'both'});
-    this.animation.finished.then(()=>this.finish(pending),()=>this.finish(pending));
+    if(!delayed){this.slide(pending,this.body.style.transform||'none');return;}
+    // Still 'prepared' while it waits: only the moving line is 'opening'.
+    this.frame(()=>this.frame(()=>this.wait(()=>{if(this.pending===pending)this.lift(pending);},Number(value.after))));
    });
+  }
+  // The warmed endpoint stays in the inline style underneath; only the
+  // animation moves it above the display and makes it opaque, so starting the
+  // reveal invalidates no paint.
+  lift(pending){
+   this.warm=false;this.lifted=true;this.body.dataset.shelfMotion='opening';this.phase='open';
+   this.animation=this.body.animate([{transform:this.offscreen(),opacity:1},{transform:pending.target,opacity:1}],{duration:OPEN_MS,easing:OPEN_CURVE,fill:'both'});
+   this.animation.finished.then(()=>this.finish(pending),()=>this.finish(pending));
+  }
+  slide(pending,from){
+   // Keep the warmed layer tree: dropping opacity from it would re-raster.
+   this.body.dataset.shelfMotion=pending.phase==='open'?'opening':'closing';this.body.style.willChange=this.body.style.opacity?'transform, opacity':'transform';this.phase=pending.phase;
+   if(this.motion?.matches||!this.body.animate){this.finish(pending);return;}
+   this.body.style.transform=pending.target;
+   this.animation=this.body.animate([{transform:from},{transform:pending.target}],{duration:pending.phase==='open'?OPEN_MS:CLOSE_MS,easing:pending.phase==='open'?OPEN_CURVE:CLOSE_CURVE,fill:'both'});
+   this.animation.finished.then(()=>this.finish(pending),()=>this.finish(pending));
   }
  }
  const exports={MotionBridge,ShelfMotion,OPEN_MS,CLOSE_MS,OPEN_CURVE,CLOSE_CURVE};

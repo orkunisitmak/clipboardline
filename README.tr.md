@@ -4,9 +4,9 @@
 
 Görseller, metinler ve linkler elinin altında. Son kopyalarını üç askıda tut, önemli olanları yerel kütüphaneye kaydet ve tümünde klavyeyle hızla gezin.
 
-[English README](README.md) · [Mac için indir](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Windows x64 için indir](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Kaynak kodu incele](https://github.com/orkunisitmak/clipboardline) · [Ekran görüntüleri ve demolar](https://orkunisitmak.github.io/clipboardline/tr/#demo)
+[English README](README.md) · [Mac için indir](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Windows x64 için indir](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Linux rehberi](docs/linux.md#türkçe) · [Kaynak kodu incele](https://github.com/orkunisitmak/clipboardline) · [Ekran görüntüleri ve demolar](https://orkunisitmak.github.io/clipboardline/tr/#demo)
 
-> macOS sürümü Swift, AppKit, SwiftUI, Vision ve Core ML kullanır; Apple silicon ve Intel’de macOS 14 veya üstünü destekler. Ayrı Electron sürümü Windows x64 için kullanılabilir; farklar ve gerçek Windows doğrulama kanıtı aşağıdaki platform tablosundadır.
+> macOS sürümü Swift, AppKit, SwiftUI, Vision ve Core ML kullanır; Apple silicon ve Intel’de macOS 14 veya üstünü destekler. Ayrı Electron sürümü Windows x64 için kullanılabilir ve Linux x64 için kaynak koddan AppImage, .deb veya .rpm olarak derlenir; farklar ve gerçek Windows doğrulama kanıtı aşağıdaki platform tablosunda, masaüstüne göre Linux davranışı [Linux rehberindedir](docs/linux.md#türkçe).
 
 **Özellik rehberi — 1.7.3:** bu sayfa kaynak ağacındaki uygulamayı anlatır. İndirilebilir paketler [son sürümde](https://github.com/orkunisitmak/clipboardline/releases/latest) listelenir; her yeni yayım iki yerel platform testini gerektirir. [Kapsam ve doğrulama şartları](docs/parity-1.7.3.md).
 
@@ -308,21 +308,21 @@ Geçmiş sürüm: Windows [1.7.2 build 64](https://github.com/orkunisitmak/clipb
 
 Geçmiş 1.7.2 sürümü; metin/görsel yapıştırma, odağı geri döndürme, ekran yakalama, OCR ve klavye akışları dahil gerçek Windows kaynak, paketlenmiş ve kurulmuş oturumlarında sınandı. Hangi pano biçimlerini kabul edeceğine hedef uygulama karar verir. macOS ve Windows veri depoları ayrıdır; cihazlar arası senkronizasyon veya otomatik platform geçişi sunulmaz.
 
-| Özellik | macOS | Windows |
-| --- | --- | --- |
-| İçerik askıları ve kütüphane | Yerel AppKit/SwiftUI; görsel/metin/link askıları, ızgara/liste, klasör, etiket ve sabitleme. | Saydam eğri askılar; birleşik araç çubuğu, ızgara/liste, klasör, etiket, sabitleme, not ve açılıp kapanan kenar/ayrıntı panelli normal boyutlandırılabilir kütüphane. |
-| Varsayılan genel kısayollar | ⌃⌥T askılar; ⌃⌥S arama. | Ctrl+Alt+T askılar; Ctrl+Alt+S arama; Ctrl+Alt+A ekran yakalama. Kütüphane ve son görseli kopyalama genel kısayolları atanabilir; varsayılan kapalıdır. |
-| Yerel kısayol değiştiricileri | Uygulama komutlarında Command (⌘); adlandırma/sayfalarda Option (⌥). | Command yerine Control; Option yerine Alt. Yerel ve genel kısayollar değiştirilebilir. |
-| Pano toplama | Görsel/metin isteğe bağlı; tek URL toplama varsayılan açık, ayarlanabilir. | Görsel/metin toplama varsayılan kapalı, tek URL toplama açıktır. Kaynaklar’dan değiştirilebilir; eski seçimler korunur. Metin ve linkler sessiz eklenir. |
-| Arama ve OCR | Apple Vision OCR; isteğe bağlı özgün MobileCLIP-S2 görsel anlam araması. | Yerel İngilizce/Türkçe Tesseract OCR ve ONNX/WASM ile özgün MobileCLIP-S2 görsel anlam araması. Kütüphanenin metin/görsel/birleşik modları ve kapsam filtreleri çevrimdışı çalışır. |
-| Önizleme düzenleme | Çerçevesiz görsel/metin/link; düzenlenebilir işaret/kırpma, otomatik kaydeden ayrıntılar ve düzenleme sonrası oturum içi geri alma. | Çerçevesiz görsel/metin/link; ortak üst çubuk, düzenlenebilir işaret/kırpma, otomatik kaydeden ayrıntılar ve düzenleme sonrası oturum içi geri alma. |
-| Kopyalama ve yapıştırma | ⌘Enter, uygulamanın Erişilebilirlik izniyle önceki düzenlenebilir alanı hedefler. | Ctrl+Enter yerel köprüyle önceki düzenlenebilir Windows alanına döner. Güvenli/değişmiş hedefler reddedilir. |
-| Görsel grupları | Birden çok görsel/dosya biçimi; hangisini alacağına hedef uygulama karar verir. | Yerel FileDrop dosya listesi ve ilk görsel yedeği. Hedef desteği değişir; görseller sessizce birleştirilmez. |
-| Geçmiş ve kurtarma | Türe göre 1/3/7/15/30 gün; saklanan öğeler kalır; kütüphane Çöp Kutusu. | Süresiz tutma dahil türe göre ayrı süreler; saklanan öğeler kalır; kurtarılabilir Çöp Kutusu ve oturum içi kaldırma geri alma. |
-| Link ayrıntıları | İsteğe bağlı genel site/YouTube başlık ve küçük görselleri. | İsteğe bağlı genel site/YouTube zenginleştirmesi varsayılan açıktır; kapatılabilir. Önceden kapatılmış tercihler korunur. |
-| Ekran kaydı ve Quick Look | Quick Look ve AVKit .mov/.mp4 kayıtları yerel denetimlerle önizler. Kırpma özgünü korur; öğenin kimliğini ve düzenini koruyan yönetilen bir kopya kaydeder. | MP4/MOV içe aktarma ve izlenen klasörden toplama, oynatma, M/Eylemler ile kırpma, dosya kopyalama/sürükleme/dışa aktarma. Yayımlama öncesi yerel kabul testi zorunludur. Kurulu Windows codec’lerini kullanır; özgünü korur, kırpmayı gerekirse yeniden kodlayarak MP4’e yazar. |
-| Diller | Sistem dili veya ortak dokuz dil kataloğundan biri. | Aynı ortak dokuz dil kataloğu ve sistem dili seçimi. OCR dilleri İngilizce/Türkçedir. |
-| Güncellemeler ve işletim sistemi güveni | Sparkle imzalı herkese açık akış ve arşivler. Proje imzalı Mac derlemesi Apple noter onaylı değildir. | Ortak herkese açık depodaki Windows imzalı akışı; ayarlanabilir açılış/saatlik kontrol ve hatada beş dakika sonra yeniden deneme. Güncelle ve yeniden aç için tıklama gerekir. Kurulumun Authenticode yayıncı sertifikası yoktur. |
+| Özellik | macOS | Windows | Linux (kaynak derlemesi) |
+| --- | --- | --- | --- |
+| İçerik askıları ve kütüphane | Yerel AppKit/SwiftUI; görsel/metin/link askıları, ızgara/liste, klasör, etiket ve sabitleme. | Saydam eğri askılar; birleşik araç çubuğu, ızgara/liste, klasör, etiket, sabitleme, not ve açılıp kapanan kenar/ayrıntı panelli normal boyutlandırılabilir kütüphane. | Windows ile aynı Electron askıları ve kütüphane; Wayland’de pencere yerleşimine compositor karar verir. |
+| Varsayılan genel kısayollar | ⌃⌥T askılar; ⌃⌥S arama. | Ctrl+Alt+T askılar; Ctrl+Alt+S arama; Ctrl+Alt+A ekran yakalama. Kütüphane ve son görseli kopyalama genel kısayolları atanabilir; varsayılan kapalıdır. | Windows varsayılanları. X11 tuş yakalama, Wayland GlobalShortcuts portalı veya `clipboardline --toggle`, `--search`, `--library`, `--copy-latest` ve `--screenshot` komutlarına atanan masaüstü kısayolları. |
+| Yerel kısayol değiştiricileri | Uygulama komutlarında Command (⌘); adlandırma/sayfalarda Option (⌥). | Command yerine Control; Option yerine Alt. Yerel ve genel kısayollar değiştirilebilir. | Windows ile aynı: Control ve Alt. |
+| Pano toplama | Görsel/metin isteğe bağlı; tek URL toplama varsayılan açık, ayarlanabilir. | Görsel/metin toplama varsayılan kapalı, tek URL toplama açıktır. Kaynaklar’dan değiştirilebilir; eski seçimler korunur. Metin ve linkler sessiz eklenir. | Windows varsayılanları. Arka planda toplama `wl-clipboard` (KDE, wlroots), GNOME’da Xwayland veya X11 yoklamasıyla yapılır; parola yöneticisi işaretli kopyalar atlanır. |
+| Arama ve OCR | Apple Vision OCR; isteğe bağlı özgün MobileCLIP-S2 görsel anlam araması. | Yerel İngilizce/Türkçe Tesseract OCR ve ONNX/WASM ile özgün MobileCLIP-S2 görsel anlam araması. Kütüphanenin metin/görsel/birleşik modları ve kapsam filtreleri çevrimdışı çalışır. | Windows ile aynı. |
+| Önizleme düzenleme | Çerçevesiz görsel/metin/link; düzenlenebilir işaret/kırpma, otomatik kaydeden ayrıntılar ve düzenleme sonrası oturum içi geri alma. | Çerçevesiz görsel/metin/link; ortak üst çubuk, düzenlenebilir işaret/kırpma, otomatik kaydeden ayrıntılar ve düzenleme sonrası oturum içi geri alma. | Windows ile aynı. |
+| Kopyalama ve yapıştırma | ⌘Enter, uygulamanın Erişilebilirlik izniyle önceki düzenlenebilir alanı hedefler. | Ctrl+Enter yerel köprüyle önceki düzenlenebilir Windows alanına döner. Güvenli/değişmiş hedefler reddedilir. | Ctrl+Enter kopyalar, gizler ve odağı geri verir. X11’de `xdotool` kuruluysa aynı, hâlâ etkin pencereye yapıştırır; Wayland’de Ctrl+V’ye basılır. |
+| Görsel grupları | Birden çok görsel/dosya biçimi; hangisini alacağına hedef uygulama karar verir. | Yerel FileDrop dosya listesi ve ilk görsel yedeği. Hedef desteği değişir; görseller sessizce birleştirilmez. | Dosya listesi (`text/uri-list` ve GNOME biçimi) ve ilk görselin PNG’si. |
+| Geçmiş ve kurtarma | Türe göre 1/3/7/15/30 gün; saklanan öğeler kalır; kütüphane Çöp Kutusu. | Süresiz tutma dahil türe göre ayrı süreler; saklanan öğeler kalır; kurtarılabilir Çöp Kutusu ve oturum içi kaldırma geri alma. | Windows ile aynı. |
+| Link ayrıntıları | İsteğe bağlı genel site/YouTube başlık ve küçük görselleri. | İsteğe bağlı genel site/YouTube zenginleştirmesi varsayılan açıktır; kapatılabilir. Önceden kapatılmış tercihler korunur. | Windows ile aynı. |
+| Ekran kaydı ve Quick Look | Quick Look ve AVKit .mov/.mp4 kayıtları yerel denetimlerle önizler. Kırpma özgünü korur; öğenin kimliğini ve düzenini koruyan yönetilen bir kopya kaydeder. | MP4/MOV içe aktarma ve izlenen klasörden toplama, oynatma, M/Eylemler ile kırpma, dosya kopyalama/sürükleme/dışa aktarma. Yayımlama öncesi yerel kabul testi zorunludur. Kurulu Windows codec’lerini kullanır; özgünü korur, kırpmayı gerekirse yeniden kodlayarak MP4’e yazar. | Dağıtımın FFmpeg’i MP4/MOV içe aktarır, küçük görsel üretir ve yeni bir MP4’e kırpar (H.264/AAC; çalışan H.264 kodlayıcı yoksa VP9/Opus). FFmpeg yoksa içe aktarma bunu açıklar. |
+| Diller | Sistem dili veya ortak dokuz dil kataloğundan biri. | Aynı ortak dokuz dil kataloğu ve sistem dili seçimi. OCR dilleri İngilizce/Türkçedir. | Windows ile aynı. |
+| Güncellemeler ve işletim sistemi güveni | Sparkle imzalı herkese açık akış ve arşivler. Proje imzalı Mac derlemesi Apple noter onaylı değildir. | Ortak herkese açık depodaki Windows imzalı akışı; ayarlanabilir açılış/saatlik kontrol ve hatada beş dakika sonra yeniden deneme. Güncelle ve yeniden aç için tıklama gerekir. Kurulumun Authenticode yayıncı sertifikası yoktur. | Henüz imzalı Linux akışı veya uygulama içi kurulum yok; verileri koruyan daha yeni bir AppImage, .deb veya .rpm kurulur. Paketler imzasız kaynak derlemeleridir. |
 
 İlk açılışta işletim sisteminin normal onayı gerekebilir. Mac derlemesi Apple Developer ID/noter onayı yerine kalıcı proje sertifikası kullanır; Windows kurulumu Authenticode imzalı değildir. Güncelleme imzaları ve özetleri proje kanalını doğrular; Apple veya Microsoft yayıncı sertifikası anlamına gelmez. Belgelenmiş sürüm dosyalarını ve normal sistem onayını kullan; sistem korumalarını kapatma.
 
@@ -342,3 +342,23 @@ npm run test:electron
 ```
 
 [Windows bileşen lisansları](windows/THIRD_PARTY_NOTICES.md)
+
+### Linux kaynak geliştirme ve paketler
+
+`windows/` içindeki Electron projesi Linux için de derlenir; Linux masaüstü entegrasyonu ayrı `windows/lib/linux-*.cjs` dosyalarındadır. Linux paketleri
+Windows ile aynı bileşenleri ve lisans bildirimlerini içerir; FFmpeg, `wl-clipboard` ve `xdotool`
+isteğe bağlı dağıtım paketleridir, pakete eklenmez.
+
+```sh
+cd windows
+npm ci
+# Çevrimdışı görsel arama modelleri; paketler bunları içermelidir:
+python3 ../scripts/prepare-windows-search-models.py --config search-model-config.json --output assets/CLIP
+npm test
+npm start
+npm run dist:linux     # dist/ içinde AppImage, .deb ve .rpm
+```
+
+`npm run test:linux` panoyu değiştirdiği için yalnızca geçici bir X11 veya Wayland
+oturumunda çalıştırılmalıdır. Kurulum, masaüstü desteği, kısayol komutları ve
+doğrulama için [Linux rehberine](docs/linux.md#türkçe) bakın.

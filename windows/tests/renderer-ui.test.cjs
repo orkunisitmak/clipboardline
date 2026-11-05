@@ -10,8 +10,11 @@ const crypto=require('node:crypto');
 const {execFileSync}=require('node:child_process');
 const os=require('node:os');
 const {exportCopies}=require('../lib/export-copies.cjs');
+// Linux ships this same renderer. On a Linux host the shared contracts run with
+// the renderer's Linux state and report as the Linux adapter.
+const ADAPTER=process.platform==='linux'?'linux':'windows',ADAPTER_STATE=ADAPTER==='linux'?'linux':null;
 
-function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,exporter=null}={}){
+function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,platform=null,width=null,exporter=null}={}){
  const listeners=new Map(),nodes=new Map(),commands=[],imageLoads=[],animationFrames=[],paintCalls=[];let exportFailures=0;
  class Element{
   constructor(id=''){this.id=id;this.innerHTML='';this.textContent='';this.dataset={};this.style={};this.className='';this.value='';this.selectionStart=0;this.selectionEnd=0;this.classList={add(){},remove(){},contains(){return false;}};}
@@ -32,6 +35,7 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
  const image='00000000-0000-4000-8000-000000000001',text1='00000000-0000-4000-8000-000000000002',text2='00000000-0000-4000-8000-000000000003',link='00000000-0000-4000-8000-000000000004';
  const base=(id,kind,createdAt,extra)=>({id,kind,createdAt,updatedAt:createdAt,name:'',title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,...extra});
  const state={items:[base(image,'image',1000,{name:'Synthetic image',...(imageDocument?{annotations:[],crop:null}:{}),mediaUrl:'appmedia://media/'+image,originalMediaUrl:'appmedia://media/'+image+'/original'}),base(text1,'text',900,{text:'Text one'}),base(text2,'text',800,{text:'Text two'}),base(link,'link',700,{url:'https://example.com/reference',title:'Reference link'})],folders:[],settings:{visibleKinds:['image','text','link'],retentionDays:{image:30,text:30,link:30},shortcuts:{toggle:'Control+Alt+Space',search:'Control+Alt+S'},localShortcuts:{},language:'en',theme:'soft',cardSize:'medium'},view:'shelves',version:'1.7.0',windowVisible:initialVisible,canUndo:false,canUndoTrash:false,libraryRevision:0};
+ if(platform)state.platform=platform;
  let subscriber,removed=[],trashRemoved=[],cleanupFailures=0,editFailures=0,delayedReply=null,releaseInitialState,deferredImageBroadcast=null,pendingImageBroadcast=null;
  const clone=value=>structuredClone(value);
  const api={emit(patch){Object.assign(state,patch);subscriber?.(clone(state));},surface(patch){Object.assign(state,patch);subscriber?.({surfaceOnly:true,...clone(patch)});},state:async()=>{const initial=clone(state);if(deferInitialState)await new Promise(resolve=>{releaseInitialState=resolve;});return initial;},subscribe(fn){subscriber=fn;return()=>{};},async command(action,payload={}){commands.push({action,payload:clone(payload)});const selected=state.items.filter(item=>(payload.ids||[payload.id]).includes(item.id));
@@ -56,10 +60,10 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
   if(delayedReply?.action===action){const pending=delayedReply;delayedReply=null;await pending.promise;}
   return output;
  }};
- const context={window:{clipboardLine:api,addEventListener(name,listener){if(!listeners.has('window:'+name))listeners.set('window:'+name,[]);listeners.get('window:'+name).push(listener);}},document,HTMLElement:Element,HTMLTextAreaElement:TextArea,Image:FixtureImage,console,structuredClone,URL,Set,Date,JSON,Math,Number,String,requestAnimationFrame:fn=>queuedAnimationFrames?animationFrames.push(fn):fn(),setTimeout:fn=>{queueMicrotask(fn);return 1;},clearTimeout(){}};
+ const context={window:{...(width?{innerWidth:width}:{}),clipboardLine:api,addEventListener(name,listener){if(!listeners.has('window:'+name))listeners.set('window:'+name,[]);listeners.get('window:'+name).push(listener);}},document,HTMLElement:Element,HTMLTextAreaElement:TextArea,Image:FixtureImage,console,structuredClone,URL,Set,Date,JSON,Math,Number,String,requestAnimationFrame:fn=>queuedAnimationFrames?animationFrames.push(fn):fn(),setTimeout:fn=>{queueMicrotask(fn);return 1;},clearTimeout(){}};
  vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../locales.js'),'utf8'),context,{filename:'locales.js'});vm.runInContext(fs.readFileSync(path.join(__dirname,'../renderer.js'),'utf8'),context,{filename:'renderer.js'});
  async function ready(){await new Promise(setImmediate);}
- async function key(code,{ctrl=false,alt=false,shift=false,key,target,composing=false,keyCode=0}={}){const event={code,key:key||(/^Key/.test(code)?code.slice(3).toLowerCase():code==='Space'?' ':code),ctrlKey:ctrl,metaKey:false,altKey:alt,shiftKey:shift,repeat:false,isComposing:composing,keyCode,target:target||new Element(),preventDefault(){this.prevented=true;}};for(const listener of listeners.get('keydown')||[])await listener(event);await ready();return event;}
+ async function key(code,{ctrl=false,alt=false,shift=false,meta=false,key,target,composing=false,keyCode=0}={}){const event={code,key:key||(/^Key/.test(code)?code.slice(3).toLowerCase():code==='Space'?' ':code),ctrlKey:ctrl,metaKey:meta,altKey:alt,shiftKey:shift,repeat:false,isComposing:composing,keyCode,target:target||new Element(),preventDefault(){this.prevented=true;}};for(const listener of listeners.get('keydown')||[])await listener(event);await ready();return event;}
  async function click(action,extra={}){const target=new Element();target.dataset.action=action;Object.assign(target.dataset,extra);target.closest=selector=>selector==='[data-action]'?target:null;for(const listener of listeners.get('click')||[])listener({target,stopPropagation(){}});await ready();}
  async function pointer(type,x,y){const target=document.getElementById('markup-canvas');for(const listener of listeners.get(type)||[])listener({target,clientX:x,clientY:y,pointerId:1,shiftKey:false,preventDefault(){}});await ready();}
  async function input(id,value){const target=document.getElementById(id);target.value=value;target.selectionStart=value.length;for(const listener of listeners.get('input')||[])await listener({target});await ready();}
@@ -331,7 +335,7 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
  assert.equal(contract.schemaVersion,1);assert.equal(contract.contractId,'clipboardline.shelves.v1');
  const observations=[],errors=[];
  for(const scenario of contract.scenarios){
-  const f=fixture();await f.ready();const aliases=new Map(),values=contract.itemSets[scenario.itemSet].map((entry,index)=>{
+  const f=fixture({platform:ADAPTER_STATE});await f.ready();const aliases=new Map(),values=contract.itemSets[scenario.itemSet].map((entry,index)=>{
    const id='20000000-0000-4000-8000-'+String(index+1).padStart(12,'0');aliases.set(id,entry.id);
    const source=f.state.items.find(value=>value.kind===entry.kind);
    return{...structuredClone(source),id,createdAt:10000-index,name:entry.kind==='image'?entry.text:'',text:entry.kind==='text'?entry.text:'',title:entry.kind==='link'?entry.text:'',url:entry.kind==='link'?'https://example.com/contract/'+entry.id:''};
@@ -364,7 +368,7 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
  if(process.env.CLIPBOARDLINE_PARITY_REPORT){
   const revision=process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(__dirname,'../..'),encoding:'utf8'}).trim();
   const implementationSHA256=crypto.createHash('sha256').update(fs.readFileSync(path.resolve(__dirname,'../renderer.js'))).digest('hex');
-  const report={schemaVersion:1,contractId:contract.contractId,platform:'windows',hostPlatform:process.platform,mode:'renderer',sourceRevision:revision,contractSHA256:crypto.createHash('sha256').update(raw).digest('hex'),implementationSHA256,implementationFiles:{'windows/renderer.js':implementationSHA256},observations,passed:errors.length===0,errors};
+  const report={schemaVersion:1,contractId:contract.contractId,platform:ADAPTER,hostPlatform:process.platform,mode:'renderer',sourceRevision:revision,contractSHA256:crypto.createHash('sha256').update(raw).digest('hex'),implementationSHA256,implementationFiles:{'windows/renderer.js':implementationSHA256},observations,passed:errors.length===0,errors};
   fs.mkdirSync(path.dirname(path.resolve(process.env.CLIPBOARDLINE_PARITY_REPORT)),{recursive:true});fs.writeFileSync(process.env.CLIPBOARDLINE_PARITY_REPORT,JSON.stringify(report,null,2)+'\n');
  }
  assert.deepEqual(errors,[]);
@@ -657,7 +661,7 @@ test('shared Library keyboard contract runs actual renderer handlers and durable
  for(const scenario of contract.scenarios){
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-library-contract-'));
   try{
-   const store=new Store(directory),now=Date.now(),f=fixture(),aliases=new Map(),ids=new Map();await f.ready();f.grid(scenario.columns);
+   const store=new Store(directory),now=Date.now(),f=fixture({platform:ADAPTER_STATE}),aliases=new Map(),ids=new Map();await f.ready();f.grid(scenario.columns);
    store.data.items=contract.records.map((entry,index)=>{const id='30000000-0000-4000-8000-'+String(index+1).padStart(12,'0');aliases.set(id,entry.id);ids.set(entry.id,id);const source=f.state.items.find(value=>value.kind===entry.kind);return{...structuredClone(source),id,createdAt:now-index*1000,updatedAt:now-index*1000,retainedAt:now,pinned:entry.pinned,hiddenFromShelf:!entry.onShelf,name:entry.title,title:entry.kind==='link'?entry.title:'',text:entry.kind==='text'?entry.text:'',url:entry.kind==='link'?'https://example.com/library-contract/'+entry.id:'',captureRevision:crypto.randomUUID(),...(entry.kind==='image'?{imageFile:'0'.repeat(64)+'.png'}:{})};});
    store.persist();let surface={view:'shelves',windowVisible:false,version:'1.7.7'};
    f.api.command=async(action,payload={})=>{f.commands.push({action,payload:structuredClone(payload)});let result;if(['library','show','settings'].includes(action))surface={...surface,view:action==='show'?'shelves':action,windowVisible:true};else if(action==='hide')surface.windowVisible=false;else if(action==='searchImages')result={ids:[],scores:[],available:false,indexing:false};else result=store.modify(action,payload);const next={...store.publicState(),...surface,result};f.api.emit(next);return structuredClone(next);};
@@ -682,8 +686,8 @@ test('shared Library keyboard contract runs actual renderer handlers and durable
    }
   }finally{fs.rmSync(directory,{recursive:true,force:true});}
  }
- const libraryReportDestination=process.env.CLIPBOARDLINE_LIBRARY_KEYBOARD_REPORT || (process.env.CLIPBOARDLINE_PARITY_REPORT && path.join(path.dirname(process.env.CLIPBOARDLINE_PARITY_REPORT),'library-windows.json'));
- if(libraryReportDestination){const revision=process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(__dirname,'../..'),encoding:'utf8'}).trim(),report={schemaVersion:1,contractId:contract.contractId,contractSHA256:crypto.createHash('sha256').update(raw).digest('hex'),platform:'windows',hostPlatform:process.platform,mode:'renderer',sourceRevision:revision,observations,errors,passed:errors.length===0};fs.mkdirSync(path.dirname(path.resolve(libraryReportDestination)),{recursive:true});fs.writeFileSync(libraryReportDestination,JSON.stringify(report,null,2)+'\n');}
+ const libraryReportDestination=process.env.CLIPBOARDLINE_LIBRARY_KEYBOARD_REPORT || (process.env.CLIPBOARDLINE_PARITY_REPORT && path.join(path.dirname(process.env.CLIPBOARDLINE_PARITY_REPORT),'library-'+ADAPTER+'.json'));
+ if(libraryReportDestination){const revision=process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(__dirname,'../..'),encoding:'utf8'}).trim(),report={schemaVersion:1,contractId:contract.contractId,contractSHA256:crypto.createHash('sha256').update(raw).digest('hex'),platform:ADAPTER,hostPlatform:process.platform,mode:'renderer',sourceRevision:revision,observations,errors,passed:errors.length===0};fs.mkdirSync(path.dirname(path.resolve(libraryReportDestination)),{recursive:true});fs.writeFileSync(libraryReportDestination,JSON.stringify(report,null,2)+'\n');}
  assert.deepEqual(errors,[]);
 });
 
@@ -729,6 +733,32 @@ test('a capture crop owns Enter before the next render tick can copy and hide th
  await f.key('Enter');
  assert.equal(f.commands.filter(value=>value.action==='copy').length,1,'Enter in the finished preview copies normally');
  assert.equal(f.state.windowVisible,false);
+});
+test('Linux shelves match Windows: Hide closes the line, Tab keeps a single shelf and a page holds nine cards',async()=>{
+ for(const platform of ['linux','windows']){
+  const f=fixture({width:2560,platform}),shelves=()=>[...f.main.matchAll(/<section class="shelf(?: active-shelf)?\s*" data-shelf="([^"]+)"/g)].map(match=>match[1]);
+  for(let index=0;index<20;index++)f.state.items.push({id:'10000000-0000-4000-8000-'+String(index).padStart(12,'0'),kind:'image',createdAt:5000+index,updatedAt:5000+index,name:'Wide '+index,title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,mediaUrl:'appmedia://media/w'+index});
+  await f.ready();await f.api.command('show');await f.ready();
+  const row=f.main.slice(f.main.indexOf('data-shelf="image"'),f.main.indexOf('data-shelf="text"'));
+  assert.equal((row.match(/<article class="card/g)||[]).length,9,platform);assert.match(row,/1 \/ 3/,platform+': 21 images');
+  assert.doesNotMatch(f.main,/data-action="hide-shelf"/,platform);assert.match(f.main,/data-action="hide"/,platform+': the toolbar keeps the line-wide Hide');
+  await f.api.command('setSettings',{patch:{visibleKinds:['image']}});await f.api.command('show');await f.ready();
+  await f.key('Tab');await f.ready();assert.deepEqual(shelves(),['image'],platform);assert.equal(activeKind(f),'image',platform);
+ }
+});
+test('a Linux global shortcut records the Windows key as Super; local shortcuts and Windows keep it as Ctrl',async()=>{
+ const saved=f=>f.commands.filter(value=>value.action==='setSettings').at(-1)?.payload.patch.shortcuts?.toggle;
+ const linux=fixture({platform:'linux'});await linux.ready();await linux.api.command('settings');await linux.ready();await linux.click('settings-tab',{tab:'shortcuts'});
+ await linux.click('record-global',{keyAction:'toggle'});await linux.key('KeyV',{meta:true});await linux.click('confirm-modal');assert.equal(saved(linux),'Super+V');
+ const windows=fixture({platform:'windows'});await windows.ready();await windows.api.command('settings');await windows.ready();await windows.click('settings-tab',{tab:'shortcuts'});
+ await windows.click('record-global',{keyAction:'toggle'});await windows.key('KeyV',{meta:true,alt:true});await windows.click('confirm-modal');assert.equal(saved(windows),'Control+Alt+V');
+});
+test('Linux settings follow the selected language',async()=>{
+ const f=fixture({platform:'linux'});await f.ready();await f.api.command('settings');
+ f.api.emit({settings:{...f.state.settings,language:'tr'},linux:{session:'wayland',backend:'wayland',clipboardMonitor:'focused-polling',automaticPaste:false,missing:['wl-clipboard'],problem:'Install wl-clipboard for background clipboard capture on Wayland.'},update:{...f.state.update,status:'manual',message:'Install newer Linux releases as an AppImage, .deb or .rpm package.'}});await f.ready();
+ await f.click('settings-tab',{tab:'sources'});for(const text of ['Linux entegrasyonu','Kopyalar yalnızca ClipBoardLine odaktayken yakalanır.','wl-clipboard’u kur','Ctrl+V’ye bas','İsteğe bağlı paketler','dağıtımının paketlerinden kur'])assert.ok(f.main.includes(text),text);
+ await f.click('settings-tab',{tab:'shortcuts'});for(const text of ['Linux kopyalama, yapıştırma','bir sistem kısayolu atayabilirsin','<code>clipboardline --toggle</code>'])assert.ok(f.main.includes(text),text);
+ await f.click('settings-tab',{tab:'updates'});for(const text of ['Sürümler sayfasını aç','Yeni Linux sürümlerini','Linux sürümleri kendini güncellemez'])assert.ok(f.main.includes(text),text);
 });
 
 test('export and shortcut-conflict notices follow the selected language',async()=>{

@@ -127,7 +127,7 @@ class Store {
       const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
       try{protectDirectory(this.directory,{powershell,script});}
       catch(error){fail('The private application data permissions could not be secured. Existing files were preserved. '+protectionFailureDetail(error,this.directory));}
-    }
+    }else if(process.platform==='linux')fs.chmodSync(this.directory,0o700);
     this.mediaDirectory = path.join(this.directory, 'media'); fs.mkdirSync(this.mediaDirectory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
     // Remove staging files a killed process left behind (putPNG '.png-' and putVideo '.video-'); exact names, regular files only.
@@ -140,6 +140,8 @@ class Store {
       let parsed;
       try { parsed = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { fail('Library is unreadable. Original data was preserved; recover library.json.backup.'); }
       if (parsed.schema !== 1 || !Array.isArray(parsed.items) || parsed.items.length > 20000 || !Array.isArray(parsed.folders)) fail('Unsupported library format');
+      // Development Linux builds saved a full-screen line preference that no longer exists.
+      if(process.platform==='linux'&&parsed.settings&&typeof parsed.settings==='object')delete parsed.settings.lineFullScreen;
       this.data = {...parsed, settings: settings(parsed.settings)};
       for (const item of this.data.items) this.validateStored(item);
       if(this.data.pendingDeletionFiles&&(!Array.isArray(this.data.pendingDeletionFiles)||this.data.pendingDeletionFiles.length>200000||this.data.pendingDeletionFiles.some(name=>typeof name!=='string'||!MANAGED_MEDIA.test(name))))fail('Invalid pending deletion state.');

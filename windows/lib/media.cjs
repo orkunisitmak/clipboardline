@@ -2,6 +2,8 @@
 const fs=require('node:fs'),path=require('node:path');
 const {spawn}=require('node:child_process');
 const {windowsEnvironment}=require('./windows-environment.cjs');
+const {LinuxMedia}=require('./linux-media.cjs');
+const {findExecutable}=require('./linux-session.cjs');
 const MAXIMUM_VIDEO_BYTES=2*1024*1024*1024,MAXIMUM_JOB_MS=10*60*1000;
 const SCRIPT=__dirname.includes('app.asar')?path.join(process.resourcesPath,'native','windows-media.ps1'):path.join(__dirname,'..','native','windows-media.ps1');
 const OWNER='clipboardline-media-v1',MARKER='.clipboardline-media.json';
@@ -51,23 +53,24 @@ class MediaJobScheduler {
  }
 }
 class MediaJobs {
- constructor({directory,script=SCRIPT,timeout=MAXIMUM_JOB_MS,concurrency=2}={}){
+ constructor({directory,script=SCRIPT,timeout=MAXIMUM_JOB_MS,concurrency=2,linuxTools=null}={}){
   if(typeof directory!=='string'||!path.isAbsolute(directory))throw new Error('Invalid private video directory.');safeDirectory(path.dirname(directory));this.directory=directory;fs.mkdirSync(this.directory,{recursive:true,mode:0o700});safeDirectory(this.directory);this.script=script;this.timeout=Math.min(MAXIMUM_JOB_MS,Math.max(1,timeout));this.jobs=new Map();
-  this.scheduler=new MediaJobScheduler({concurrency});
+  this.scheduler=new MediaJobScheduler({concurrency});this.linuxTools=linuxTools;
   for(const name of fs.readdirSync(this.directory))if(/^job-[A-Za-z0-9]{6}$/.test(name))this.remove(path.join(this.directory,name));
  }
+ linuxMedia(){if(!this.linux){const tools=this.linuxTools||{ffmpeg:findExecutable('ffmpeg'),ffprobe:findExecutable('ffprobe')};this.linux=new LinuxMedia({ffmpeg:tools.ffmpeg,ffprobe:tools.ffprobe});}return this.linux;}
  remove(directory){
   try{if(path.dirname(directory)!==this.directory||!/^job-[A-Za-z0-9]{6}$/.test(path.basename(directory)))return false;safeDirectory(directory);const marker=path.join(directory,MARKER);if(!regular(marker)||fs.statSync(marker).size>1000)return false;const value=JSON.parse(fs.readFileSync(marker,'utf8'));if(value.owner!==OWNER)return false;const names=fs.readdirSync(directory);if(names.some(name=>![MARKER,'poster.png','trimmed.mp4','audio.wav'].includes(name)||!regular(path.join(directory,name))))return false;for(const name of names)fs.unlinkSync(path.join(directory,name));fs.rmdirSync(directory);return true;}catch{return false;}
  }
  run(mode,source,options={}){return this.scheduler.schedule(mode,signal=>this.execute(mode,source,{...options,signal}),{signal:options.signal,onDiscard:result=>this.release(result)});}
  async execute(mode,source,{startMs,endMs,signal,verifyAudio=false}={}){
-  if(process.platform!=='win32')throw new Error('Native recording processing requires Windows.');
+  if(!['win32','linux'].includes(process.platform))throw new Error('Native recording processing requires Windows or Linux.');
   if(signal?.aborted)throw aborted();const before=validVideo(source);safeDirectory(this.directory);
   if(mode==='Trim'&&(!Number.isFinite(startMs)||!Number.isFinite(endMs)||startMs<0||endMs-startMs<50))throw new Error('Choose a nonempty trim interval.');
   const directory=fs.mkdtempSync(path.join(this.directory,'job-'));fs.writeFileSync(path.join(directory,MARKER),JSON.stringify({owner:OWNER}),{flag:'wx',mode:0o600});
   let keep=false;
   try{
-   const result=await new Promise((resolve,reject)=>{
+   const result=process.platform==='linux'?await this.linuxMedia().run(mode,{source,outputDirectory:directory,verifyAudio:verifyAudio===true,...(mode==='Trim'?{startMs,endMs}:{})},{signal,timeout:this.timeout,track:child=>this.jobs.set(directory,child)}).finally(()=>this.jobs.delete(directory)):await new Promise((resolve,reject)=>{
     const executable=path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
     const child=spawn(executable,['-NoLogo','-NoProfile','-MTA','-NonInteractive','-ExecutionPolicy','Bypass','-File',this.script,'-Mode',mode],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:windowsEnvironment()});
     let stdout='',stderr='',failure=null,finished=false;this.jobs.set(directory,child);
