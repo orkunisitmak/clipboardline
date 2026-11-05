@@ -31,7 +31,7 @@ const {Updates,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
 const {GlobalShortcuts}=require('./lib/global-shortcuts.cjs');
 const {ImageSearch,modelPaths}=require('./lib/image-search.cjs');
 const {createOcrQueue}=require('./lib/ocr-queue.cjs');
-const {StatusTray,trayIcon,translated,languageCode}=require('./lib/status-summary.cjs');
+const {StatusTray,trayIcon,translatedKnown,languageCode}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
 const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
@@ -93,7 +93,7 @@ function broadcast({surfaceOnly=false}={}) {
   if(window&&!window.isDestroyed()){window.webContents.send('clipboardline:changed',packet);if(!packet.surfaceOnly)lastBroadcastLibraryRevision=store.revision;}
   return packet;
 }
-function mainText(key,...values){return translated(languageCode(store?.data.settings.language,app.getLocale()),key,...values);}
+function mainText(key,...values){return translatedKnown(languageCode(store?.data.settings.language,app.getLocale()),key,...values);}
 function notify(text) { message=text;broadcast(); }
 function openUpdates(){return show('settings',{settingsTab:'updates'});}
 function refreshTray(){

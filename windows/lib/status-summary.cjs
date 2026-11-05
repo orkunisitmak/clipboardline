@@ -5,6 +5,7 @@ function languageCode(value='system',systemLocale='en'){
  const code=String(value==='system'||!value?systemLocale:value);if(/^pt(?:-|$)/i.test(code))return'pt-BR';if(/^zh(?:-|$)/i.test(code))return'zh-Hans';const language=code.split('-')[0].toLowerCase();return Object.hasOwn(catalogs,language)?language:'en';
 }
 function translated(language,key,...values){let index=0;return(catalogs[language]?.[key]||catalogs.en[key]||key).replace(/%[@d]/g,()=>String(values[index++]??''));}
+function translatedKnown(language,key,...values){return Object.hasOwn(catalogs.en,key)?translated(language,key,...values):String(key);}
 function statusSummary({items=[],settings={},updateVersion=null,systemLocale='en'}={}){
  const kinds=Array.isArray(settings.visibleKinds)&&settings.visibleKinds.length?new Set(settings.visibleKinds):new Set(KINDS),counts={image:0,text:0,link:0};
  for(const item of items)if(item&&!item.trashedAt&&!item.hiddenFromShelf&&kinds.has(item.kind)&&Object.hasOwn(counts,item.kind))counts[item.kind]++;
@@ -49,4 +50,4 @@ class StatusTray{
  dispose(){this.disposed=true;this.icons.clear();}
  snapshot(){return this.current?{...this.current,revision:this.revision,imageRevision:this.imageRevision,menuRevision:this.menuRevision,cachedIcons:this.icons.size}:null;}
 }
-module.exports={statusSummary,languageCode,translated,badgeBitmap,trayIcon,StatusTray};
+module.exports={statusSummary,languageCode,translated,translatedKnown,badgeBitmap,trayIcon,StatusTray};

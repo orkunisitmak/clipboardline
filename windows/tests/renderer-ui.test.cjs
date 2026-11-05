@@ -11,7 +11,7 @@ const {execFileSync}=require('node:child_process');
 const os=require('node:os');
 const {exportCopies}=require('../lib/export-copies.cjs');
 
-function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,exporter=null}={}){
+function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,exporter=null,serializeOverlayMarkup=false}={}){
  const listeners=new Map(),nodes=new Map(),commands=[],imageLoads=[],animationFrames=[],paintCalls=[];let exportFailures=0;
  class Element{
   constructor(id=''){this.id=id;this.innerHTML='';this.textContent='';this.dataset={};this.style={};this.className='';this.value='';this.selectionStart=0;this.selectionEnd=0;this.classList={add(){},remove(){},contains(){return false;}};}
@@ -30,7 +30,7 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
  }
  const document={body:new Element('body'),activeElement:null,querySelectorAll(){return[];},getElementById(id){if(!nodes.has(id))nodes.set(id,id==='markup-canvas'?new Canvas(id):new Element(id));return nodes.get(id);},createElement(tag){return tag==='canvas'?new Canvas():new Element();},querySelector(){return null;},addEventListener(name,listener){if(!listeners.has(name))listeners.set(name,[]);listeners.get(name).push(listener);}};
  const overlayNode=document.getElementById('overlay-root');let overlayWrites=0,overlayMarkup='';
- Object.defineProperty(overlayNode,'innerHTML',{get(){return overlayMarkup;},set(value){overlayWrites++;overlayMarkup=value;}});
+ Object.defineProperty(overlayNode,'innerHTML',{get(){return overlayMarkup;},set(value){overlayWrites++;overlayMarkup=serializeOverlayMarkup?value.replace(/ >/g,'>'):value;}});
  const image='00000000-0000-4000-8000-000000000001',text1='00000000-0000-4000-8000-000000000002',text2='00000000-0000-4000-8000-000000000003',link='00000000-0000-4000-8000-000000000004';
  const base=(id,kind,createdAt,extra)=>({id,kind,createdAt,updatedAt:createdAt,name:'',title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,...extra});
  const state={items:[base(image,'image',1000,{name:'Synthetic image',...(imageDocument?{annotations:[],crop:null}:{}),mediaUrl:'appmedia://media/'+image,originalMediaUrl:'appmedia://media/'+image+'/original'}),base(text1,'text',900,{text:'Text one'}),base(text2,'text',800,{text:'Text two'}),base(link,'link',700,{url:'https://example.com/reference',title:'Reference link'})],folders:[],settings:{visibleKinds:['image','text','link'],retentionDays:{image:30,text:30,link:30},shortcuts:{toggle:'Control+Alt+Space',search:'Control+Alt+S'},localShortcuts:{},language:'en',theme:'soft',cardSize:'medium'},view:'shelves',version:'1.7.0',windowVisible:initialVisible,canUndo:false,canUndoTrash:false,libraryRevision:0};
@@ -537,8 +537,8 @@ test('Turkish Settings toggles use the same localized visible and accessible lab
 
 test('closing an editor before its scheduled frame prevents stale overlay painting',async()=>{const f=fixture({queuedAnimationFrames:true});await f.ready();await f.key('Space');f.flushAnimationFrames();await f.key('KeyM');assert.equal(f.animationFrames.length,1);await f.key('Escape');assert.doesNotMatch(f.overlay,/id="markup-canvas"/);f.paintCalls.length=0;f.flushAnimationFrames();assert.equal(f.paintCalls.filter(value=>value.canvas==='markup-canvas').length,0);assert.match(f.overlay,/id="preview-dialog"/);});
 
-async function historyCleanupFixture(language='en'){
- const f=fixture();await f.ready();const basedOn=(kind,id,extra)=>({...structuredClone(f.state.items.find(value=>value.kind===kind)),id,retainedAt:null,pinned:false,folderIds:[],tags:[],trashedAt:null,...extra});
+async function historyCleanupFixture(language='en',fixtureOptions={}){
+ const f=fixture(fixtureOptions);await f.ready();const basedOn=(kind,id,extra)=>({...structuredClone(f.state.items.find(value=>value.kind===kind)),id,retainedAt:null,pinned:false,folderIds:[],tags:[],trashedAt:null,...extra});
  f.api.emit({settings:{...f.state.settings,language},items:[...f.state.items.map(value=>value.id===f.text2?{...value,retainedAt:1000}:value),
   basedOn('image','00000000-0000-4000-8000-000000000005',{pinned:true}),basedOn('link','00000000-0000-4000-8000-000000000006',{folderIds:['retained-folder']}),
   basedOn('text','00000000-0000-4000-8000-000000000007',{tags:['retained-tag']}),basedOn('link','00000000-0000-4000-8000-000000000008',{trashedAt:1000})]});
@@ -554,7 +554,7 @@ for(const cancel of['Escape','button'])test('History cleanup '+cancel+' cancel s
  if(cancel==='Escape')await f.key('Escape');else await f.click('close-modal');assert.equal(f.overlay,'');assert.equal(f.commands.length,calls);assert.deepEqual(f.state,before);
 });
 test('History confirmation retains its Cancel button DOM across unrelated native state broadcasts',async()=>{
- const f=await historyCleanupFixture('tr');await f.change('history-cleanup-kind','text');await f.click('clear-history');
+ const f=await historyCleanupFixture('tr',{serializeOverlayMarkup:true});await f.change('history-cleanup-kind','text');await f.click('clear-history');
  const original=f.overlay,writes=f.overlayWrites;
  f.api.emit({items:f.state.items.map(value=>value.id===f.link?{...value,title:'Updated in background'}:value),libraryRevision:6});await f.ready();
  assert.equal(f.overlay,original,'unchanged confirmation text must remain visible');
@@ -760,6 +760,29 @@ test('export and shortcut-conflict notices follow the selected language',async()
  }finally{fs.rmSync(directory,{recursive:true,force:true});}
 });
 
+test('localized runtime messages render actual translated notice text in every language',async()=>{
+ const f=fixture();await f.ready();
+ for(const language of ['az','en','es','fr','ja','ko','pt-BR','tr','zh-Hans']){
+  f.api.emit({settings:{...f.state.settings,language},message:''});await f.ready();
+  f.api.emit({message:'Update check failed: Installer integrity check failed'});await f.ready();
+  const catalogs=require('../locales.js');
+  assert.equal(f.nodes.get('toast').textContent,catalogs[language]['Update check failed: %@'].replace('%@',catalogs[language]['Installer integrity check failed']),language);
+  f.api.emit({message:'ClipBoardLine 9.8.7 is available.'});await f.ready();
+  assert.equal(f.nodes.get('toast').textContent,catalogs[language]['ClipBoardLine %@ is available.'].replace('%@','9.8.7'),language);
+  f.api.emit({message:'Shortcut Ctrl+Alt+K is unavailable. Could not restore: search.'});await f.ready();
+  const restored=catalogs[language]['Could not restore: %@.'].replace('%@','search');
+  assert.equal(f.nodes.get('toast').textContent,catalogs[language]['Shortcut %@ is unavailable. %@'].replace('%@','Ctrl+Alt+K').replace('%@',restored),language);
+  f.api.emit({message:'Unexpected file%@%d.txt'});await f.ready();
+  assert.equal(f.nodes.get('toast').textContent,'Unexpected file%@%d.txt',language);
+ }
+});
+test('action palette and Settings display translated labels and private-data notice',async()=>{
+ const f=fixture();await f.ready();
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/Kütüphaneyi aç/);await f.key('Escape');
+ await f.api.command('settings');await f.ready();await f.click('settings-tab',{tab:'sources'});
+ assert.match(f.main,/Panoya ait özel işaretler yok sayılır/);
+});
 test('Tab onto an empty shelf leaves copy, take down, pin and preview with nothing to act on',async()=>{
  const f=fixture();await f.ready();f.api.emit({items:f.state.items.filter(value=>value.kind!=='text')});await f.ready();
  await f.key('Tab');assert.equal(activeKind(f),'text');const commands=f.commands.length;

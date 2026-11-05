@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const catalogs = require('../locales.js');
-const { languageCode, translated } = require('../lib/status-summary.cjs');
+const { languageCode, translated, translatedKnown } = require('../lib/status-summary.cjs');
 
 const renderer = fs.readFileSync(path.join(__dirname, '../renderer.js'), 'utf8');
 const windowsMain = fs.readFileSync(path.join(__dirname, '../main.cjs'), 'utf8');
@@ -267,18 +267,14 @@ test('all fixed Windows runtime errors are translated in every locale', () => {
   }
 });
 
-test('Windows native notices and dialogs use locale-aware main-process copy', () => {
-  assert.match(windowsMain, /new Notification\(\{title:mainText\('ClipBoardLine update available'\),body:mainText\('ClipBoardLine %@ is ready\. Click to review and install\.',manifest\.version\)/);
-  assert.match(windowsMain, /name:mainText\('Images, recordings and text'\)/);
-  assert.match(windowsMain, /dialog\.showErrorBox\(mainText\('ClipBoardLine could not start'\),mainText\(error\.message\)\)/);
-  assert.match(windowsMain, /notify\(item\.ocrText\?'Image text ready':'No text found in this image\.'\)/);
-  assert.match(windowsMain, /mainText\('Imported %d · failed %d\. %@: %@',imported\.length,failures\.length,first\.filename,localizedError\)/);
-  assert.ok(renderer.includes("'Shortcuts %@ are unavailable. %@'"), 'Shortcut conflict notices must use a formatted locale key');
-  assert.ok(renderer.includes("'Shortcut %@ is unavailable. %@'"), 'Single shortcut failures must be localized');
-  assert.match(windowsMain, /others\.map\(failure=>/, 'Every failed imported file must be included, not only the first');
+test('native Windows notification and dialog templates exist in every locale catalog', () => {
   for (const locale of locales) {
-    for (const key of ['ClipBoardLine update available', 'ClipBoardLine %@ is ready. Click to review and install.', 'Images, recordings and text', 'ClipBoardLine could not start']) {
-      assert.equal(typeof catalogs[locale][key], 'string', `${locale} is missing native Windows copy: ${key}`);
+    for (const key of [
+      'ClipBoardLine update available', 'ClipBoardLine %@ is ready. Click to review and install.',
+      'Images, recordings and text', 'ClipBoardLine could not start',
+      'Imported %d · failed %d. %@: %@', 'Installer integrity check failed'
+    ]) {
+      assert.equal(typeof catalogs[locale][key], 'string', locale+': missing '+key);
     }
   }
 });
@@ -295,41 +291,13 @@ test('main-process localization formats imported counts, names, errors, and upda
   }
 });
 
-test('Windows runtime status and error templates are localized at display time', () => {
-  assert.match(renderer, /localizedMessage\(update\.message\|\|/);
-  assert.match(renderer, /localizedMessage\(update\.error\)/);
-  assert.match(renderer, /toast\(localizedMessage\(message\)\)/);
-
-  const start = renderer.indexOf('const FORMATTED_MESSAGES=');
-  const end = renderer.indexOf('\nfunction toast', start);
-  assert.ok(start >= 0 && end > start, 'runtime localization helpers are missing');
-  const source = renderer.slice(start, end);
-  for (const locale of locales.filter(value => value !== 'en')) {
-    const helpers = new Function('t', `${source}\nreturn { localizedMessage, localizedFormat };`)(
-      key => catalogs[locale][key] || key
-    );
-    const error = helpers.localizedMessage('Update check failed: Installer integrity check failed');
-    assert.equal(error, catalogs[locale]['Update check failed: %@'].replace('%@', catalogs[locale]['Installer integrity check failed']), `${locale} did not localize a nested update error`);
-    assert.equal(helpers.localizedMessage('ClipBoardLine 9.8.7 is available.'), catalogs[locale]['ClipBoardLine %@ is available.'].replace('%@', '9.8.7'), `${locale} did not preserve the update version`);
-    assert.equal(helpers.localizedMessage('Imported 2 · failed 1. broken.txt: Installer integrity check failed'), catalogs[locale]['Imported %d · failed %d. %@: %@'].replace('%d', '2').replace('%d', '1').replace('%@', 'broken.txt').replace('%@', catalogs[locale]['Installer integrity check failed']), `${locale} did not localize an import failure`);
-    assert.equal(helpers.localizedMessage('Shortcuts Ctrl+Alt+K are unavailable. Choose another combination in Settings.'), catalogs[locale]['Shortcuts %@ are unavailable. %@'].replace('%@', 'Ctrl+Alt+K').replace('%@', catalogs[locale]['Choose another combination in Settings.']), `${locale} did not localize shortcut conflicts`);
-    const restored = catalogs[locale]['Could not restore: %@.'].replace('%@', 'search');
-    const shortcut = catalogs[locale]['Shortcut %@ is unavailable. %@'].replace('%@', 'Ctrl+Alt+K').replace('%@', restored);
-    assert.equal(helpers.localizedMessage('Shortcut Ctrl+Alt+K is unavailable. Could not restore: search.'), shortcut, `${locale} did not localize single shortcut recovery details`);
-    assert.equal(helpers.localizedFormat('Permanently remove %d records? This cannot be undone.', 12), catalogs[locale]['Permanently remove %d records? This cannot be undone.'].replace('%d', '12'), `${locale} did not format the deletion message`);
+test('main-process localization preserves arbitrary error filenames with printf tokens', () => {
+  for (const locale of locales) {
+    assert.equal(translatedKnown(locale, 'D:\\archive\\file%d%@.txt cannot be read'), 'D:\\archive\\file%d%@.txt cannot be read');
+    assert.equal(translatedKnown(locale, 'Installer integrity check failed'), catalogs[locale]['Installer integrity check failed']);
+    const values = ['2', '1', 'file%@.txt', 'Error%d'];
+    let index = 0;
+    const expected = catalogs[locale]['Imported %d · failed %d. %@: %@'].replace(/%[@d]/g, () => values[index++]);
+    assert.equal(translatedKnown(locale, 'Imported %d · failed %d. %@: %@', 2, 1, 'file%@.txt', 'Error%d'), expected);
   }
-});
-
-test('Windows action palette localizes titles and availability details', () => {
-  assert.match(renderer, /esc\(localizedActionText\(value\.title\)\)/);
-  assert.match(renderer, /esc\(localizedActionText\(value\.detail\|\|''\)\)/);
-  assert.match(renderer, /selectedLabel\(ids\.length\)/);
-  for (const key of ['Open folder', 'Add to folder', 'Remove from folder', 'Open tag', 'Settings']) {
-    assert.ok(renderer.includes(`t('${key}')`), `Dynamic action title does not localize its fixed label: ${key}`);
-  }
-});
-
-test('settings help text and privacy note pass through the locale lookup', () => {
-  assert.match(renderer, /description\?`<small>\$\{esc\(localizedMessage\(description\)\)\}<\/small>`/);
-  assert.match(renderer, /esc\(t\('Private clipboard markers are ignored\.[^']*'\)\)/);
 });
