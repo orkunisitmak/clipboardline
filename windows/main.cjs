@@ -405,7 +405,6 @@ async function command(action,payload={}) {
         try{window.setIgnoreMouseEvents(true);}catch{}
       }
       window.webContents.startDrag({files:batch.files,icon});
-      if(view==='shelves')void hide(false);
     }catch(error){
       if(batch.batch)dragFiles.remove(batch.batch);
       throw error;
@@ -447,7 +446,7 @@ async function command(action,payload={}) {
     await updates.install(launchInstaller);app.quit();
   }else if(action==='quit')app.quit();
   else throw new Error('Unknown command');
-  const packet=broadcast({surfaceOnly:['show','search','hide','library','settings','windowClose','windowMinimize','windowMaximize'].includes(action)});return result===undefined?packet:{...packet,result};
+  const packet=broadcast({surfaceOnly:['show','search','hide','library','settings','windowClose','windowMinimize','windowMaximize','dragStartOverlay','dragEndOverlay'].includes(action)});return result===undefined?packet:{...packet,result};
 }
 
 let applicationIcon;

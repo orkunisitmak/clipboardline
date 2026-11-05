@@ -217,8 +217,8 @@ function focusFirst({preferImages=false}={}) {
  }
  const first=currentItems()[0];ui.selected=new Set(first?[first.id]:[]);ui.focus=first?.id||null;ui.anchor=ui.focus;ui.pages={image:0,text:0,link:0};
 }
-function clearShelfSession(){ui.search='';ui.searchOpen=false;ui.searchEditing=false;ui.selecting=false;ui.selected.clear();ui.focus=null;ui.anchor=null;ui.pages={image:0,text:0,link:0};}
-function resetShelfSession(){clearShelfSession();focusFirst({preferImages:true});}
+function clearShelfSession(){document.body?.classList?.remove?.('dragging-out');ui.search='';ui.searchOpen=false;ui.searchEditing=false;ui.selecting=false;ui.selected.clear();ui.focus=null;ui.anchor=null;ui.pages={image:0,text:0,link:0};}
+function resetShelfSession(){document.body?.classList?.remove?.('dragging-out');clearShelfSession();focusFirst({preferImages:true});}
 function reconcileVisibleShelves(previousKinds){
  if(ui.view!=='shelves')return;
  const kinds=visibleKinds();for(const kind of kinds)if(!previousKinds.includes(kind))ui.pages[kind]=0;
@@ -266,6 +266,7 @@ function applyState(next,{initial=false}={}) {
  if(previousView==='library'&&next.view&&next.view!=='library')librarySelection={focus:ui.focus,anchor:ui.anchor,selected:[...ui.selected]};
  const wasHidden=lastVisibility===false&&next.windowVisible===true; lastVisibility=next.windowVisible ?? lastVisibility; const previousSettings=state.settings;state=next;for(const [property,key]of Object.entries({list:'libraryListMode',inspectorVisible:'libraryInspectorVisible',sidebarVisible:'librarySidebarVisible',sidebarWidth:'librarySidebarWidth',inspectorWidth:'libraryInspectorWidth',listColumns:'libraryListColumns'})){if(next.settings[key]!=null&&(firstState||(property==='listColumns'?JSON.stringify(previousSettings?.[key])!==JSON.stringify(next.settings[key]):previousSettings?.[key]!==next.settings[key])))ui[property]=next.settings[key];} if(['shelves','library','settings'].includes(next.view))ui.view=next.view;
  const fresh=wasHidden||previousView!==ui.view||firstState;
+  if(wasHidden)document.body?.classList?.remove?.('dragging-out');
  if(ui.view==='shelves'&&next.windowVisible===false)clearShelfSession();
  else if(fresh&&!ui.preview){if(ui.view==='shelves')resetShelfSession();else if(ui.view==='library'){if(previousView!=='library'){ui.focus=librarySelection?.focus||null;ui.anchor=librarySelection?.anchor||null;ui.selected=new Set(librarySelection?.selected||[]);}reconcileLibraryFocus();}else focusFirst();}
  else if(JSON.stringify(previousKinds)!==JSON.stringify(visibleKinds()))reconcileVisibleShelves(previousKinds);
@@ -412,8 +413,8 @@ function updateShelfSelection(){
   if(card.getAttribute('aria-selected')!==String(selected))card.setAttribute('aria-selected',String(selected));
  }
 }
-function render() { if(preserveLibraryDrag())return;const libraryFocus=libraryFocusIdentity();const scrollPositions=captureScrollPositions();queueLibraryImageSearch();const focused=document.activeElement;const detailID=focused?.dataset?.detailId;const selected=detailID?selectedIds():[];const reuseDetail=!!detailID&&ui.view==='library'&&ui.inspectorVisible&&!ui.preview&&!ui.modal&&state.windowVisible!==false&&selected.length===1&&selected[0]===detailID;const identity=focused?.dataset?.focus;const focusedId=focused?.id;const oldValue=isEditor(focused)?focused.value:null;const selection=(identity||focusedId)&&typeof focused.selectionStart==='number'?[focused.selectionStart,focused.selectionEnd]:null;const draggingClass=document.body.classList.contains('dragging-out')?' dragging-out':'';document.body.className=`view-${ui.view}${draggingClass}`;root.className=`${state.settings.theme==='neutral'?'neutral':''} size-${state.settings.cardSize||'medium'}`;const html=`<div class="shell ${ui.view==='shelves'?'shelf-shell':'normal-shell'}">${topbar()}${ui.view==='settings'?settings():ui.view==='library'?library():shelves()}${ui.view==='library'?`<footer class="statusbar"><span>${esc(selectedLabel(selectedIds().length))}</span><div class="grow"></div><div class="key-legend"><span><kbd>Space</kbd> ${esc(t('Preview'))}</span><span><kbd>Enter</kbd> ${esc(t('Copy'))}</span><span>${keyHint('pin')} ${esc(t('Pin'))}</span><span>${keyHint('actions')} ${esc(t('Actions'))}</span></div></footer>`:''}</div>`;if(!renderShelfTree(html)&&!renderWithActiveInspector(html,focused,reuseDetail))root.innerHTML=html;updateShelfSelection();root.setAttribute('aria-busy','false');renderOverlay();if(identity||focusedId){let next=focusedId?(detailID?root.querySelector('#'+focusedId):document.getElementById(focusedId)):root.querySelector(`[data-focus="${identity}"]`);if(detailID)next=null;else if(next&&oldValue!=null&&isEditor(next))next.value=oldValue;next?.focus({preventScroll:true});if(selection&&next?.setSelectionRange)try{next.setSelectionRange(...selection);}catch{}}restoreScrollPositions(scrollPositions);restoreLibraryFocus(libraryFocus);}
-// Folded-name order of the native Library: same fold as search (NFKC + NFD, strip marks, lower case), by code point.
+function render() { if(preserveLibraryDrag())return;const libraryFocus=libraryFocusIdentity();const scrollPositions=captureScrollPositions();queueLibraryImageSearch();const focused=document.activeElement;const detailID=focused?.dataset?.detailId;const selected=detailID?selectedIds():[];const reuseDetail=!!detailID&&ui.view==='library'&&ui.inspectorVisible&&!ui.preview&&!ui.modal&&state.windowVisible!==false&&selected.length===1&&selected[0]===detailID;const identity=focused?.dataset?.focus;const focusedId=focused?.id;const oldValue=isEditor(focused)?focused.value:null;const selection=(identity||focusedId)&&typeof focused.selectionStart==='number'?[focused.selectionStart,focused.selectionEnd]:null;const draggingClass=document.body?.classList?.contains?.('dragging-out')?' dragging-out':'';document.body.className=`view-${ui.view}${draggingClass}`;root.className=`${state.settings.theme==='neutral'?'neutral':''} size-${state.settings.cardSize||'medium'}`;const html=`<div class="shell ${ui.view==='shelves'?'shelf-shell':'normal-shell'}">${topbar()}${ui.view==='settings'?settings():ui.view==='library'?library():shelves()}${ui.view==='library'?`<footer class="statusbar"><span>${esc(selectedLabel(selectedIds().length))}</span><div class="grow"></div><div class="key-legend"><span><kbd>Space</kbd> ${esc(t('Preview'))}</span><span><kbd>Enter</kbd> ${esc(t('Copy'))}</span><span>${keyHint('pin')} ${esc(t('Pin'))}</span><span>${keyHint('actions')} ${esc(t('Actions'))}</span></div></footer>`:''}</div>`;if(!renderShelfTree(html)&&!renderWithActiveInspector(html,focused,reuseDetail))root.innerHTML=html;updateShelfSelection();root.setAttribute('aria-busy','false');renderOverlay();if(identity||focusedId){let next=focusedId?(detailID?root.querySelector('#'+focusedId):document.getElementById(focusedId)):root.querySelector(`[data-focus="${identity}"]`);if(detailID)next=null;else if(next&&oldValue!=null&&isEditor(next))next.value=oldValue;next?.focus({preventScroll:true});if(selection&&next?.setSelectionRange)try{next.setSelectionRange(...selection);}catch{}}restoreScrollPositions(scrollPositions);restoreLibraryFocus(libraryFocus);}
+// Folded-name order of the native Library: NFKD, no marks, locale-independent lower case, by code point.
 const foldedCodes=value=>Array.from(fold(value),character=>character.codePointAt(0));
 const compareFoldedOnly=(a,b)=>{const left=foldedCodes(a),right=foldedCodes(b);for(let at=0;at<Math.min(left.length,right.length);at++)if(left[at]!==right[at])return left[at]-right[at];return left.length-right.length;};
 const compareFolded=(a,b)=>compareFoldedOnly(a,b)||(a<b?-1:a>b?1:0);
@@ -924,14 +925,7 @@ document.addEventListener('pointerdown',event=>{const grip=event.target.closest(
 document.addEventListener('pointermove',event=>{if(pointer){event.preventDefault();editorPointerMove(event);}});
 document.addEventListener('pointerup',()=>{if(pointer?.type==='list-resize')void setLibraryLayout({listColumns:{...ui.listColumns}});if(pointer?.type==='library-resize'){const column=pointer.column;void setLibraryLayout({[column+'Width']:ui[column+'Width']});}finishPointerGesture();document.querySelector('.image-stage')?.classList.remove('panning');});
 document.addEventListener('pointercancel',()=>{if(pointer?.type==='list-resize'){resizeListColumn(pointer.column,pointer.width);render();}finishPointerGesture();});
-document.addEventListener('wheel',event=>{
- if(ui.preview&&item(ui.preview)?.kind==='image'&&!recording(item(ui.preview))&&event.target.closest('.image-stage')){
-  event.preventDefault();
-  if(event.shiftKey){ui.pan.x-=event.deltaY;ui.pan.y-=event.deltaX;}
-  else{ui.zoom=Math.min(4,Math.max(1,ui.zoom*(event.deltaY<0?1.13:1/1.13)));if(ui.zoom===1)ui.pan={x:0,y:0};}
-  updateTransform();
- }
-},{passive:false});
+document.addEventListener('wheel',event=>{if(!ui.preview||item(ui.preview)?.kind!=='image'||recording(item(ui.preview))||!event.target.closest('.image-stage'))return;event.preventDefault();if(event.shiftKey){ui.pan.x-=event.deltaY;ui.pan.y-=event.deltaX;}else{ui.zoom=Math.min(4,Math.max(1,ui.zoom*(event.deltaY<0?1.13:1/1.13)));if(ui.zoom===1)ui.pan={x:0,y:0};}updateTransform();},{passive:false});
 const libraryDragType='application/x-clipboardline-ids';let libraryDragIDs=null,folderDropTarget=null,libraryRenderDeferred=false;
 function clearFolderDropTarget(){folderDropTarget?.classList.remove('folder-drop-target');folderDropTarget=null;}
 function clearLibraryDrag({flush=true}={}){const deferred=libraryRenderDeferred;libraryDragIDs=null;libraryRenderDeferred=false;clearFolderDropTarget();if(flush&&deferred)render();return deferred;}
@@ -953,7 +947,11 @@ document.addEventListener('dragstart',event=>{
  if(!ui.selected.has(value.id))select(value);
  const values=selectedIds().map(item).filter(value=>value&&!value.trashedAt),ids=values.map(value=>value.id);
  if(!ids.length){event.preventDefault();if(deferred)render();return;}
- const text=values.filter(value=>value.kind!=='image').map(value=>value.kind==='link'?value.url:value.text).join('\n\n');
+ if(typeof card?.addEventListener==='function'){
+  const onCardDragEnd=event=>{try{card.removeEventListener('dragend',onCardDragEnd);}catch{}document.body?.classList?.remove?.('dragging-out');clearLibraryDrag();const completed=Boolean(event?.dataTransfer&&event.dataTransfer.dropEffect!=='none');if(ui.view==='shelves')void command('dragEndOverlay',{completed});};
+  card.addEventListener('dragend',onCardDragEnd);
+ }
+  const text=values.filter(value=>value.kind!=='image').map(value=>value.kind==='link'?value.url:value.text).join('\n\n');
  event.dataTransfer.effectAllowed='copy';
  if(text){
   try{event.dataTransfer.setData('text/plain',text);}catch{}
@@ -967,16 +965,14 @@ document.addEventListener('dragstart',event=>{
  }else if(hasImage||event.altKey){
   event.preventDefault();
   if(deferred)render();
-  if(ui.view==='shelves')document.body.classList.add('dragging-out');
-  void command('startDrag',{ids}).then(result=>{if(!result)toast(t('Use Copy or Export to transfer these items.'));}).finally(()=>{document.body.classList.remove('dragging-out');});
+  if(ui.view==='shelves')document.body?.classList?.add?.('dragging-out');
+  void command('startDrag',{ids}).then(result=>{if(!result)toast(t('Use Copy or Export to transfer these items.'));}).finally(()=>{document.body?.classList?.remove?.('dragging-out');});
  }else{
   const links=values.filter(value=>value.kind==='link').map(value=>value.url);
   if(links.length)try{event.dataTransfer.setData('text/uri-list',links.join('\r\n'));}catch{}
   if(ui.view==='shelves'){
-   requestAnimationFrame(()=>{
-    document.body.classList.add('dragging-out');
-    void command('dragStartOverlay');
-   });
+   document.body?.classList?.add?.('dragging-out');
+   void command('dragStartOverlay');
   }
  }
 });
@@ -993,7 +989,7 @@ document.addEventListener('drop',async event=>{
  }finally{if(deferred)render();}
 });
 document.addEventListener('dragend',event=>{
- document.body.classList.remove('dragging-out');
+ document.body?.classList?.remove?.('dragging-out');
  clearLibraryDrag();
  const completed=Boolean(event.dataTransfer&&event.dataTransfer.dropEffect!=='none');
  if(ui.view==='shelves')void command('dragEndOverlay',{completed});

@@ -784,7 +784,7 @@ test('the Move to Trash confirmation uses the shared localized catalog entry',as
  f.api.emit({settings:{...f.state.settings,language:'en'}});await f.click('close-modal');await f.click('trash');
  assert.match(f.overlay,/Move 1 items to recoverable Trash\?/);
 });
-test('shelf cards have draggable=true, sag curve and pointer-events protection for drag gesture reliability',async()=>{
+test('rendered shelf and library card images carry no draggable=false and cards retain draggable=true with rope sag',async()=>{
  const f=fixture();await f.ready();
  const cards=[...f.main.matchAll(/<article class="card kind-([^"]+)"[^>]*style="([^"]*)"[^>]*draggable="([^"]+)"/g)];
  assert.ok(cards.length>0);
@@ -792,9 +792,11 @@ test('shelf cards have draggable=true, sag curve and pointer-events protection f
   assert.equal(card[3],'true','Card must be draggable');
   assert.match(card[2],/--sag:\d+(\.\d+)?px/,'Shelf card must retain --sag rope curve');
  }
- const css=fs.readFileSync(path.join(__dirname,'../styles.css'),'utf8');
- assert.match(css,/\.card\s+img\s*\{[^}]*pointer-events:\s*none/);
- assert.match(css,/\.card\s+\.card-body[^}]*pointer-events:\s*none/);
+ const shelfImages=[...f.main.matchAll(/<article class="card[^"]*"[^>]*>[\s\S]*?<img [^>]*draggable="false"/g)];
+ assert.equal(shelfImages.length,0,'Shelf card images must not carry draggable="false"');
+ await f.click('library');
+ const libraryImages=[...f.main.matchAll(/<article class="card[^"]*"[^>]*>[\s\S]*?<img [^>]*draggable="false"/g)];
+ assert.equal(libraryImages.length,0,'Library card images must not carry draggable="false"');
 });
 test('shelf page-next and page-back advance and rewind ui.pages and synchronize selection to visible cards',async()=>{
  const f=fixture();await f.ready();
