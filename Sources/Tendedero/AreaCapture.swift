@@ -37,6 +37,8 @@ final class AreaCapture {
     private var screenObserver: NSObjectProtocol?
     private var previousApplication: NSRunningApplication?
     private(set) var finished = false
+    /// Whether the overlay took the keyboard; only then is it handed back.
+    private var presented = false
 
     /// Freezes the screens and shows the overlay. The completion runs once:
     /// with the kept area, or nil when cancelled or when capture failed.
@@ -94,6 +96,7 @@ final class AreaCapture {
     // MARK: The overlay
 
     private func present(_ frozen: [(NSScreen, CGImage)]) {
+        presented = true
         for (screen, image) in frozen {
             let window = AreaCaptureWindow(screen: screen, image: image)
             window.overlay.onBegin = { [weak self, weak window] in self?.selectionBegan(in: window) }
@@ -133,7 +136,7 @@ final class AreaCapture {
         windows.removeAll()
         NSCursor.arrow.set()
         // Saving keeps the app in front for its panel and returns afterwards.
-        if output != .save || result == nil { previousApplication?.activate(options: []) }
+        if presented && (output != .save || result == nil) { previousApplication?.activate(options: []) }
         let completion = self.completion
         self.completion = nil
         completion?(result)
