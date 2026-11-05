@@ -653,7 +653,9 @@ extension String {
             let url = URL(fileURLWithPath: path)
             do {
                 if FileManager.default.fileExists(atPath: path) {
-                    guard files.isFavoriteCopy(url) else { continue }
+                    // Markup leftovers are favorite copies; permanently deleted
+                    // items also queue clipboard copies. Never anything else.
+                    guard files.isAppCopy(url) else { continue }
                     _ = try files.trashAppCopy(url)
                 }
                 try db.execute("DELETE FROM image_markup_garbage WHERE path=?", [.text(path)])
@@ -969,6 +971,12 @@ extension String {
                 try db.execute("DELETE FROM text_identity WHERE item=?", [id])
                 try db.execute("DELETE FROM image_analysis WHERE item=?", [id])
                 try db.execute("DELETE FROM items WHERE id=? AND deleted IS NOT NULL", [id])
+                // Queue the app's own copies in the same write: if moving them
+                // fails now, the queue is retried on the next save or launch.
+                for path in Set([value.path, value.markupBasePath, value.recordingOriginalPath].compactMap { $0 })
+                where files.isAppCopy(URL(fileURLWithPath: path)) {
+                    try db.execute("INSERT OR IGNORE INTO image_markup_garbage VALUES(?)", [.text(path)])
+                }
             }
             return targets
         }
@@ -977,22 +985,17 @@ extension String {
         invalidateTrashUndo(erased); invalidateShelfUndo(erased)
         // Under the writer lock, so no other instance can capture the same file
         // between the reference check and the move.
-        try? db.transaction { releaseFiles(of: targets) }
+        try? db.transaction { drainMarkupGarbage() }
+        releaseThumbnails(of: targets)
         changed()
         return targets.count
     }
-    /// Runs after the records are gone, so a failure here can only leave a
-    /// file behind, never a record pointing at a missing file.
-    private func releaseFiles(of erased: [LibraryRecord]) {
-        guard let remaining = try? LibrarySQL.decode(db.rows("SELECT payload FROM items")) else { return }
-        let referenced = Set(remaining.flatMap { [$0.path, $0.markupBasePath, $0.recordingOriginalPath, $0.thumbnailPath].compactMap { $0 } })
-            .union(recordingTrimPending)
+    /// Link thumbnails are a cache, removed once no remaining link uses them.
+    private func releaseThumbnails(of erased: [LibraryRecord]) {
+        let thumbnails = erased.compactMap(\.thumbnailPath)
+        guard !thumbnails.isEmpty, let remaining = try? LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='link'")) else { return }
+        let referenced = Set(remaining.compactMap(\.thumbnailPath))
         for value in erased {
-            for path in Set([value.path, value.markupBasePath, value.recordingOriginalPath].compactMap { $0 }) where !referenced.contains(path) {
-                let url = URL(fileURLWithPath: path)
-                guard files.isAppCopy(url) else { continue }
-                do { _ = try files.trashAppCopy(url) } catch { log.error("A deleted item's copy could not be moved to the Trash") }
-            }
             if let path = value.thumbnailPath, !referenced.contains(path) {
                 let file = URL(fileURLWithPath: path)
                 if file.deletingLastPathComponent() == thumbnailsFolder, file.resolvingSymlinksInPath() == file { try? FileManager.default.removeItem(at: file) }
