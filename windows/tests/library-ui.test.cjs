@@ -449,3 +449,9 @@ test('Library domain filter ignores case, surrounding spaces and dots, www and a
  await f.input('domain-filter','other.org');assert.deepEqual(cards(f),[]);
  await f.input('domain-filter','  ');assert.deepEqual(cards(f),[f.image,f.link]);
 });
+test('copying several Library items says how many were copied',async()=>{
+ const f=fixture();await f.ready();await recent(f);
+ await f.key('ArrowRight');await f.key('KeyC',{ctrl:true});assert.equal(f.nodes.get('toast').textContent,'Copied');
+ await f.key('ArrowRight',{shift:true});await f.key('ArrowRight',{shift:true});await f.key('KeyC',{ctrl:true});
+ assert.equal(f.commands.findLast(command=>command.action==='copy').payload.ids.length,3);assert.equal(f.nodes.get('toast').textContent,'3 items copied');
+});

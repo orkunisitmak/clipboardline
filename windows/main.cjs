@@ -245,7 +245,7 @@ async function copy(payload,paste=false) {
   }
   await writeClipboard(selected);
   if(store.data.settings.sounds)shell.beep();
-  if(payload.keepOpen&&!paste){notify('Copied');return;}
+  if(payload.keepOpen&&!paste){if(selected.length<=1)notify('Copied');return;}
   await hide();
 }
 async function importFile(file) {
