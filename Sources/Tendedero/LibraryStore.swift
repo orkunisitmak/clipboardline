@@ -45,6 +45,8 @@ struct LibraryRecord: Codable, Equatable, Identifiable {
     var author: String?
     var metadataState = "pending"
     var metadataAttemptedAt: Date?
+    /// The name the user gave, or nil when it is blank, so shelf cards fall back to the content like the Library card.
+    var shelfName: String? { let name = title.trimmingCharacters(in: .whitespacesAndNewlines); return name.isEmpty ? nil : name }
     var displayTitle: String {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !name.isEmpty { return name }

@@ -99,7 +99,7 @@ final class TextHistory: ObservableObject {
     private func reloadFromLibrary() {
         guard let library else { return }
         do {
-            let updated = try library.shelfItems(.text).map { Entry(id: $0.id, text: $0.text ?? "", capturedAt: $0.createdAt, pinned: $0.favorite, title: $0.title.isEmpty ? nil : $0.title) }
+            let updated = try library.shelfItems(.text).map { Entry(id: $0.id, text: $0.text ?? "", capturedAt: $0.createdAt, pinned: $0.favorite, title: $0.shelfName) }
             if updated != entries { entries = updated; sanitizeFocus() }
         }
         catch { notice = L("Library could not be saved or opened") }
