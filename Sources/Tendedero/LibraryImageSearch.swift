@@ -78,7 +78,7 @@ enum VisualRanking {
 }
 
 final class ImageSearchWorker: @unchecked Sendable {
-    static let version = "vision-mobileclip-s2-3e0a7bf-v2"
+    static let version = "vision-mobileclip-s2-3e0a7bf-v1"
     private let database: URL
     private let modelFolder: URL?
     private let queue = DispatchQueue(label: "local.clipboardline.image-search.index", qos: .utility)

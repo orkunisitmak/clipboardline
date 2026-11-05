@@ -39,21 +39,15 @@ function prune(keys){
  records.sort((a,b)=>b.time-a.time);let bytes=0;for(let index=0;index<records.length;index++){const record=records[index];bytes+=record.size;if(index>=MAX_CACHE_RECORDS||bytes>MAX_CACHE_BYTES){fs.unlinkSync(record.file);vectors.delete(record.key);}}
  return true;
 }
-async function releaseSessions(){
- const currentImage=imageSession,currentText=textSession;imageSession=null;textSession=null;
- try{await currentImage?.release?.();}catch{}
- try{await currentText?.release?.();}catch{}
-}
 async function session(kind){
  if(kind==='image'&&imageSession)return imageSession;
  if(kind==='text'&&textSession)return textSession;
- await releaseSessions();
  if(!ort){
   ort=require(workerData.ortModule||'onnxruntime-web/wasm');ort.env.logLevel='error';ort.env.wasm.numThreads=1;ort.env.wasm.proxy=false;
   // Every WASM/JS asset is packaged locally. ORT receives no network model URL.
   if(workerData.runtimeDirectory)ort.env.wasm.wasmPaths=pathToFileURL(workerData.runtimeDirectory+path.sep).href;
  }
- const options={executionProviders:['wasm'],graphOptimizationLevel:'all',enableCpuMemArena:false,enableMemPattern:false};
+ const options={executionProviders:['wasm'],graphOptimizationLevel:'all',enableCpuMemArena:true};
  try{
   if(kind==='image'){
    imageSession=await ort.InferenceSession.create(fs.readFileSync(safeFile(workerData.modelDirectory,'mobileclip-s2-image.onnx',400*1024*1024)),options);
@@ -78,6 +72,7 @@ async function infer(activeSession,name,tensor){
 async function handle(action,payload){
  if(action==='has')return load(payload.key)!==null;
  if(action==='prune')return prune(payload.keys);
+ if(action==='warmup'){await session('text');return true;}
  if(action==='index'){
   const {key,bitmap,width,height}=payload;if(!keyPattern.test(key))throw new Error('Invalid image search identity.');
   const views=imageTensors(bitmap,width,height),embeddings=[];if(views.length){const activeSession=await session('image');for(const pixels of views)embeddings.push(await infer(activeSession,'image',new ort.Tensor('float32',pixels,[1,3,256,256])));}
