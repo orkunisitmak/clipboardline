@@ -325,7 +325,7 @@ try {
   if ($Mode -eq 'CopyImages') {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
-    $payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    $payload = (New-Object IO.StreamReader([Console]::OpenStandardInput(),[Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
     if ($payload.files.Count -lt 1 -or $payload.files.Count -gt 1000) { throw 'Invalid image batch.' }
     foreach ($file in $payload.files) { if (-not [System.IO.File]::Exists($file) -or [System.IO.Path]::GetExtension($file) -ne '.png') { throw 'Managed image is unavailable.' } }
     $data = New-Object System.Windows.Forms.DataObject
@@ -367,7 +367,7 @@ try {
     $captureInfo | ConvertTo-Json -Compress
   } else {
     $phase=@{started=[DateTime]::UtcNow.ToString('o')}
-    $expected = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    $expected = (New-Object IO.StreamReader([Console]::OpenStandardInput(),[Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
     if ($expected.handle -notmatch '^\d+$' -or $expected.processId -le 0) { throw 'No previous application was captured.' }
     $window = [IntPtr][Int64]::Parse($expected.handle)
     [uint32]$owner = 0
