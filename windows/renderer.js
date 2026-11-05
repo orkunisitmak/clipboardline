@@ -544,14 +544,14 @@ function actionCommands(){
  const commands=keyboard.map(id=>{
   let reason='';
   if(selectedActions.has(id)&&!hasSelection)reason='Select an item first.';
-  else if(deleted&&['paste','preview','pin','folder','name','tag','remove','markup','crop','copyOCR','edit'].includes(id))reason='Restore this item first.';
+  else if(deleted&&['paste','preview','pin','folder','name','tag','remove','trash','markup','crop','copyOCR','edit'].includes(id))reason='Restore this item first.';
   else if(['crop',...Object.keys(MARKUP_TOOLS),'copyOCR'].includes(id)&&(!image||video))reason='Select a still image first.';
   else if(id==='markup'&&!image)reason='Select an image first.';
   else if(id==='edit'&&!text)reason='Select a text item first.';
   else if(id==='open'&&!link)reason='Select a link first.';
   else if(id==='finishEditing'&&!ui.editingText)reason='Start editing text first.';
+  else if(!['search','library','edit','markup','crop',...Object.keys(MARKUP_TOOLS)].includes(id)&&!shortcutAllowed(id,context))reason='Available '+(['librarySearch','allTypes','images','texts','links','focusNextPane','focusPreviousPane','newNote','newFolder','undoTrash'].includes(id)?'in Library':'on the shelves');
   else if((id==='undo'&&!state.canUndo)||(id==='undoTrash'&&!state.canUndoTrash))reason='Nothing to undo.';
-  else if(!['search','library','edit','markup','crop',...Object.keys(MARKUP_TOOLS)].includes(id)&&!shortcutAllowed(id,context))reason='Available '+(['librarySearch','allTypes','images','texts','links','focusNextPane','focusPreviousPane','newNote','newFolder','undoTrash'].includes(id)?'in Library.':'on the shelves.');
   if(id==='search'&&library)return{id,title:'Search contents',key:effectiveShortcut('librarySearch',context),detail:'Search this Library view',aliases:'ara arama içerik kütüphane',disabled:false};
   const allPinned=hasSelection&&ids.every(id=>item(id)?.pinned);
   return{id,title:id==='remove'&&library?'Move to Trash':id==='pin'&&allPinned?'Unpin':id==='markup'&&video?'Trim video':ACTION_TITLES[id],key:actionShortcut(id,context),detail:reason||(selectedActions.has(id)?ids.length+' selected':(['previous','next','up','down','first','last','previousPage','nextPage'].includes(id)?'Browse selected items':'')),aliases:t(ACTION_TITLES[id])+' '+id,disabled:!!reason};
@@ -751,7 +751,7 @@ default:
  else if(action.startsWith('tag.rename.'))openTagAction('rename-tag',decodeURIComponent(action.slice(11)));
  else if(action.startsWith('tag.delete.'))openTagAction('remove-global-tag',decodeURIComponent(action.slice(11)));
  else if(action.startsWith('folder.open.')){if(!await flushPreview())break;ui.preview=null;ui.scope='folder';ui.folder=action.slice(12);ui.search='';await command('library');focusFirst();render();}
- else if(action.startsWith('folder.assign.')){if(ids.length)await command('folder',{ids,folderId:action.slice(14)});}
+ else if(action.startsWith('folder.assign.')){if(ids.length)await command('folder',{ids,folderId:action.slice(14),pinning:false});}
  else if(action.startsWith('folder.remove.')){if(ids.length)await command('unassign',{ids,folderId:action.slice(14)});}
  else if(action.startsWith('tag.open.')){if(!await flushPreview())break;ui.preview=null;ui.scope='tag';ui.tag=decodeURIComponent(action.slice(9));ui.search='';await command('library');focusFirst();render();}
  break;

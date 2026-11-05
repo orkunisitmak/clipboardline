@@ -1466,7 +1466,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }, completion: { [weak self] result in
                 guard let self else { return }; self.isPasting = false
                 switch result {
-                case .pasted: self.reportActionStatus(L("Pasted"))
+                case .pasted:
+                    try? store.markCopied(ids)
+                    self.reportActionStatus(L("Pasted"))
                 case .permissionRequired:
                     self.reportActionStatus(L("Accessibility permission is needed to paste into another app."))
                     let alert = NSAlert()
@@ -1975,7 +1977,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if line.activeShelf == .links, let store = line.library { sources = try LibraryTransfer.exportSources(line.links.selectedEntries, store: store) }
             else if line.showingTexts { sources = try line.texts.exportSources(line.texts.selectedEntries) }
             else { sources = line.selectedItems.map {
-                (url: $0.url, name: HistoryFiles.exportName(for: $0.url, originalPath: $0.originalPath))
+                (url: $0.url, name: $0.exportName)
             } }
         } catch { line.notice = L("Could not export copies"); return }
         guard !sources.isEmpty else { return }
