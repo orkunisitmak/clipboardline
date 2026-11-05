@@ -450,6 +450,7 @@ enum HistoryTestRunner {
             ("testSpeedActionsAndQuickSelectionRemapAndUseOnlyTheActiveRow", keyboardSpeedTests.testSpeedActionsAndQuickSelectionRemapAndUseOnlyTheActiveRow),
             ("testGlobalSearchShortcutDefaultDisableAndCustomPersistenceRejectInvalidValues", keyboardSpeedTests.testGlobalSearchShortcutDefaultDisableAndCustomPersistenceRejectInvalidValues),
             ("testDeletePermanentlyErasesTrashedRecordsAndOnlyTheAppsOwnCopies", permanentDelete.testDeletePermanentlyErasesTrashedRecordsAndOnlyTheAppsOwnCopies),
+            ("testTextDragFileLeavesWithTheRecord", permanentDelete.testTextDragFileLeavesWithTheRecord),
             ("testItemsOutsideTrashAndFilesStillInUseAreKept", permanentDelete.testItemsOutsideTrashAndFilesStillInUseAreKept),
             ("testConfirmedSnapshotSparesAnItemTrashedAgainAfterConfirmation", permanentDelete.testConfirmedSnapshotSparesAnItemTrashedAgainAfterConfirmation),
             ("testUnreadableImageAfterRemovalOrUndoKeepsUndoablePanelWithoutStaleActions", previewRemoval.testUnreadableImageAfterRemovalOrUndoKeepsUndoablePanelWithoutStaleActions),

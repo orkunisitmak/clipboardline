@@ -643,7 +643,11 @@ extension String {
         try handle.write(contentsOf: data); try handle.synchronize()
         guard files.isFavoriteCopy(url) else { throw HistoryFiles.Failure.unsafeFile }
     }
-    private func drainMarkupGarbage() {
+    /// Always under the writer lock, so no other instance can make a queued
+    /// file referenced again between the check and the move. Every caller is
+    /// outside a transaction; a busy lock leaves the queue for the next drain.
+    private func drainMarkupGarbage() { try? db.transaction { drainMarkupGarbageLocked() } }
+    private func drainMarkupGarbageLocked() {
         guard let queued = try? db.rows("SELECT path FROM image_markup_garbage"), !queued.isEmpty,
               let records = try? LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='image'")) else { return }
         let referenced = Set(records.flatMap { [$0.path, $0.markupBasePath, $0.recordingOriginalPath].compactMap { $0 } }).union(recordingTrimPending)
@@ -985,13 +989,21 @@ extension String {
         invalidateTrashUndo(erased); invalidateShelfUndo(erased)
         // Under the writer lock, so no other instance can capture the same file
         // between the reference check and the move.
-        try? db.transaction { drainMarkupGarbage() }
-        releaseThumbnails(of: targets)
+        drainMarkupGarbage()
+        releaseDerivedFiles(of: targets)
         changed()
         return targets.count
     }
-    /// Link thumbnails are a cache, removed once no remaining link uses them.
-    private func releaseThumbnails(of erased: [LibraryRecord]) {
+    /// Files derived from erased records: the per-item text/link files made for
+    /// drag and copy (they hold the item's content, so they go to the system
+    /// Trash with it) and link thumbnails, a cache removed once no link uses it.
+    private func releaseDerivedFiles(of erased: [LibraryRecord]) {
+        for value in erased where value.kind != .image {
+            let folder = files.inbox.appendingPathComponent(value.kind == .text ? "Texts" : "Links", isDirectory: true)
+            let file = folder.appendingPathComponent(value.kind == .text ? "Text \(value.id).txt" : "Link \(value.id).webloc")
+            guard folder.resolvingSymlinksInPath().path == folder.standardizedFileURL.path, files.isRegularFile(file) else { continue }
+            do { _ = try files.moveToTrash(file) } catch { log.error("A deleted item's drag file could not be moved to the Trash") }
+        }
         let thumbnails = erased.compactMap(\.thumbnailPath)
         guard !thumbnails.isEmpty, let remaining = try? LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='link'")) else { return }
         let referenced = Set(remaining.compactMap(\.thumbnailPath))
