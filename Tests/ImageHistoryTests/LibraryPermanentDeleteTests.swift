@@ -34,6 +34,16 @@ import XCTest
         XCTAssertTrue(try library.collections(for: owned.id).isEmpty)
     }
 
+    func testTextDragFileLeavesWithTheRecord() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let text = try XCTUnwrap(library.captureText("private note"))
+        let file = try LibraryTransfer.materialize(text, store: library)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        try library.trash([text.id])
+        XCTAssertEqual(try library.deletePermanently([text.id]), 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "The drag copy of the text does not outlive it")
+    }
+
     func testItemsOutsideTrashAndFilesStillInUseAreKept() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let copy = try f.image()
