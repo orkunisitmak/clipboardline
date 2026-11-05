@@ -262,7 +262,10 @@ extension String {
         try backfillTextIdentity()
         try db.execute("PRAGMA user_version=1")
         drainMarkupGarbage()
+        expire()
     }
+    /// Copies past their retention leave the shelves at launch and after every capture, as in the Windows store.
+    private func expire() { try? prune() }
     private func migrateLegacy() throws {
         guard try db.rows("SELECT value FROM metadata WHERE key='migration-v1'").isEmpty else { return }
         // Decode before writing any record or applying expiry. A damaged
@@ -453,6 +456,7 @@ extension String {
         try db.transaction { try put(record) }; changed(); return record
     }
     @discardableResult func captureImage(_ url: URL, capturedAt: Date? = nil) throws -> LibraryRecord {
+        defer { expire() }
         if let existing = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE path=? AND deleted IS NULL", [.text(url.standardizedFileURL.path)])).first { return existing }
         guard files.isRegularFile(url) else { throw HistoryFiles.Failure.unsafeFile }
         let date = capturedAt ?? now()
@@ -493,6 +497,7 @@ extension String {
         return nil
     }
     @discardableResult func captureText(_ text: String) throws -> LibraryRecord? {
+        defer { expire() }
         guard !text.isEmpty, text.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
         let date = now()
         var affected = [UUID]()
@@ -557,6 +562,7 @@ extension String {
         return captured
     }
     @discardableResult func captureLink(_ url: URL) throws -> LibraryRecord {
+        defer { expire() }
         guard let normalized = LinkIdentity.normalized(url) else { throw HistoryFiles.Failure.unsafeFile }
         if var item = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE normalized=? AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1", [.text(normalized)])).first {
             item.onShelf = true; item.updatedAt = now(); item.lastCopiedAt = now(); item.lastCapturedAt = now(); item.captureRevision = UUID()
