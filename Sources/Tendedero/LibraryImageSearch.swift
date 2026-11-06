@@ -92,17 +92,24 @@ final class ImageSearchWorker: @unchecked Sendable {
     private var cachedQuery = ""
     private var cachedVector: [Float]?
     init(database: URL, modelFolder: URL?) { self.database = database; self.modelFolder = modelFolder }
+    /// Invalidates any running scan and queues an immediate model release
+    /// unless another scan still owns the model.
     func cancel() {
         stateLock.lock(); generation += 1; stateLock.unlock()
         queries.async { [weak self] in self?.releaseModelMemory() }
     }
     private func current(_ value: Int) -> Bool { stateLock.lock(); defer { stateLock.unlock() }; return generation == value }
+    /// The shared Clip instance for queries, created on first use. Cancels a
+    /// pending idle release so the model is not dropped while in use.
     private func clip() -> Clip? {
         modelLock.lock(); defer { modelLock.unlock() }
         idleUnloadWork?.cancel(); idleUnloadWork = nil
         if !modelLoaded { modelLoaded = true; model = modelFolder.flatMap(Clip.init(folder:)) }
         return model
     }
+    /// Registers an active scan and returns a Clip whose image model loaded.
+    /// Nil means OCR-only indexing; the next scan retries model creation.
+    /// Every call must be balanced by `endScanModel()`.
     private func beginScanModel() -> Clip? {
         modelLock.lock(); defer { modelLock.unlock() }
         activeScans += 1
@@ -115,6 +122,8 @@ final class ImageSearchWorker: @unchecked Sendable {
         }
         return current
     }
+    /// Ends a scan started by `beginScanModel()` and schedules the idle model
+    /// release once no scan remains.
     private func endScanModel() {
         modelLock.lock()
         activeScans = max(0, activeScans - 1)
@@ -122,12 +131,15 @@ final class ImageSearchWorker: @unchecked Sendable {
         modelLock.unlock()
         if shouldSchedule { scheduleIdleModelRelease() }
     }
+    /// Unloads the Core ML models now, unless a scan is still using them.
     private func releaseModelMemory() {
         modelLock.lock(); defer { modelLock.unlock() }
         idleUnloadWork?.cancel(); idleUnloadWork = nil
         guard activeScans == 0 else { return }
         model?.unloadModels()
     }
+    /// Replaces any pending release with one that unloads the models after
+    /// 15 seconds of idle time. Skipped while a scan is active.
     private func scheduleIdleModelRelease() {
         modelLock.lock(); defer { modelLock.unlock() }
         idleUnloadWork?.cancel(); idleUnloadWork = nil
@@ -149,6 +161,10 @@ final class ImageSearchWorker: @unchecked Sendable {
         try VNImageRequestHandler(cgImage: image).perform([request])
         return String((request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n").prefix(65536))
     }
+    /// Indexes library images whose fingerprint or analysis version changed,
+    /// storing OCR text and, when the image model loads, CLIP vectors.
+    /// `progress` reports (done, total, changed) on the main actor; a newer
+    /// scan or `cancel()` stops this one.
     func scan(progress: @escaping @MainActor (Int, Int, Bool) -> Void) {
         stateLock.lock(); generation += 1; let token = generation; stateLock.unlock()
         queue.async { [self] in
@@ -192,6 +208,9 @@ final class ImageSearchWorker: @unchecked Sendable {
             } catch { DispatchQueue.main.async { if self.current(token) { progress(0, 0, false) } } }
         }
     }
+    /// Ranks indexed images in `eligibleIDs` against the query text and
+    /// delivers matching IDs on the main actor. The last query vector is
+    /// cached; a failed embedding is not cached so the next call retries.
     func search(_ text: String, eligibleIDs: Set<UUID>, completion: @escaping @MainActor ([UUID]) -> Void) {
         queries.async { [self] in
             if cachedQuery != text || cachedVector == nil {

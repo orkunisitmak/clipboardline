@@ -10,11 +10,29 @@ function workerFile(){const file=path.join(__dirname,'image-search-worker.cjs'),
 // derived index and all model inference; the main process only supplies bounded
 // decoded pixels and rechecks each current record before accepting a result.
 class ImageSearch{
+ /**
+  * @param {object} options
+  * @param {string} options.modelDirectory Folder holding the pinned ONNX models.
+  * @param {string} options.cacheDirectory Private folder for derived `.bin` vectors.
+  * @param {() => object[]} options.items Current Library records.
+  * @param {(id: string) => Promise<{bitmap:Uint8Array,width:number,height:number}|null>} options.readImage Decodes a record's pixels.
+  * @param {(state: object) => void} [options.changed] Receives public state updates.
+  * @param {(options: object) => Worker} [options.workerFactory] Creates the inference worker.
+  * @param {string|null} [options.runtimeDirectory] Local ONNX Runtime WASM folder.
+  * @param {string|null} [options.ortModule] ONNX Runtime module path.
+  * @param {object} [options.modelConfig] Pinned model sizes and SHA-256 hashes.
+  * @param {number} [options.idleTimeoutMs] Idle time before the worker is terminated; 0 disables it.
+  */
  constructor({modelDirectory,cacheDirectory,items,readImage,changed=()=>{},workerFactory=options=>new Worker(workerFile(),options),runtimeDirectory=null,ortModule=null,modelConfig=MODEL_CONFIG,idleTimeoutMs=15000}){
   this.items=items;this.readImage=readImage;this.changed=changed;this.sequence=0;this.requests=new Map();this.queue=[];this.known=new Set();this.failed=new Set();this.active=null;this.closed=false;this.state={available:false,indexing:false,pending:0,revision:0};
   this.workerFactory=workerFactory;this.workerOptions={modelDirectory,cacheDirectory,runtimeDirectory,ortModule,modelConfig};this.idleTimeoutMs=idleTimeoutMs;this.idleTimer=null;this.heavyWorkDone=false;this.prunedKeys=null;
   this.spawnWorker(true);
  }
+ /**
+  * Starts a worker unless one is running. Events from a replaced worker are ignored.
+  * @param {boolean} [initial] True only for the first worker, whose ready event is always published.
+  * @returns {Promise<boolean>} Resolves with model availability.
+  */
  spawnWorker(initial=false){
   if(this.worker)return this.ready;
   const worker=this.workerFactory({workerData:this.workerOptions});this.worker=worker;this.heavyWorkDone=false;
@@ -25,17 +43,32 @@ class ImageSearch{
   worker.unref?.();
   return this.ready;
  }
+ /** Cancels a pending idle hibernation, if any. */
  clearIdleTimer(){if(this.idleTimer){clearTimeout(this.idleTimer);this.idleTimer=null;}}
+ /**
+  * Restarts the idle timer after model work. Nothing is scheduled while work
+  * is queued or pending, before any index/search ran, or when disabled.
+  */
  scheduleIdleHibernate(){
   this.clearIdleTimer();
   if(this.closed||this.broken||!this.worker||!this.heavyWorkDone||this.draining||this.active||this.queue.length||this.requests.size||!(this.idleTimeoutMs>0))return;
   this.idleTimer=setTimeout(()=>this.hibernate(),this.idleTimeoutMs);this.idleTimer.unref?.();
  }
+ /**
+  * Terminates an idle worker so its WASM memory returns to the OS. Known
+  * fingerprints and availability are kept; the next request respawns it.
+  */
  hibernate(){
   this.clearIdleTimer();
   if(this.closed||this.broken||!this.worker||!this.heavyWorkDone||this.draining||this.active||this.queue.length||this.requests.size)return;
   const worker=this.worker;this.worker=null;this.heavyWorkDone=false;void worker.terminate();
  }
+ /**
+  * Handles a worker message: `failed` and `ready` events, or a request reply.
+  * A respawned worker's ready event is only published when availability changes.
+  * @param {object} message Worker message.
+  * @param {boolean} [initial] Whether it came from the first worker.
+  */
  receive(message,initial=false){
   if(!message||typeof message!=='object')return;
   if(message.event==='failed'){this.failure();return;}
@@ -50,7 +83,17 @@ class ImageSearch{
   if(message.error)pending.reject(new Error(String(message.error).slice(0,300)));else pending.resolve(message.result);
   this.scheduleIdleHibernate();
  }
+ /** Marks search permanently unavailable, rejects pending requests and terminates the worker. */
  failure(){this.clearIdleTimer();if(this.closed||this.broken)return;this.broken=true;this.state.available=false;this.state.indexing=false;this.state.pending=0;this.queue=[];this.active=null;this.state.error='Offline image search stopped. Reopen ClipBoardLine to try again.';this.resolveReady(false);for(const pending of this.requests.values()){clearTimeout(pending.timer);pending.reject(new Error(this.state.error));}this.requests.clear();this.changed({...this.state});const worker=this.worker;this.worker=null;void worker?.terminate();}
+ /**
+  * Sends one request to the worker, respawning a hibernated worker first.
+  * A request that times out after 120 seconds marks search as failed.
+  * @param {'has'|'prune'|'index'|'search'} action Worker operation.
+  * @param {object} payload Operation input.
+  * @param {Transferable[]} [transfer] Buffers moved to the worker.
+  * @returns {Promise<any>} The worker result.
+  * @throws When search is closed, failed or unavailable.
+  */
  async request(action,payload,transfer=[]){
   if(this.closed||this.broken||!this.state.available&&this.state.error)throw new Error('Offline image search is unavailable.');
   this.clearIdleTimer();
@@ -62,6 +105,10 @@ class ImageSearch{
  }
  key(value){const key=value?.kind==='image'&&!value.trashedAt?(value.renderedFile||value.imageFile):null;return typeof key==='string'&&/^[a-f0-9]{64}\.png$/.test(key)?key.slice(0,64):null;}
  current(id,key){return this.items().some(value=>value.id===id&&this.key(value)===key);}
+ /**
+  * Syncs the queue with current Library images and starts indexing. The cache
+  * is pruned only when a previously pruned key is no longer live.
+  */
  refresh(){
   if(this.closed||!this.state.available&&this.state.error)return;const values=this.items().filter(value=>this.key(value)),live=new Set(values.map(value=>this.key(value)));
   this.queue=this.queue.filter(job=>live.has(job.key));for(const key of this.known)if(!live.has(key))this.known.delete(key);for(const key of this.failed)if(!live.has(key))this.failed.delete(key);
@@ -72,6 +119,11 @@ class ImageSearch{
   if(needsPrune)void this.ready.then(available=>{if(available&&!this.closed)return this.request('prune',{keys:[...live]}).then(()=>{this.prunedKeys=new Set(live);},()=>{this.prunedKeys=null;});});
  }
  updateStatus(){const pending=this.queue.length+(this.active?1:0);if(pending!==this.state.pending||!!pending!==this.state.indexing){this.state.pending=pending;this.state.indexing=!!pending;this.changed({...this.state});}}
+ /**
+  * Indexes queued images one at a time, reusing cached vectors when present
+  * and rechecking each record before accepting a result. Schedules idle
+  * hibernation when the queue is empty.
+  */
  async drain(){
   if(this.draining||this.closed)return;this.draining=true;this.clearIdleTimer();
   try{
@@ -110,6 +162,7 @@ class ImageSearch{
   const fingerprints=new Map(entries.map(value=>[value.id,value.key])),scores=(result?.scores||[]).filter(value=>eligible.has(value.id)&&this.current(value.id,fingerprints.get(value.id))&&Number.isFinite(value.score));
   const allowed=new Set(scores.map(value=>value.id));return{ids:(result?.ids||[]).filter(id=>allowed.has(id)),scores,available:true,indexing:this.state.indexing};
  }
+ /** Closes search permanently, rejects pending requests and terminates any running worker. */
  async stop(){this.clearIdleTimer();if(this.closed)return;this.closed=true;this.resolveReady(false);for(const pending of this.requests.values()){clearTimeout(pending.timer);pending.reject(new Error('Image search closed.'));}this.requests.clear();this.queue=[];const worker=this.worker;this.worker=null;if(worker)await worker.terminate();}
 }
 function modelPaths({packaged,resourcesPath,sourceDirectory}){const modelDirectory=packaged?path.join(resourcesPath,'CLIP'):path.join(sourceDirectory,'assets','CLIP');return{modelDirectory,cacheAvailable:fs.existsSync(path.join(modelDirectory,'model-source.json'))};}

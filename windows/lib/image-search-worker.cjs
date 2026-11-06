@@ -39,6 +39,14 @@ function prune(keys){
  records.sort((a,b)=>b.time-a.time);let bytes=0;for(let index=0;index<records.length;index++){const record=records[index];bytes+=record.size;if(index>=MAX_CACHE_RECORDS||bytes>MAX_CACHE_BYTES){fs.unlinkSync(record.file);vectors.delete(record.key);}}
  return true;
 }
+/**
+ * Returns the ONNX session for one model, creating it on first use. Image
+ * indexing never loads the text model or tokenizer; both sessions may stay
+ * resident together until the parent terminates this idle worker.
+ * @param {'image'|'text'} kind Model to load.
+ * @returns {Promise<object>} The ONNX Runtime inference session.
+ * @throws When a model cannot load; the worker then reports `failed`.
+ */
 async function session(kind){
  if(kind==='image'&&imageSession)return imageSession;
  if(kind==='text'&&textSession)return textSession;
@@ -58,6 +66,15 @@ async function session(kind){
   return textSession;
  }catch(error){available=false;parentPort.postMessage({event:'failed'});throw error;}
 }
+/**
+ * Runs one inference and returns its normalized embedding. The input and
+ * output tensors are disposed afterwards, including when the output is invalid.
+ * @param {object} activeSession ONNX inference session.
+ * @param {string} name Model input name.
+ * @param {object} tensor Input tensor.
+ * @returns {Promise<Float32Array>} Unit length embedding.
+ * @throws When the model returns no valid embedding.
+ */
 async function infer(activeSession,name,tensor){
  const output=await activeSession.run({[name]:tensor});
  try{
@@ -69,6 +86,14 @@ async function infer(activeSession,name,tensor){
   for(const value of Object.values(output||{}))value?.dispose?.();
  }
 }
+/**
+ * Executes one validated request from the parent process.
+ * @param {'has'|'prune'|'index'|'search'} action Requested operation.
+ * @param {object} payload Operation input.
+ * @returns {Promise<boolean|{ids:string[],scores:{id:string,score:number}[]}>}
+ *   Cache/index result, or ranked matches for `search`.
+ * @throws On invalid input or an unknown action.
+ */
 async function handle(action,payload){
  if(action==='has')return load(payload.key)!==null;
  if(action==='prune')return prune(payload.keys);

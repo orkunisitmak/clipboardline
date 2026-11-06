@@ -1,3 +1,16 @@
+<#
+.SYNOPSIS
+Native Windows bridge for ClipBoardLine: focus capture/restore, guarded paste,
+clipboard monitoring and image clipboard export.
+.DESCRIPTION
+Restore, PreparePaste, ValidatePaste and Paste read the captured target from
+stdin and reactivate it only when it is still the same window and process.
+SW_RESTORE is sent only to a minimized or hidden target, so a visible
+maximized window keeps its maximized state.
+.PARAMETER Mode
+Operation to run: Capture, CaptureDiagnostics, FocusPolicySelfTest, Restore,
+PreparePaste, ValidatePaste, Paste, Monitor, CopyImages or ClipboardSequence.
+#>
 param([ValidateSet('Capture','CaptureDiagnostics','FocusPolicySelfTest','Restore','PreparePaste','ValidatePaste','Paste','Monitor','CopyImages','ClipboardSequence')][string]$Mode)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient

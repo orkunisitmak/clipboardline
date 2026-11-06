@@ -30,6 +30,8 @@ final class Clip: @unchecked Sendable {
         self.folder = folder
     }
 
+    /// Drops the loaded image model, text model and tokenizer so Core ML can
+    /// reclaim their memory. The next embed call reloads what it needs.
     func unloadModels() {
         lock.lock(); defer { lock.unlock() }
         imageModel = nil
@@ -37,11 +39,15 @@ final class Clip: @unchecked Sendable {
         tokenizer = nil
     }
 
+    /// Loads the image model if needed. False when Core ML cannot load it, so
+    /// callers can fall back to OCR-only indexing before writing any version.
     func prepareImageModel() -> Bool {
         lock.lock(); defer { lock.unlock() }
         return loadImageModelUnlocked() != nil
     }
 
+    /// Returns the resident image model, loading it first when absent.
+    /// The caller must hold `lock`.
     private func loadImageModelUnlocked() -> MLModel? {
         if let imageModel { return imageModel }
         let config = MLModelConfiguration()
@@ -50,6 +56,8 @@ final class Clip: @unchecked Sendable {
         return imageModel
     }
 
+    /// Returns the resident text model and tokenizer, loading whichever is
+    /// absent. Nil when either fails to load. The caller must hold `lock`.
     private func loadTextModelUnlocked() -> (MLModel, ClipTokenizer)? {
         if let textModel, let tokenizer { return (textModel, tokenizer) }
         let config = MLModelConfiguration()
