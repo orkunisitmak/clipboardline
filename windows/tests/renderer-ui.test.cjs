@@ -329,9 +329,9 @@ test('late Hide response cannot replace a newer native global search opening',as
 test('shared macOS/Windows shelf contract runs through actual renderer handlers',async()=>{
  const contractFile=path.resolve(__dirname,'../../contracts/shelf-behavior.json'),raw=fs.readFileSync(contractFile),contract=JSON.parse(raw);
  assert.equal(contract.schemaVersion,1);assert.equal(contract.contractId,'clipboardline.shelves.v1');
- const observations=[],errors=[];
- for(const scenario of contract.scenarios){
-  const f=fixture();await f.ready();const aliases=new Map(),values=contract.itemSets[scenario.itemSet].map((entry,index)=>{
+ const observations=[],errors=[],directories=[],{Store}=require('../lib/model.cjs');
+ try{for(const scenario of contract.scenarios){
+  const f=fixture();await f.ready();let store=null;const links=new Map(),aliases=new Map(),values=contract.itemSets[scenario.itemSet].map((entry,index)=>{
    const id='20000000-0000-4000-8000-'+String(index+1).padStart(12,'0');aliases.set(id,entry.id);
    const source=f.state.items.find(value=>value.kind===entry.kind);
    return{...structuredClone(source),id,createdAt:10000-index,name:entry.kind==='image'?entry.text:'',text:entry.kind==='text'?entry.text:'',title:entry.kind==='link'?entry.text:'',url:entry.kind==='link'?'https://example.com/contract/'+entry.id:''};
@@ -342,7 +342,7 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
   await f.api.command('hide');await f.ready();
   for(let index=0;index<scenario.steps.length;index++){
    const step=scenario.steps[index],commandsBefore=f.commands.length;const editor=f.nodes.get('search-input');if(editor)editor.matches=selector=>selector.includes('input');
-   const searchEditing=/class="search-hud"/.test(f.main);
+   const searchEditing=/class="search-hud"/.test(f.main);let copied=null;
    if(step.action==='open')await f.api.command('show');
    else if(step.action==='close')await f.api.command('hide');
    else if(step.action==='remap'){const localShortcuts={...f.state.settings.localShortcuts};if(step.key===null)delete localShortcuts[step.binding];else localShortcuts[step.binding]=step.key==='KeyX'?'X':step.key;f.api.emit({settings:{...f.state.settings,localShortcuts}});}
@@ -353,14 +353,18 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
    else if(step.action==='command')await f.key(step.code,step.ctrl?{ctrl:true}:{});
    else if(step.action==='openSearch')await f.key('KeyS',{shift:true});
    else if(step.action==='finishSearch')await f.key('Enter',{target:editor});
+   else if(step.action==='copyLink'){
+    if(!store){const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-shelf-contract-'));directories.push(directory);store=new Store(directory);}
+    const item=store.insert('link',step.url);if(!links.has(item.id))links.set(item.id,'link-'+(links.size+1));copied={link:{item:links.get(item.id),address:item.url}};
+   }
    else throw new Error('Unsupported shared contract action: '+step.action);
    await f.ready();
    const active=activeKind(f),focusedAlias=aliases.get(focusedCard(f)),actual={activeKind:active,focused:kinds.get(focusedAlias)===active?focusedAlias:null,selected:selectedCards(f).map(id=>aliases.get(id)||id).sort(),visibleKinds:[...f.main.matchAll(/<section class="shelf(?: active-shelf)?\s*" data-shelf="([^"]+)"/g)].map(match=>match[1]),searchEditing:/class="search-hud"/.test(f.main)};
    if(step.action==='command')actual.effects=[...f.commands.slice(commandsBefore).map(value=>value.action),...(f.overlay?['preview']:[])];
-   observations.push({scenarioId:scenario.id,step:index,actual});
-   try{assert.deepEqual(actual,step.expect);}catch(error){errors.push(scenario.id+' step '+index+': '+error.message);}
+   const reported=copied||actual;observations.push({scenarioId:scenario.id,step:index,actual:reported});
+   try{assert.deepEqual(reported,step.expect);}catch(error){errors.push(scenario.id+' step '+index+': '+error.message);}
   }
- }
+ }}finally{for(const directory of directories)fs.rmSync(directory,{recursive:true,force:true});}
  if(process.env.CLIPBOARDLINE_PARITY_REPORT){
   const revision=process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(__dirname,'../..'),encoding:'utf8'}).trim();
   const implementationSHA256=crypto.createHash('sha256').update(fs.readFileSync(path.resolve(__dirname,'../renderer.js'))).digest('hex');

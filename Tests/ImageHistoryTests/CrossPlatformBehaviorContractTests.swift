@@ -68,7 +68,7 @@ import XCTest
                 }
                 aliases[record.id] = alias; fixture.date += 1
             }
-            var effects = [String]()
+            var effects = [String](), linkLabels = [UUID: String]()
             let line = Line(defaults: fixture.defaults, inbox: fixture.inbox, now: { fixture.date }, breeze: false,
                 copyImage: { _ in effects.append("copy") }, copyText: { _ in effects.append("copy") }, library: store)
             let visible = try required(scenario["visibleKinds"], [String].self).map { try shelf($0) }
@@ -82,6 +82,7 @@ import XCTest
             for (index, step) in try required(scenario["steps"], [[String: Any]].self).enumerated() {
                 // Library writes (pin, take down) and image-row changes count as effects too.
                 effects.removeAll(); let revisionBefore = store.revision, imagesBefore = line.items.map { "\($0.id)-\($0.pinned)" }
+                var copied: [String: Any]?
                 switch try required(step["action"], String.self) {
                 case "open": line.revealed = true
                 case "close": line.revealed = false
@@ -113,6 +114,11 @@ import XCTest
                     default: throw CocoaError(.coderReadCorrupt)
                     }
                     _ = keyboard.handle(event)
+                case "copyLink":
+                    // The copy goes through the real store; the report names the stored link it resolved to (numbered by first appearance) and its address.
+                    let record = try store.captureLink(try XCTUnwrap(URL(string: try required(step["url"], String.self))))
+                    if linkLabels[record.id] == nil { linkLabels[record.id] = "link-\(linkLabels.count + 1)" }
+                    copied = ["link": ["item": linkLabels[record.id] ?? "unexpected-id", "address": record.originalURL ?? ""]]
                 case "openSearch": line.beginShelfSearch()
                 case "finishSearch":
                     line.finishShelfSearchEditing(line.activeShelf)
@@ -120,7 +126,7 @@ import XCTest
                     while line.shelfSearchIsSearching, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.005)) }
                 default: throw CocoaError(.coderReadCorrupt)
                 }
-                var actual = snapshot(line, aliases: aliases)
+                var actual = copied ?? snapshot(line, aliases: aliases)
                 let expected = try required(step["expect"], [String: Any].self)
                 if step["action"] as? String == "command" {
                     if store.revision != revisionBefore { effects.append("library") }
