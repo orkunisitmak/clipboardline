@@ -6,6 +6,9 @@
       "macos",
       "windows"
     ],
+    "additionalPlatforms": [
+      "linux"
+    ],
     "futureUserVisibleChanges": "Extend this shared behavioral contract and both adapters in the same change; document OS-native exceptions explicitly without dropping shared behavior.",
     "scope": "Shelf selection and keyboard navigation; native paste, layout and installers retain their separate mandatory acceptance suites.",
     "nativeExceptions": [
@@ -13,19 +16,78 @@
         "id": "modifier-names",
         "macos": "Command/Option",
         "windows": "Control/Alt",
+        "linux": "Control/Alt",
         "reason": "Platform-standard modifier names; shared actions and outcomes remain the same."
       },
       {
         "id": "native-window-materials",
         "macos": "AppKit materials, system window chrome and native controls",
         "windows": "Native Windows chrome with Electron-rendered shared layout, controls and icons",
+        "linux": "The shared Electron layout and controls inside the desktop compositor; Wayland compositors own window placement",
         "reason": "Native platform rendering differs; action placement, content hierarchy, keyboard behavior and outcomes remain shared."
       },
       {
         "id": "native-text-file-drag",
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
+        "linux": "Same Electron behavior as Windows; Alt-drag exports .txt files for text and freedesktop .desktop Link files for links.",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
+      },
+      {
+        "id": "linux-clipboard-monitoring",
+        "macos": "NSPasteboard change count",
+        "windows": "Clipboard sequence number from the native monitor",
+        "linux": "wl-paste --watch on Wayland compositors that offer data-control (KDE Plasma, wlroots); on Mutter desktops (GNOME, Ubuntu) the app runs through Xwayland and polls the mirrored selection with xclip; xclip polling on X11. Without wl-clipboard or xclip capture does not run and the app says which tool to install.",
+        "reason": "Wayland only lets the focused client read the selection unless the compositor offers data-control; Mutter does not, but mirrors the selection to Xwayland. An X11 request to an app that quits mid-transfer can stall Electron's reader for good, so a separate xclip process reads it. Admission, privacy markers and deduplication remain the shared policy."
+      },
+      {
+        "id": "linux-paste-into-previous-application",
+        "macos": "Command+Return pastes into the verified previous editable field.",
+        "windows": "Ctrl+Enter pastes after UI Automation verifies an editable, non-secure field.",
+        "linux": "Ctrl+Enter copies, hides the shelves and returns focus. It also pastes where the session has window activation and key injection: xdotool on X11, and wtype or ydotool on Wayland. Otherwise the user presses Ctrl+V.",
+        "reason": "Wayland offers no standard cross-application input injection, so paste depends on compositor-specific tools, and Linux has no portable editable-field check. Copy and focus return are identical; only the final paste step can differ."
+      },
+      {
+        "id": "linux-global-shortcuts",
+        "macos": "System hot keys registered by the app",
+        "windows": "System hot keys registered by the app",
+        "linux": "X11 key grabs, also through Xwayland on Mutter desktops; on other Wayland desktops the GlobalShortcuts portal asks the user to approve them. Desktops without that portal bind system shortcuts to clipboardline --toggle, --search, --library, --copy-latest or --screenshot.",
+        "reason": "Wayland forbids global key grabs by clients; the same five actions remain available through the portal or desktop shortcut commands."
+      },
+      {
+        "id": "linux-keep-clipboard",
+        "macos": "A captured copy stays on the pasteboard after the app that copied it quits",
+        "windows": "A captured copy stays on the clipboard after the app that copied it quits",
+        "linux": "When the app that copied an image quits and the clipboard empties, ClipBoardLine serves that image again while its item is still on the shelf. Text, links, recordings and items deleted, trashed or hidden from the shelf are never served again.",
+        "reason": "A Linux selection is served by the app that copied it and disappears when it quits (Spectacle quits right after copying a screenshot); macOS and Windows keep the data themselves. Keeping only images covers that case and never undoes a password manager clearing copied text."
+      },
+      {
+        "id": "linux-wayland-line-focus",
+        "macos": "The line panel floats above other windows until it is dismissed",
+        "windows": "The always-on-top line stays above other windows until it is dismissed",
+        "linux": "On X11 the line stays above other windows. On Wayland the compositor places the line on the monitor in use and it fills that monitor's work area. On KDE Plasma a KWin script keeps it above; on other Wayland compositors it is dismissed when another window takes focus.",
+        "reason": "Wayland clients cannot see the pointer, place their windows or request keep-above or skip-taskbar; only KWin offers a scripted equivalent, and a line left open under another window would look closed."
+      },
+      {
+        "id": "linux-screen-capture",
+        "macos": "Native screen capture",
+        "windows": "Electron desktop capture of the current display",
+        "linux": "xdg-desktop-portal Screenshot on Wayland (the desktop may ask once for permission); Electron desktop capture on X11.",
+        "reason": "Wayland clients cannot read the screen directly; the captured image enters the same crop preview."
+      },
+      {
+        "id": "linux-recordings",
+        "macos": "AVFoundation and Quick Look",
+        "windows": "WinRT media stack",
+        "linux": "The distribution's FFmpeg (ffprobe and ffmpeg) inspects, posters and trims to a new MP4, H.264/AAC where the build has those encoders and VP9/Opus otherwise; import explains when FFmpeg is missing.",
+        "reason": "Linux has no system media editing API, and codec licensing keeps FFmpeg a distribution package rather than a bundled binary."
+      },
+      {
+        "id": "linux-updates-and-login",
+        "macos": "Signed in-app update channel; login item",
+        "windows": "Signed in-app installer channel; Electron login item",
+        "linux": "No update check or in-app installer: Settings opens the releases page, and a newer AppImage, .deb, .rpm or pacman package replaces the app and keeps data. Launch at login writes an XDG autostart entry.",
+        "reason": "No signed Linux release feed or identity exists yet; distribution package managers own installed files."
       }
     ],
     "sharedBehaviors": [

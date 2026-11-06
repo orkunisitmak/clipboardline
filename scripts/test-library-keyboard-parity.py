@@ -67,11 +67,36 @@ class LibraryKeyboardParityTests(unittest.TestCase):
         self.reports['windows']['hostPlatform'] = 'darwin'; self.rejected()
 
     def test_mismatched_platform_or_adapter_mode_is_rejected(self):
-        for platform in self.reports:
+        for platform in ['macos', 'windows']:
             original = copy.deepcopy(self.reports[platform])
             for key, value in [('mode', 'source-text-comparison'), ('platform', 'linux'), ('hostPlatform', 'linux')]:
                 self.reports[platform] = dict(original, **{key: value}); self.rejected()
             self.reports[platform] = original
+
+    def verify_linux(self):
+        self.save()
+        return CHECKER.verify(self.contract_path, self.directory / 'macos.json', self.directory / 'windows.json', REVISION,
+                              self.directory / 'linux.json')
+
+    def test_linux_renderer_report_is_verified_when_supplied(self):
+        result = self.verify_linux()
+        self.assertEqual(result['platforms'], ['macos', 'windows', 'linux'])
+        for key, value in [('hostPlatform', 'win32'), ('platform', 'windows'), ('mode', 'model')]:
+            original = copy.deepcopy(self.reports['linux']); self.reports['linux'][key] = value
+            with self.assertRaises(CHECKER.ParityError): self.verify_linux()
+            self.reports['linux'] = original
+        self.reports['linux']['observations'].pop()
+        with self.assertRaises(CHECKER.ParityError): self.verify_linux()
+
+    def test_linux_policy_requires_linux_exception_text_and_is_closed(self):
+        del self.contract['policy']['nativeExceptions'][0]['linux']; self.rejected_contract()
+        self.contract['policy']['nativeExceptions'][0]['linux'] = 'primary=Control'
+        self.contract['policy']['additionalPlatforms'] = ['freebsd']; self.rejected_contract()
+        del self.contract['policy']['additionalPlatforms']; self.contract_path.write_text(json.dumps(self.contract))
+        self.reports = {platform: dict(report, contractSHA256=hashlib.sha256(self.contract_path.read_bytes()).hexdigest())
+                        for platform, report in self.reports.items()}
+        self.assertEqual(self.verify()['platforms'], ['macos', 'windows'])
+        with self.assertRaises(CHECKER.ParityError): self.verify_linux()
 
     def test_other_contract_or_hash_is_rejected(self):
         for key, value in [('contractSHA256', '0' * 64), ('contractId', 'clipboardline.shelves.v1')]:

@@ -4,6 +4,7 @@
 release-version.json is the shared product version. Platform build counters
 remain independent; they are monotonic updater identifiers, not product names.
 The private Mac checkout can omit windows/, but the public CI requires it.
+The Arch PKGBUILD, when present, carries the same version.
 """
 from __future__ import annotations
 
@@ -16,10 +17,19 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 STABLE_VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
+PKGVER = re.compile(r"^[ \t]*pkgver[ \t]*(\+?=.*)$", re.MULTILINE)
 
 
 class ReleaseVersionError(ValueError):
     pass
+
+
+def pkgbuild_version(text: str):
+    """The one plain pkgver assignment, or None when bash could see another value."""
+    assignments = PKGVER.findall(text)
+    if len(assignments) != 1 or not assignments[0].startswith("="):
+        return None
+    return assignments[0][1:].split("#", 1)[0].strip().strip("'\"")
 
 
 def _read_object(root: Path, relative: str) -> dict:
@@ -64,6 +74,13 @@ def check_release_version(root: Path = ROOT, *, require_windows: bool = False,
         top_package = packages.get("") if isinstance(packages, dict) else None
         require(top_package.get("version") if isinstance(top_package, dict) else None,
                 'windows/package-lock.json packages[""] version')
+    pkgbuild = root / "packaging/arch/PKGBUILD"
+    if pkgbuild.exists():
+        try:
+            version = pkgbuild_version(pkgbuild.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError) as error:
+            raise ReleaseVersionError(f"Cannot read packaging/arch/PKGBUILD: {error}") from error
+        require(version, "packaging/arch/PKGBUILD pkgver")
     return expected
 
 

@@ -61,13 +61,13 @@ class MediaJobs {
  }
  run(mode,source,options={}){return this.scheduler.schedule(mode,signal=>this.execute(mode,source,{...options,signal}),{signal:options.signal,onDiscard:result=>this.release(result)});}
  async execute(mode,source,{startMs,endMs,signal,verifyAudio=false}={}){
-  if(process.platform!=='win32')throw new Error('Native recording processing requires Windows.');
+  if(!['win32','linux'].includes(process.platform))throw new Error('Native recording processing requires Windows or Linux.');
   if(signal?.aborted)throw aborted();const before=validVideo(source);safeDirectory(this.directory);
   if(mode==='Trim'&&(!Number.isFinite(startMs)||!Number.isFinite(endMs)||startMs<0||endMs-startMs<50))throw new Error('Choose a nonempty trim interval.');
   const directory=fs.mkdtempSync(path.join(this.directory,'job-'));fs.writeFileSync(path.join(directory,MARKER),JSON.stringify({owner:OWNER}),{flag:'wx',mode:0o600});
   let keep=false;
   try{
-   const result=await new Promise((resolve,reject)=>{
+   const result=process.platform==='linux'?await this.linuxMedia().run(mode,{source,outputDirectory:directory,verifyAudio:verifyAudio===true,...(mode==='Trim'?{startMs,endMs}:{})},{signal,timeout:this.timeout,track:child=>this.jobs.set(directory,child)}).finally(()=>this.jobs.delete(directory)):await new Promise((resolve,reject)=>{
     const executable=path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
     const child=spawn(executable,['-NoLogo','-NoProfile','-MTA','-NonInteractive','-ExecutionPolicy','Bypass','-File',this.script,'-Mode',mode],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:windowsEnvironment()});
     let stdout='',stderr='',failure=null,finished=false;this.jobs.set(directory,child);
@@ -87,6 +87,7 @@ class MediaJobs {
    keep=true;return{...details,file:source,posterFile:poster,jobDirectory:directory,...(audioFile?{audioFile}:{})};
   }finally{if(!keep)this.remove(directory);}
  }
+ linuxMedia(){if(!this.linux){const {LinuxMedia}=require('./linux-media.cjs'),{which}=require('./linux-clipboard.cjs');this.linux=new LinuxMedia({ffmpeg:which('ffmpeg'),ffprobe:which('ffprobe')});}return this.linux;}
  probe(file,options){return this.run('Inspect',file,options);}
  inspect(file,options){return this.probe(file,options);}
  trim(file,options){return this.run('Trim',file,options);}
