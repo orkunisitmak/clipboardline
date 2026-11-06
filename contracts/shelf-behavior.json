@@ -142,6 +142,12 @@
         "behavior": "Clear filters is available in the action list only while the Library has a filter to clear (favorites only, a search, a type, a date range, a domain, a tag or a search mode other than all); with no filter it is disabled with the reason \"No filters to clear\", and with the Library closed it keeps the Library reason.",
         "macos": "ActionBarMenuAction.clearFilters requires libraryAvailable and hasLibraryFilters and otherwise names \"No filters to clear\"; ActionBarCatalogTests covers it.",
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
+      },
+      {
+        "id": "unavailable-watched-folder",
+        "behavior": "A watched folder that is unavailable (for example on an unmounted volume) is skipped while watching but stays in the saved list, so adding or removing another watched folder does not forget it.",
+        "macos": "AppDelegate.extraFolders returns every saved folder and existingExtraFolders is the subset that is watched, re-evaluated when a volume mounts; SettingsTests.testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable covers it.",
+        "windows": "main.cjs skips a watchFolders entry that is not a directory without changing the list; model.test.cjs checks that adding and removing folders keeps an unavailable entry."
         },
         {
         "id": "disabled-undo-names-the-surface",
