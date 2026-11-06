@@ -31,6 +31,40 @@ import XCTest
         wait { preview.controls.pinButton.accessibilityLabel() == L("Unpin") && !model.loading }
         XCTAssertEqual(publications, 0); XCTAssertEqual(controller.currentID, record.id)
     }
+    func testAddToFolderMenuTellsSameNamedSubfoldersApart() throws {
+        _ = NSApplication.shared
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox)
+        let work = try store.createCollection("Work"), personal = try store.createCollection("Personal")
+        _ = try store.createCollection("2024", parent: work); _ = try store.createCollection("2024", parent: personal)
+        let note = try XCTUnwrap(store.captureText("Quarterly plan")); try store.retain([note.id])
+        let model = LibraryModel(store: store), controller = LibraryTableController(model: model)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentViewController = controller; defer { window.contentViewController = nil }
+        wait { model.ids.count == 1 && !model.loading && controller.table.numberOfRows == 1 }
+        controller.table.layoutSubtreeIfNeeded()
+        let rect = controller.table.rect(ofRow: 0), point = controller.table.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        let submenu = try XCTUnwrap(try XCTUnwrap(controller.table.menu(for: event)).items.first { $0.title == L("Add to folder") }?.submenu)
+        let titles = submenu.items.map(\.title)
+        XCTAssertTrue(titles.contains("Work / 2024")); XCTAssertTrue(titles.contains("Personal / 2024")); XCTAssertFalse(titles.contains("2024"))
+    }
+    func testToolbarAddToFolderMenuTellsSameNamedSubfoldersApart() throws {
+        _ = NSApplication.shared
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox)
+        let work = try store.createCollection("Work"), personal = try store.createCollection("Personal")
+        _ = try store.createCollection("2024", parent: work); _ = try store.createCollection("2024", parent: personal)
+        let note = try XCTUnwrap(store.captureText("Quarterly plan")); try store.retain([note.id])
+        let controller = LibraryWindowController(store: store, line: Line(defaults: f.defaults, inbox: f.inbox, breeze: false, library: store))
+        let model = controller.model, window = try XCTUnwrap(controller.window)
+        defer { window.contentViewController = nil }
+        wait { model.ids == [note.id] && model.collections.count == 4 && !model.loading }
+        XCTAssertTrue(model.select(note.id)); controller.toolbarController.refresh()
+        let item = try XCTUnwrap(window.toolbar?.items.first { $0.itemIdentifier == LibraryToolbarController.actionsID } as? NSMenuToolbarItem)
+        let titles = try XCTUnwrap(item.menu.items.first { $0.title == L("Add to folder") }?.submenu).items.map(\.title)
+        XCTAssertTrue(titles.contains("Work / 2024")); XCTAssertTrue(titles.contains("Personal / 2024")); XCTAssertFalse(titles.contains("2024"))
+    }
     func testClosedLibraryDefersCaptureQueriesAndRefreshesOnceOnReopen() throws {
         _ = NSApplication.shared
         let f = try SyntheticFixture(); defer { f.cleanup() }
