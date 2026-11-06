@@ -242,6 +242,19 @@ test('selection lookups keep request order and reject missing items',()=>fixture
  assert.throws(()=>s.selected([first.id,'00000000-0000-4000-8000-000000000000']),/no longer exists/);
  s.modify('trash',{ids:[first.id]});s.modify('delete',{ids:[first.id]});assert.deepEqual(s.data.items.map(item=>item.id),[second.id]);
 }));
+test('Name and pin follows macOS nameAndPin: 1-160 characters, 1024 bytes, no control or line separators',()=>fixture(s=>{
+ const id=s.insert('text','Synthetic text').id,family='\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}';
+ for(const name of ['',' \n ','x'.repeat(161),'a\nb','a\u0007b','a b','a b','\u{1F600}'.repeat(161),family.repeat(41),'x'.repeat(4097),'a\0b',undefined,42])assert.throws(()=>s.modify('name',{id,name}),{message:'Enter a name (1–160 characters)'});
+ assert.equal(s.item(id).pinned,false);assert.equal(s.item(id).name,'');
+ s.modify('name',{id,name:'  '+'é'.repeat(80)+'  '});assert.equal(s.item(id).name,'é'.repeat(80));assert.equal(s.item(id).pinned,true);
+ s.modify('name',{id,name:'x'.repeat(160)});s.modify('name',{id,name:'\u{1F600}'.repeat(160)});assert.equal(s.item(id).name.length,320);
+ s.modify('name',{id,name:' '.repeat(4096)+'Padded'+' '.repeat(8)});assert.equal(s.item(id).name,'Padded');
+ s.modify('details',{id,name:'\u{1F600}'.repeat(101)});assert.equal(s.item(id).name.length,202);
+ for(const name of ['x'.repeat(161),'a\nb'])assert.throws(()=>s.modify('details',{id,name}),{message:'Enter a name (1–160 characters)'});assert.equal(s.item(id).name.length,202);
+ s.modify('details',{id,name:'  '});assert.equal(s.item(id).name,'');
+ s.modify('name',{id,name:'\u0085Ada\u0085'});assert.equal(s.item(id).name,'Ada');s.modify('details',{id,name:'\u0085'});assert.equal(s.item(id).name,'');
+ const count=s.data.items.length;for(const title of ['x'.repeat(161),'a\nb'])assert.throws(()=>s.createNote({title}),{message:'Enter a name (1–160 characters)'});assert.equal(s.data.items.length,count);
+}));
 test('opening the Store removes stale .png-/.video- temporaries from a killed process and leaves everything else',()=>fixture((s,_time,dir)=>{
  const id='0f8fad5b-d9cb-469f-a165-70867728950e',media=s.mediaDirectory,stale=['.png-'+id,'.video-'+id],keep=['.png-'+id+'.x','.png-nope','x.png-'+id,'.video-'+id.slice(1)];
  for(const name of [...stale,...keep])fs.writeFileSync(path.join(media,name),'x');

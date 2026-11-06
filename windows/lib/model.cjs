@@ -96,6 +96,12 @@ const graphemes=new Intl.Segmenter('en',{granularity:'grapheme'});
 // 64 graphemes can span far more UTF-16 units; this only bounds raw input.
 const TAG_INPUT_LIMIT=4096;
 const validTagName=name=>!/[\p{Cc}\p{Cf}]/u.test(name)&&[...graphemes.segment(name)].length<=64;
+// Match macOS nameAndPin: 1-160 Characters, at most 1024 UTF-8 bytes, and no
+// control, line or paragraph separator characters.
+// Swift's .whitespacesAndNewlines also trims U+0085, which String.trim() keeps.
+const trimName=value=>value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu,'');
+const blankName=value=>typeof value==='string'&&!trimName(value);
+function itemName(value){let name='';try{name=text(typeof value==='string'?trimName(value):value,TAG_INPUT_LIMIT,true);}catch{}if(!name||[...graphemes.segment(name)].length>160||Buffer.byteLength(name)>1024||/[\p{Cc}\p{Zl}\p{Zp}]/u.test(name))fail('Enter a name (1–160 characters)');return name;}
 function saved(item) { return item.retainedAt != null || item.pinned || item.folderIds.length > 0 || item.tags.length > 0; }
 // Match macOS LinkIdentity.standalone: a copied URL keeps its link identity
 // when the source adds a trailing newline or surrounding spaces.
@@ -357,8 +363,10 @@ class Store {
   }
   /** A new, retained note record, like macOS createNote. It never reuses a matching capture. */
   createNote({text: value = '', title = ''} = {}) {
+    // Validate the title first, so a rejected one leaves no note behind.
+    const name = title && !blankName(title) ? itemName(title) : '';
     const item = this.insert('text', value || 'New note', {fresh: true, createdAsNote: true});
-    if (title) this.modify('details', {id: item.id, name: title});
+    if (name) this.modify('details', {id: item.id, name});
     this.modify('retain', {ids: [item.id]});
     return item;
   }
@@ -469,12 +477,12 @@ class Store {
       else if(action==='retain')item.retainedAt??=now;
       else if(action==='note')item.note=sizedText(payload.note,true);
       else if(action==='details') {
-        if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
+        if(payload.name!==undefined)item.name=blankName(payload.name)?'':itemName(payload.name);
         if(payload.note!==undefined)item.note=sizedText(payload.note,true);
         if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }
       else if(action==='markCopied'){item.lastCopiedAt=now;item.captureRevision=crypto.randomUUID();}
-      else if (action === 'name') { item.name = text(payload.name, 200, true).trim(); item.pinned = true; item.retainedAt??=now; }
+      else if (action === 'name') { item.name = itemName(payload.name); item.pinned = true; item.retainedAt??=now; }
       else if (action === 'folder') {
         if (!this.data.folders.some(f => f.id === payload.folderId)) fail('Folder unavailable');
         if(payload.pinning!==undefined&&typeof payload.pinning!=='boolean')fail('Invalid folder pin option');
