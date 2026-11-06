@@ -1,0 +1,98 @@
+name: Linux application
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['windows/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-library-keyboard-parity.py', 'scripts/test-library-keyboard-parity.py', 'scripts/check-release-version.py', 'scripts/sync-windows-locales.py', 'scripts/test-windows-search-models.py', 'scripts/prepare-windows-search-models.py', '.github/workflows/linux.yml']
+  pull_request:
+    paths: ['windows/**', 'contracts/**', 'scripts/check-cross-platform-parity.py', 'scripts/test-cross-platform-parity.py', 'scripts/check-library-keyboard-parity.py', 'scripts/test-library-keyboard-parity.py', 'scripts/check-release-version.py', 'scripts/sync-windows-locales.py', 'scripts/test-windows-search-models.py', 'scripts/prepare-windows-search-models.py', '.github/workflows/linux.yml']
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+      - name: Install disposable desktop sessions and optional Linux tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb sway wl-clipboard xclip xdotool ffmpeg dbus-x11 rpm libgtk-3-0t64 libnss3 libasound2t64 libgbm1 libnotify4 libxss1 libxtst6
+          # Hosted Ubuntu 24.04 restricts unprivileged user namespaces, which
+          # Electron's sandbox uses. Installed .deb packages ship an AppArmor profile.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Install pinned dependencies
+        run: npm ci --no-fund
+      - name: Prepare pinned offline image search models
+        run: |
+          python3 ../scripts/test-windows-search-models.py
+          python3 ../scripts/prepare-windows-search-models.py --config search-model-config.json --output assets/CLIP
+          python3 ../scripts/prepare-windows-search-models.py --config search-model-config.json --output assets/CLIP --check
+      - name: Shared version and parity guard tests
+        run: |
+          python3 ../scripts/check-release-version.py --require-windows
+          python3 ../scripts/sync-windows-locales.py --check
+          python3 ../scripts/test-cross-platform-parity.py
+          python3 ../scripts/test-library-keyboard-parity.py
+      - name: Run model, renderer and Linux adapter tests
+        run: npm test
+        env:
+          CLIPBOARDLINE_PARITY_REPORT: validation/parity/linux.json
+      - name: Linux runtime acceptance on X11
+        run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' npm run test:linux
+        env:
+          XDG_SESSION_TYPE: x11
+          XDG_CURRENT_DESKTOP: XFCE
+          CLIPBOARDLINE_VALIDATION: validation/source-x11
+      - name: Linux runtime acceptance on Wayland (headless sway, data-control)
+        run: |
+          export XDG_RUNTIME_DIR="$(mktemp -d)"; chmod 700 "$XDG_RUNTIME_DIR"
+          WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman sway -c /dev/null > "$RUNNER_TEMP/sway.log" 2>&1 &
+          for attempt in $(seq 50); do socket=$(ls "$XDG_RUNTIME_DIR" | grep -E '^wayland-[0-9]+$' | head -1); [ -n "$socket" ] && break; sleep 0.2; done
+          test -n "$socket" || { cat "$RUNNER_TEMP/sway.log"; exit 1; }
+          WAYLAND_DISPLAY="$socket" dbus-run-session -- npm run test:linux
+        env:
+          XDG_SESSION_TYPE: wayland
+          XDG_CURRENT_DESKTOP: sway
+          CLIPBOARDLINE_VALIDATION: validation/source-wayland
+      - name: Build AppImage, deb and rpm packages
+        run: npm run dist:linux
+      - name: Execute packaged Linux application acceptance
+        run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' npm run test:linux
+        env:
+          XDG_SESSION_TYPE: x11
+          XDG_CURRENT_DESKTOP: XFCE
+          CLIPBOARDLINE_EXECUTABLE: dist/linux-unpacked/clipboardline
+          CLIPBOARDLINE_VALIDATION: validation/packaged
+      - name: Record package metadata and hashes
+        run: |
+          mkdir -p validation
+          { dpkg-deb -I dist/ClipBoardLine-*-amd64.deb; rpm -qip dist/ClipBoardLine-*-x86_64.rpm; sha256sum dist/ClipBoardLine-*; } > validation/linux-packages.txt
+          echo "sourceRevision=$GITHUB_SHA" >> validation/linux-packages.txt
+      - name: Upload Linux packages and runtime evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: clipboardline-linux-${{ github.sha }}
+          path: |
+            windows/dist/ClipBoardLine-*.AppImage
+            windows/dist/ClipBoardLine-*.deb
+            windows/dist/ClipBoardLine-*.rpm
+            windows/validation/**
+          if-no-files-found: error
+          retention-days: 14
+      # Last, so a dependency advisory fails the job without hiding the test
+      # and package evidence above.
+      - name: Audit dependencies
+        if: ${{ !cancelled() }}
+        run: npm audit --audit-level=moderate

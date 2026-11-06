@@ -4,9 +4,9 @@
 
 Images, text and links, close at hand. Keep recent copies on three shelves, save what matters in a local Library, and move through it all with your keyboard.
 
-[Türkçe README](README.tr.md) · [Download for Mac](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Download for Windows x64](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Explore source](https://github.com/orkunisitmak/clipboardline) · [Screenshots and demos](https://orkunisitmak.github.io/clipboardline/#demo)
+[Türkçe README](README.tr.md) · [Download for Mac](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Download for Windows x64](https://github.com/orkunisitmak/clipboardline/releases/latest) · [Linux guide](docs/linux.md) · [Explore source](https://github.com/orkunisitmak/clipboardline) · [Screenshots and demos](https://orkunisitmak.github.io/clipboardline/#demo)
 
-> The macOS edition uses Swift, AppKit, SwiftUI, Vision and Core ML on macOS 14 or later, for Apple silicon and Intel. The separate Electron edition is available for Windows x64; see the platform matrix for differences and native validation evidence.
+> The macOS edition uses Swift, AppKit, SwiftUI, Vision and Core ML on macOS 14 or later, for Apple silicon and Intel. The separate Electron edition is available for Windows x64 and builds for Linux x64 from source as an AppImage, .deb or .rpm; see the platform matrix for differences and native validation evidence, and the [Linux guide](docs/linux.md) for desktop-specific behavior.
 
 **Feature reference — 1.7.3:** this page describes the implementation in this source tree. The [latest release](https://github.com/orkunisitmak/clipboardline/releases/latest) lists available packages; every new release requires both native platform suites. See the [parity scope and verification requirements](docs/parity-1.7.3.md).
 
@@ -308,21 +308,21 @@ Historical release: Windows [1.7.2 build 64](https://github.com/orkunisitmak/cli
 
 The historical 1.7.2 release was checked in actual Windows source, packaged and installed sessions, including text/image paste, focus return, capture, OCR and keyboard workflows. Destination apps still decide which clipboard formats they accept. macOS and Windows data stores are separate; cross-device sync and automatic migration between them are not provided.
 
-| Capability | macOS | Windows |
-| --- | --- | --- |
-| Content shelves and Library | Native AppKit/SwiftUI; image/text/link shelves, grid/list, folders, tags and pins. | Transparent curved hanging shelves; a normal resizable Library window with unified toolbar, grid/list, folders, tags, pins, notes and toggled sidebar/inspector. |
-| Default global shortcuts | ⌃⌥T shelves; ⌃⌥S search. | Ctrl+Alt+T shelves; Ctrl+Alt+S search; Ctrl+Alt+A screen capture. Global Library and copy-latest-image shortcuts are configurable and off by default. |
-| Local shortcut modifiers | Command (⌘) for app commands; Option (⌥) for naming/pages. | Control replaces Command; Alt replaces Option. Local and global bindings are configurable. |
-| Clipboard collection | Image/text opt-in; standalone-link capture defaults on and is configurable. | Image/text collection defaults off; standalone-link capture defaults on. Each can be changed in Sources; existing choices are preserved. Text and link capture stays silent. |
-| Search and OCR | Apple Vision OCR; optional original MobileCLIP-S2 semantic image search. | Local Tesseract English/Turkish OCR and original MobileCLIP-S2 semantic image search through ONNX/WASM. Library text/visual/combined modes and scoped filters work offline. |
-| Preview editing | Borderless image/text/link previews; editable vectors/crop, auto-saving inspector and session undo after editing. | Frameless image/text/link previews; shared top toolbar, editable vectors/crop, auto-saving inspector and session undo after editing. |
-| Copy and paste | ⌘Enter targets the original editable field using app Accessibility permission. | Ctrl+Enter restores the prior editable Windows field through the native bridge. Secure/changed targets are rejected. |
-| Image batches | Multiple image/file representations; destination app decides what to accept. | Native FileDrop list plus first-raster fallback. Destination support varies; items are not silently stitched together. |
-| Retention and recovery | Per-kind 1/3/7/15/30-day choices; retained items survive; Library Trash. | Separate per-kind history including Keep forever; saved items survive; recoverable Trash and session take-down undo. |
-| Link metadata | Optional public website/YouTube titles and thumbnails. | Optional public website/YouTube enrichment defaults on; can be disabled. Existing explicit opt-outs remain unchanged. |
-| Recordings and Quick Look | Quick Look and AVKit preview .mov/.mp4 recordings with native controls. Trim keeps the original and saves a managed derivative while preserving item identity and organization. | MP4/MOV import and watched-folder collection, playback, M/Actions Trim, file copy/drag/export. Native acceptance is mandatory before publication. Uses installed Windows codecs; keeps the original and renders trim output to MP4, possibly re-encoding. |
-| Languages | System language or one of nine shared language catalogs. | The same nine shared language catalogs and system-language selection. OCR languages are English/Turkish. |
-| Updates and OS trust | Sparkle signed public feed and archives. Project-signed Mac build is not Apple-notarized. | Windows signed feed in the shared public repository; configurable launch/hourly checks and five-minute failure retry. Update and reopen requires a click. The installer has no Authenticode publisher certificate. |
+| Capability | macOS | Windows | Linux (source build) |
+| --- | --- | --- | --- |
+| Content shelves and Library | Native AppKit/SwiftUI; image/text/link shelves, grid/list, folders, tags and pins. | Transparent curved hanging shelves; a normal resizable Library window with unified toolbar, grid/list, folders, tags, pins, notes and toggled sidebar/inspector. | The same Electron shelves and Library as Windows; Wayland compositors decide window placement. |
+| Default global shortcuts | ⌃⌥T shelves; ⌃⌥S search. | Ctrl+Alt+T shelves; Ctrl+Alt+S search; Ctrl+Alt+A screen capture. Global Library and copy-latest-image shortcuts are configurable and off by default. | Windows defaults. X11 key grabs, the Wayland GlobalShortcuts portal, or desktop shortcuts bound to `clipboardline --toggle`, `--search`, `--library`, `--copy-latest` and `--screenshot`. |
+| Local shortcut modifiers | Command (⌘) for app commands; Option (⌥) for naming/pages. | Control replaces Command; Alt replaces Option. Local and global bindings are configurable. | Same as Windows: Control and Alt. |
+| Clipboard collection | Image/text opt-in; standalone-link capture defaults on and is configurable. | Image/text collection defaults off; standalone-link capture defaults on. Each can be changed in Sources; existing choices are preserved. Text and link capture stays silent. | Windows defaults. Background capture through `wl-clipboard` (KDE, wlroots), Xwayland on GNOME, or X11 polling; password-manager markers are skipped. |
+| Search and OCR | Apple Vision OCR; optional original MobileCLIP-S2 semantic image search. | Local Tesseract English/Turkish OCR and original MobileCLIP-S2 semantic image search through ONNX/WASM. Library text/visual/combined modes and scoped filters work offline. | Same as Windows. |
+| Preview editing | Borderless image/text/link previews; editable vectors/crop, auto-saving inspector and session undo after editing. | Frameless image/text/link previews; shared top toolbar, editable vectors/crop, auto-saving inspector and session undo after editing. | Same as Windows. |
+| Copy and paste | ⌘Enter targets the original editable field using app Accessibility permission. | Ctrl+Enter restores the prior editable Windows field through the native bridge. Secure/changed targets are rejected. | Ctrl+Enter copies, hides and returns focus. Under X11 with `xdotool` it also pastes into the same, still active window; on Wayland press Ctrl+V. |
+| Image batches | Multiple image/file representations; destination app decides what to accept. | Native FileDrop list plus first-raster fallback. Destination support varies; items are not silently stitched together. | File list (`text/uri-list` and GNOME copied files) plus the first image as PNG. |
+| Retention and recovery | Per-kind 1/3/7/15/30-day choices; retained items survive; Library Trash. | Separate per-kind history including Keep forever; saved items survive; recoverable Trash and session take-down undo. | Same as Windows. |
+| Link metadata | Optional public website/YouTube titles and thumbnails. | Optional public website/YouTube enrichment defaults on; can be disabled. Existing explicit opt-outs remain unchanged. | Same as Windows. |
+| Recordings and Quick Look | Quick Look and AVKit preview .mov/.mp4 recordings with native controls. Trim keeps the original and saves a managed derivative while preserving item identity and organization. | MP4/MOV import and watched-folder collection, playback, M/Actions Trim, file copy/drag/export. Native acceptance is mandatory before publication. Uses installed Windows codecs; keeps the original and renders trim output to MP4, possibly re-encoding. | The distribution's FFmpeg imports MP4/MOV, makes posters and trims to a new MP4 (H.264/AAC, or VP9/Opus without a working H.264 encoder). Import explains when FFmpeg is missing. |
+| Languages | System language or one of nine shared language catalogs. | The same nine shared language catalogs and system-language selection. OCR languages are English/Turkish. | Same as Windows. |
+| Updates and OS trust | Sparkle signed public feed and archives. Project-signed Mac build is not Apple-notarized. | Windows signed feed in the shared public repository; configurable launch/hourly checks and five-minute failure retry. Update and reopen requires a click. The installer has no Authenticode publisher certificate. | No signed Linux feed or in-app installer yet; install a newer AppImage, .deb or .rpm, which keeps your data. Packages are unsigned source builds. |
 
 Normal operating-system approval may be required on first open. The Mac build uses a persistent project certificate rather than Apple Developer ID/notarization; the Windows installer is not Authenticode-signed. Update signatures and hashes establish the project update channel, not Apple or Microsoft publisher certification. Use the documented release assets and normal OS approval; do not disable system protections.
 
@@ -342,3 +342,23 @@ npm run test:electron
 ```
 
 [Windows component notices](windows/THIRD_PARTY_NOTICES.md)
+
+### Linux source development and packages
+
+The Electron project in `windows/` also builds for Linux; the Linux desktop integration lives in separate `windows/lib/linux-*.cjs` files.
+Linux packages contain the same components and notices as the Windows edition; FFmpeg, `wl-clipboard` and
+`xdotool` are optional distribution packages, never bundled.
+
+```sh
+cd windows
+npm ci
+# Offline image search models; packages must bundle them:
+python3 ../scripts/prepare-windows-search-models.py --config search-model-config.json --output assets/CLIP
+npm test
+npm start
+npm run dist:linux     # AppImage, .deb and .rpm in dist/
+```
+
+Run `npm run test:linux` only inside a disposable X11 or Wayland session, because it
+replaces the clipboard. See the [Linux guide](docs/linux.md) for installation,
+desktop support, shortcut commands and validation.

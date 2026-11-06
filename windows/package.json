@@ -6,11 +6,14 @@
   "license": "MIT",
   "private": true,
   "main": "main.cjs",
+  "desktopName": "com.clipboardline.ClipBoardLine.desktop",
   "scripts": {
     "start": "electron .",
     "test": "node --test --test-concurrency=1 tests/*.test.cjs",
     "test:electron": "node tests/electron-smoke.cjs",
-    "dist": "electron-builder --win nsis --x64 --publish never"
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "dist:linux": "electron-builder --linux AppImage deb rpm --x64 --publish never -c.extraMetadata.homepage=https://github.com/orkunisitmak/clipboardline",
+    "test:linux": "node tests/linux-runtime-acceptance.cjs"
   },
   "dependencies": {
     "@tesseract.js-data/eng": "1.0.0",
@@ -45,7 +48,8 @@
       "assets/**/*",
       "search-model-config.json",
       "package.json",
-      "!assets/CLIP/**"
+      "!assets/CLIP/**",
+      "!assets/linux-icons/**"
     ],
     "extraResources": [
       {
@@ -107,11 +111,70 @@
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": false
     },
+    "linux": {
+      "icon": "assets/linux-icons",
+      "executableName": "clipboardline",
+      "syncDesktopName": true,
+      "category": "Utility",
+      "synopsis": "Keyboard-first clipboard shelves and saved library",
+      "description": "Keyboard-first local clipboard shelves and saved library for Linux.",
+      "maintainer": "ClipBoardLine contributors",
+      "desktop": {
+        "entry": {
+          "Keywords": "clipboard;history;screenshot;paste;"
+        }
+      },
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "ClipBoardLine-${version}-${arch}.${ext}"
+    },
+    "deb": {
+      "afterRemove": "scripts/linux-after-remove.sh",
+      "recommends": [
+        "libappindicator3-1",
+        "wl-clipboard",
+        "xclip",
+        "xdotool",
+        "ffmpeg"
+      ]
+    },
+    "rpm": {
+      "afterRemove": "scripts/linux-after-remove.sh",
+      "fpm": [
+        "--rpm-tag",
+        "Recommends: wl-clipboard",
+        "--rpm-tag",
+        "Recommends: xclip",
+        "--rpm-tag",
+        "Suggests: xdotool",
+        "--rpm-tag",
+        "Suggests: ffmpeg-free"
+      ]
+    },
     "asarUnpack": [
       "lib/*.cjs",
       "node_modules/onnxruntime-web/**",
       "node_modules/onnxruntime-common/**"
     ]
   },
-  "clipboardLineBuild": 71
+  "clipboardLineBuild": 71,
+  "clipboardLineLinuxBuild": 1
 }

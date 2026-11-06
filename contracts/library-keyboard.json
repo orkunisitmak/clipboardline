@@ -6,12 +6,16 @@
       "macos",
       "windows"
     ],
+    "additionalPlatforms": [
+      "linux"
+    ],
     "scope": "Library model/renderer selection, navigation, query handoff, editor guards and recoverable Trash. Real pane focus, native control activation, dialogs, system clipboard paste and installers have separate mandatory native acceptance. The Mac adapter runs actual LibraryModel/LibraryStore entry points; callback intent is not proof of physical focus.",
     "nativeExceptions": [
       {
         "id": "modifier-names",
         "macos": "primary=Command; alt=Option; control=Control",
         "windows": "primary=Control; alt=Alt; control=Control",
+        "linux": "primary=Control; alt=Alt; control=Control",
         "reason": "Native platform modifier conventions, identical actions and outcomes."
       }
     ],

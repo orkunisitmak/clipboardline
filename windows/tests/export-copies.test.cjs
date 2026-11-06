@@ -34,3 +34,13 @@ test('truncating exported names preserves complete Unicode characters',async()=>
   ]);
   assert.deepEqual(names,['a'.repeat(99)+'.txt','b'.repeat(98)+emoji+'.txt']);
 });
+
+test('exports a link as the platform link file and keeps going after an invalid one',async()=>{
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-export-'));
+  try{
+    const result=await exportCopies([{kind:'link',name:'Example',url:'https://example.com/a?b=1'},{kind:'link',name:'Broken',url:'https://example.com/\nExec=x'}],directory,{mediaPath:()=>{throw new Error('No media in this test');}});
+    const extension=process.platform==='linux'?'.desktop':'.url';
+    assert.deepEqual([result.count,result.failed,fs.readdirSync(directory)],[1,1,['Example'+extension]]);
+    assert.match(fs.readFileSync(path.join(directory,'Example'+extension),'utf8'),/URL=https:\/\/example\.com\/a\?b=1\r?\n/);
+  }finally{fs.rmSync(directory,{recursive:true,force:true});}
+});
