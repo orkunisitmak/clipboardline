@@ -79,6 +79,8 @@ Restore.
 whitespace and a whitespace-only name to count as no name.
 `folder-removal-view` requires removing a folder to return the Library to My
 library only when the open view is that folder or one of its subfolders.
+`inspector-title-length` requires a Library inspector title longer than 200 characters to be saved on both
+platforms, up to 1 MiB of UTF-8 bytes.
 `text-and-note-size-limit` requires a text or a note over 1 MiB of UTF-8 bytes to be refused on both
 platforms, not 1 MiB of UTF-16 units on Windows.
 `name-fold-keeps-script-marks` requires tag and folder names that differ only by a kana voiced mark or a
