@@ -22,7 +22,7 @@ function renderer(){
  function card(id){const element=new Element();element.dataset.itemId=id;element.closest=selector=>selector==='[data-item-id]'?element:null;return element;}
  function folder(id){const row=new Element(),button=new Element();button.dataset.folder=id;row.querySelector=selector=>selector==='[data-action="folder-scope"]'?button:null;button.closest=selector=>selector==='.folder-row'?row:selector==='[data-action="folder-scope"]'?button:null;return{row,button};}
  async function drag(id,{alt=false}={}){const values=new Map(),dataTransfer={effectAllowed:'',dropEffect:'',setData:(key,value)=>values.set(key,value),getData:key=>values.get(key)||'',get types(){return [...values.keys()];}};const event=await dispatch('dragstart',{target:card(id),altKey:alt,dataTransfer});return{...event,dataTransfer,values};}
- return{ready,dispatch,drag,folder,ids,folders,state,commands,api,get html(){return nodes.get('app').innerHTML;},get writes(){return nodes.get('app').htmlWrites;},async selectAll(){await dispatch('keydown',{target:new Element(),code:'KeyA',key:'a',ctrlKey:true,metaKey:false,altKey:false,shiftKey:false,repeat:false});},async end(){await dispatch('dragend');},async blur(){await dispatch('blur',{},windowListeners);}};
+ return{toastText:()=>document.getElementById('toast').textContent,clearToast:()=>{document.getElementById('toast').textContent='';},ready,dispatch,drag,folder,ids,folders,state,commands,api,get html(){return nodes.get('app').innerHTML;},get writes(){return nodes.get('app').htmlWrites;},async selectAll(){await dispatch('keydown',{target:new Element(),code:'KeyA',key:'a',ctrlKey:true,metaKey:false,altKey:false,shiftKey:false,repeat:false});},async end(){await dispatch('dragend');},async blur(){await dispatch('blur',{},windowListeners);}};
 }
 
 test('Library image and mixed selections drag onto folders additively without pinning or native file export',async()=>{
@@ -81,4 +81,19 @@ test('new folders have two levels while legacy deeper folders load and subtree r
   store=new Store(directory);assert.equal(store.data.folders.length,5);assert.deepEqual(store.item(item.id).folderIds,[deeper,other.id]);store.modify('removeFolder',{id:root.id});
   assert.deepEqual(store.data.folders.map(folder=>folder.id),[other.id]);assert.equal(store.data.items.length,1);assert.deepEqual(store.item(item.id).folderIds,[other.id]);assert.equal(store.item(item.id).retainedAt,retained);assert.equal(store.item(item.id).text,'Preserve this legacy saved content');assert.equal(store.item(item.id).pinned,false);assert.equal(store.item(item.id).trashedAt,null);
  }finally{fs.rmSync(directory,{recursive:true,force:true});}
+});
+
+test('A plain shelf text or link drag says to start the drag again with Alt for the Desktop and folders, while Alt, images and the Library stay quiet',async()=>{
+ const f=renderer();await f.ready();const toast=()=>f.toastText();
+ f.api.emit({view:'shelves'});await f.ready();
+ for(const id of [f.ids[1],f.ids[2]]){await f.dispatch('dragend');f.clearToast();const drag=await f.drag(id);assert.equal(drag.prevented,undefined);assert.equal(toast(),'To drop on the Desktop or a folder as a file, start the drag again while holding Alt');assert.equal(f.commands.some(value=>value.action==='startDrag'),false);}
+ f.clearToast();await f.drag(f.ids[1],{alt:true});assert.equal(toast(),'');assert.equal(f.commands.at(-1).action,'startDrag');
+ f.clearToast();await f.drag(f.ids[0]);assert.equal(toast(),'');
+ f.api.emit({view:'library'});await f.ready();f.clearToast();await f.drag(f.ids[1]);assert.equal(toast(),'');
+});
+
+test('A plain shelf drag shows the Turkish Desktop hint when the language is Turkish',async()=>{
+ const f=renderer();await f.ready();
+ f.api.emit({view:'shelves',settings:{...f.state.settings,language:'tr'}});await f.ready();f.clearToast();
+ await f.drag(f.ids[1]);assert.equal(f.toastText(),'Masaüstüne veya klasöre dosya olarak bırakmak için sürüklemeyi Alt tuşu basılıyken yeniden başlat');
 });

@@ -26,7 +26,8 @@ insertion; shelf images and mixed batches containing an image use native files.
 In Library, ordinary card dragging adds the captured selection to a folder,
 preserving its existing folders and pin state. **Alt+drag** offers native file
 copies from Library or the shelves instead. Tooltips and accessible descriptions
-expose the gestures. Text copies use UTF-8 `.txt`; Windows link copies use
+expose the gestures, and a plain shelf text or link drag also shows a notice that
+starting the drag again while holding Alt drops it on the Desktop or a folder as a file. Text copies use UTF-8 `.txt`; Windows link copies use
 native Internet Shortcut `.url`, the Windows counterpart to Mac `.webloc`.
 Original images remain unchanged.
 
