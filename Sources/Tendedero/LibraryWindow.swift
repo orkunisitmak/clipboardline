@@ -90,6 +90,7 @@ final class LibraryNativeWindow: NSWindow {
         model.onNameAndPinBatchRequested = { [weak self] ids in self?.nameAndPin(ids) }
         model.onExportRequested = { [weak self] in self?.exportSelection() }
         model.onTrashRequested = { [weak self] in self?.confirmTrash() }
+        model.onDeletePermanentlyRequested = { [weak self] in self?.confirmDeletePermanently() }
         model.onCloseRequested = { [weak self] in
             guard let window = self?.window else { return }
             if window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) } else { window.performClose(nil) }
@@ -286,6 +287,38 @@ final class LibraryNativeWindow: NSWindow {
             guard response == .alertFirstButtonReturn, let self, self.flush() else { return }; self.model.trashSelection(snapshot)
         }
     }
+    func confirmDeletePermanently(ids: [UUID]? = nil) {
+        guard model.query.scope == .trash, model.flushEdits() else { return }
+        let snapshot: [UUID: String]
+        do { snapshot = try model.store.trashSnapshot(ids ?? model.actionIDs) } catch { model.report(error.localizedDescription); return }
+        guard !snapshot.isEmpty else { return }
+        let alert = NSAlert(); alert.alertStyle = .warning
+        alert.messageText = String(format: L("Delete %d items permanently?"), snapshot.count)
+        alert.informativeText = L("They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are.")
+        alert.addButton(withTitle: L("Delete permanently")).hasDestructiveAction = true
+        alert.addButton(withTitle: L("Cancel"))
+        presentAlert(alert) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self, self.model.flushEdits() else { return }
+            self.model.deletePermanently(snapshot)
+        }
+    }
+    func confirmEmptyTrash() {
+        guard model.flushEdits() else { return }
+        // Only what the user sees and confirms is erased; an item that lands
+        // in Trash while the sheet is up is not.
+        let snapshot: [UUID: String]
+        do { snapshot = try model.store.trashSnapshot(model.store.trashedIDs()) } catch { model.report(error.localizedDescription); return }
+        guard !snapshot.isEmpty else { model.report(L("Trash is empty")); return }
+        let alert = NSAlert(); alert.alertStyle = .warning
+        alert.messageText = String(format: L("Empty Trash and delete %d items permanently?"), snapshot.count)
+        alert.informativeText = L("They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are.")
+        alert.addButton(withTitle: L("Empty Trash")).hasDestructiveAction = true
+        alert.addButton(withTitle: L("Cancel"))
+        presentAlert(alert) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self, self.model.flushEdits() else { return }
+            self.model.emptyTrash(snapshot)
+        }
+    }
     func exportSelection(ids: [UUID]? = nil) {
         guard model.flushEdits() else { return }
         let snapshot = ids ?? model.actionIDs; guard !snapshot.isEmpty else { return }
@@ -401,8 +434,10 @@ final class LibraryNativeWindow: NSWindow {
                 Button(L("Add tag…")) { actions?.promptTag() }
                 Button(L("Save to library")) { model.retain() }
                 Button(L("Export copies…")) { actions?.exportSelection() }
-                if model.query.scope == .trash { Button(L("Restore")) { model.restore() } }
-                else { Button(L("Move to Trash…")) { actions?.confirmTrash() } }
+                if model.query.scope == .trash {
+                    Button(L("Restore")) { model.restore() }
+                    Button(L("Delete permanently…")) { actions?.confirmDeletePermanently() }
+                } else { Button(L("Move to Trash…")) { actions?.confirmTrash() } }
                 Spacer()
             }.controlSize(.small).padding(20).frame(maxWidth: .infinity, alignment: .leading)
         } else if let record = model.inspected {
@@ -435,7 +470,10 @@ final class LibraryNativeWindow: NSWindow {
                     }
                     VStack(alignment: .leading, spacing: 7) { Text(L("Note")).font(.caption.weight(.semibold)).foregroundStyle(.secondary); TextEditor(text: $model.draftNote).font(.system(size: 12)).scrollContentBackground(.hidden).frame(height: 100).padding(8).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8)).accessibilityLabel(L("Note")).accessibilityIdentifier("library-detail-note") }
                     Text(record.createdAt, style: .date).font(.caption).foregroundStyle(.secondary)
-                    if record.deletedAt != nil { Button(L("Restore")) { model.restore() } }
+                    if record.deletedAt != nil {
+                        Button(L("Restore")) { model.restore() }
+                        Button(L("Delete permanently…")) { actions?.confirmDeletePermanently() }
+                    }
                     else {
                         if record.retainedAt == nil { Button(L("Save to library")) { model.retain() } }
                         Button(L("Export copies…")) { actions?.exportSelection() }

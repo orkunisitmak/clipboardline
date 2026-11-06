@@ -154,7 +154,11 @@ import SwiftUI
         add(L("Add tag…"), enabled: hasSelection) { [weak actions] in actions?.promptTag() }
         add(L("Export copies…"), enabled: hasSelection) { [weak actions] in actions?.exportSelection() }
         menu.addItem(.separator())
-        if model.query.scope == .trash { add(L("Restore"), enabled: hasSelection) { [weak model] in model?.restore() } }
+        if model.query.scope == .trash {
+            add(L("Restore"), enabled: hasSelection) { [weak model] in model?.restore() }
+            add(L("Delete permanently…"), enabled: hasSelection) { [weak actions] in actions?.confirmDeletePermanently() }
+            add(L("Empty Trash…")) { [weak actions] in actions?.confirmEmptyTrash() }
+        }
         else { add(L("Move to Trash…"), enabled: hasSelection) { [weak actions] in actions?.confirmTrash() } }
         menu.addItem(.separator()); add(L("New folder")) { [weak actions] in actions?.createFolder() }
         return menu

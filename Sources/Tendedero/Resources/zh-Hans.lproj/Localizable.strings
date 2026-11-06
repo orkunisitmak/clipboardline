@@ -537,3 +537,15 @@
 "This image could not be opened for markup." = "无法打开此图像进行标记。";
 "Markup supports images up to 80 megapixels." = "标记功能支持最高 8000 万像素的图像。";
 "The marked image could not be rendered." = "无法渲染已标记的图像。";
+
+
+/* Permanent deletion from Trash. */
+"Delete %d items permanently?" = "要永久删除 %d 个项目吗？";
+"Delete permanently" = "永久删除";
+"Delete permanently…" = "永久删除…";
+"Deleted %d items permanently" = "已永久删除 %d 个项目";
+"Empty Trash" = "清倒废纸篓";
+"Empty Trash and delete %d items permanently?" = "要清倒废纸篓并永久删除 %d 个项目吗？";
+"Empty Trash…" = "清倒废纸篓…";
+"They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are." = "这些项目将无法恢复。App 创建的副本会移到 Mac 的废纸篓；其他位置的原始文件保持不变。";
+"Trash is empty" = "废纸篓为空";
