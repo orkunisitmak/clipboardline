@@ -10,6 +10,7 @@
     "start": "electron .",
     "test": "node --test --test-concurrency=1 tests/*.test.cjs",
     "test:electron": "node tests/electron-smoke.cjs",
+    "predist": "python ../scripts/check-release-version.py --require-windows --require-installed-electron",
     "dist": "electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
