@@ -252,6 +252,8 @@ test('Name and pin follows macOS nameAndPin: 1-160 characters, 1024 bytes, no co
  s.modify('details',{id,name:'\u{1F600}'.repeat(101)});assert.equal(s.item(id).name.length,202);
  for(const name of ['x'.repeat(161),'a\nb'])assert.throws(()=>s.modify('details',{id,name}),{message:'Enter a name (1–160 characters)'});assert.equal(s.item(id).name.length,202);
  s.modify('details',{id,name:'  '});assert.equal(s.item(id).name,'');
+ s.modify('name',{id,name:'\u0085Ada\u0085'});assert.equal(s.item(id).name,'Ada');s.modify('details',{id,name:'\u0085'});assert.equal(s.item(id).name,'');
+ const count=s.data.items.length;for(const title of ['x'.repeat(161),'a\nb'])assert.throws(()=>s.createNote({title}),{message:'Enter a name (1–160 characters)'});assert.equal(s.data.items.length,count);
 }));
 test('opening the Store removes stale .png-/.video- temporaries from a killed process and leaves everything else',()=>fixture((s,_time,dir)=>{
  const id='0f8fad5b-d9cb-469f-a165-70867728950e',media=s.mediaDirectory,stale=['.png-'+id,'.video-'+id],keep=['.png-'+id+'.x','.png-nope','x.png-'+id,'.video-'+id.slice(1)];
