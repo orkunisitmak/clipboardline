@@ -134,7 +134,7 @@ async function show(next='shelves',event=null) {
       if(generation!==visibilityGeneration)return;
       previous=pasteTargets.capture(target);
     }
-    rememberNormalBounds();view=next;viewEvent=event?{...event,serial:crypto.randomUUID()}:null;message='';if(next==='library')imageSearch?.warmup?.();
+    rememberNormalBounds();view=next;viewEvent=event?{...event,serial:crypto.randomUUID()}:null;message='';
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     applyingBounds=true;
     try{

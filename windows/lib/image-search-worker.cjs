@@ -72,7 +72,6 @@ async function infer(activeSession,name,tensor){
 async function handle(action,payload){
  if(action==='has')return load(payload.key)!==null;
  if(action==='prune')return prune(payload.keys);
- if(action==='warmup'){await session('text');return true;}
  if(action==='index'){
   const {key,bitmap,width,height}=payload;if(!keyPattern.test(key))throw new Error('Invalid image search identity.');
   const views=imageTensors(bitmap,width,height),embeddings=[];if(views.length){const activeSession=await session('image');for(const pixels of views)embeddings.push(await infer(activeSession,'image',new ort.Tensor('float32',pixels,[1,3,256,256])));}

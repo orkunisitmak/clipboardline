@@ -56,7 +56,7 @@ class ImageSearch{
   this.clearIdleTimer();
   if(!this.worker){const ready=await this.spawnWorker(false);if(!ready||this.closed||this.broken||!this.state.available)throw new Error('Offline image search is unavailable.');}
   else if(!this.state.available){const ready=await this.ready;if(!ready||this.closed||this.broken||!this.state.available)throw new Error('Offline image search is unavailable.');}
-  if(action==='index'||action==='search'||action==='warmup')this.heavyWorkDone=true;
+  if(action==='index'||action==='search')this.heavyWorkDone=true;
   const worker=this.worker,id=++this.sequence;
   return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.requests.delete(id);reject(new Error('Offline image search timed out.'));this.failure();void worker?.terminate();},120000);timer.unref?.();this.requests.set(id,{resolve,reject,timer});try{worker.postMessage({id,action,payload},transfer);}catch(error){this.requests.delete(id);clearTimeout(timer);reject(error);}});
  }
@@ -98,11 +98,6 @@ class ImageSearch{
     }
    }
   }finally{this.draining=false;this.active=null;this.updateStatus();this.scheduleIdleHibernate();}
- }
- warmup(){
-  if(this.closed||this.broken||!this.state.available&&this.state.error)return;
-  if(!this.items().some(value=>this.key(value)))return;
-  void this.request('warmup',{}).catch(()=>{});
  }
  async search(query,eligibleIds){
   if(typeof query!=='string'||query.length>2048||query.includes('\0'))throw new Error('Search images with up to 2,048 characters.');
