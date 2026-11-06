@@ -188,6 +188,28 @@ import XCTest
         try library.prune(); XCTAssertNil(try library.item(first.id)?.deletedAt); XCTAssertTrue(try library.item(second.id)?.deletedAt != nil)
         f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(first.id)?.deletedAt != nil)
     }
+    func testUndoTakeDownDoesNotHangATextOrLinkTwiceAfterItWasCopiedAgain() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let text = try XCTUnwrap(library.captureText("Hang once")), link = try library.captureLink(URL(string: "https://example.com/hang-once")!)
+        try library.removeFromShelf([text.id]); try library.removeFromShelf([link.id])
+        f.date.addTimeInterval(10)
+        let freshText = try XCTUnwrap(library.captureText("Hang once")), freshLink = try library.captureLink(URL(string: "https://example.com/hang-once")!)
+        XCTAssertNotEqual(freshText.id, text.id); XCTAssertNotEqual(freshLink.id, link.id)
+        XCTAssertEqual(try library.undoShelfRemoval(), []); XCTAssertEqual(try library.undoShelfRemoval(), [])
+        XCTAssertEqual(try library.shelfItems(.text).map(\.id), [freshText.id]); XCTAssertEqual(try library.shelfItems(.link).map(\.id), [freshLink.id])
+        let other = try XCTUnwrap(library.captureText("Plain take down")); try library.removeFromShelf([other.id])
+        XCTAssertEqual(try library.undoShelfRemoval(), [other.id])
+    }
+    func testUndoTakeDownSeesATextEditedByAnOlderAppWhileOpen() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let old = try XCTUnwrap(library.captureText("Hang once")), edited = try XCTUnwrap(library.captureText("Something else"))
+        try library.removeFromShelf([old.id])
+        let db = try LibraryDatabase(url: library.databaseURL)
+        var legacy = edited; legacy.text = "Hang once"; legacy.updatedAt = f.date
+        try db.execute("UPDATE items SET payload=? WHERE id=?", [.blob(try JSONEncoder().encode(legacy)), .text(edited.id.uuidString)])
+        XCTAssertEqual(try library.undoShelfRemoval(), [])
+        XCTAssertEqual(try library.shelfItems(.text).map(\.id), [edited.id])
+    }
     func testRestoringOldCopyAfterRecapturePreservesBothRecordsAndPinsExactImageID() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let original = try f.image(owned: false), first = try library.captureImage(original), link = try library.captureLink(URL(string: "https://example.com/repeated")!)
