@@ -449,6 +449,7 @@
 /* Searchable action bar. */
 "Actions" = "Əməliyyatlar";
 "Available on the shelves" = "Rəflərdə istifadə edilə bilər";
+"Available in Library" = "Kitabxanada istifadə edilə bilər";
 "Available on the shelves or in Library" = "Rəflərdə və ya Kitabxanada istifadə edilə bilər";
 "Edit item details" = "Elementin təfərrüatlarını redaktə et";
 "Finish editing first" = "Əvvəlcə redaktəni tamamlayın";

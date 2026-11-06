@@ -449,6 +449,7 @@
 /* Searchable action bar. */
 "Actions" = "操作";
 "Available on the shelves" = "可在置物架中使用";
+"Available in Library" = "可在资料库中使用";
 "Available on the shelves or in Library" = "可在置物架或资料库中使用";
 "Edit item details" = "编辑项目详情";
 "Finish editing first" = "请先完成编辑";
