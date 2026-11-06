@@ -266,7 +266,7 @@ public static class ClipBoardLineNative {
     focusHandler=delegate(object sender,AutomationFocusChangedEventArgs args) {
       try { var value=DescribeFocus(sender as AutomationElement,true);EmitFocus(value==null?null:value.Json); } catch(Exception) {}
     };
-    try { Automation.AddAutomationFocusChangedEventHandler(focusHandler); } catch(Exception) {}
+    Automation.AddAutomationFocusChangedEventHandler(focusHandler);
   }
   public static void EmitCurrentFocus() { try { EmitFocus(FocusSnapshot()); } catch(Exception) {} }
   public static void EmitSequence(uint sequence) { lock(outputLock) { Console.Out.WriteLine("{\"sequence\":"+sequence+"}");Console.Out.Flush(); } }
@@ -287,6 +287,7 @@ public static class ClipBoardLineNative {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
   [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
@@ -414,7 +415,7 @@ try {
     if ($Mode -in @('Paste','ValidatePaste') -and $expected.prepared) {
       if ([ClipBoardLineNative]::GetForegroundWindow() -ne $window) { throw 'Focus changed before paste. No keys were sent.' }
     } else {
-      if ([ClipBoardLineNative]::IsIconic($window)) { [void][ClipBoardLineNative]::ShowWindow($window,9) }
+      if ([ClipBoardLineNative]::IsIconic($window) -or -not [ClipBoardLineNative]::IsWindowVisible($window)) { [void][ClipBoardLineNative]::ShowWindow($window,9) }
       [void][ClipBoardLineNative]::SetForegroundWindow($window)
     }
     $phase.activationRequested=[DateTime]::UtcNow.ToString('o')
