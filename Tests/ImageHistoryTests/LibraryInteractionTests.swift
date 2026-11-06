@@ -34,6 +34,15 @@ import XCTest
         }
         XCTAssertEqual(try store.tags().count, 6); XCTAssertEqual(try store.collections().count, 6)
     }
+    func testNewNoteIsTitledByItsFirstLineLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let model = LibraryModel(store: store)
+        model.newNote(); wait { !model.loading && model.ids.count == 1 }
+        let id = try XCTUnwrap(model.ids.first)
+        XCTAssertEqual(try store.item(id)?.title, ""); XCTAssertEqual(model.draftTitle, "")
+        model.draftText = "Groceries\nmilk, eggs"; XCTAssertTrue(model.flushEdits())
+        XCTAssertEqual(try store.item(id)?.displayTitle, "Groceries")
+    }
     func testPagedTagSummariesRefreshAfterRenameAndRemovalWithoutChangingSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let plain = try XCTUnwrap(store.captureText("plain note")), tagged = try XCTUnwrap(store.captureText("tagged note İstanbul 中文"))
