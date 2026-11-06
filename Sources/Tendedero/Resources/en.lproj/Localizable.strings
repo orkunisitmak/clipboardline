@@ -449,6 +449,7 @@
 /* Searchable action bar. */
 "Actions" = "Actions";
 "Available on the shelves" = "Available on the shelves";
+"Available in Library" = "Available in Library";
 "Available on the shelves or in Library" = "Available on the shelves or in Library";
 "Edit item details" = "Edit item details";
 "Finish editing first" = "Finish editing first";
