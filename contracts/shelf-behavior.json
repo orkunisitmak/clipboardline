@@ -54,6 +54,12 @@
         "windows": "decodeHTML in lib/network.cjs follows that order with TextDecoder; security.test.cjs covers it."
       },
       {
+        "id": "link-title-quoted-greater-than",
+        "behavior": "A greater-than sign inside a quoted meta value, such as content=\"Tips > Tricks\", is part of the value, so the link preview shows the full title.",
+        "macos": "PublicLinkHTMLMetadata reads quoted attribute values whole; PublicLinkPolicyTests.testGreaterThanInsideQuotedMetaValueKeepsTheTitle covers it.",
+        "windows": "meta in lib/network.cjs reads quoted attribute values whole; link-metadata-embed.test.cjs covers it."
+      },
+      {
         "id": "link-blank-thumbnail",
         "behavior": "A link preview whose Open Graph image is empty or only whitespace has no thumbnail; a valid relative image URL is resolved against the page address.",
         "macos": "PublicLinkHTMLMetadata drops a whitespace-only og:image before resolving it; PublicLinkNetworkTests.testWhitespaceOnlyOpenGraphImageGivesNoThumbnailAndValidOneIsKept covers it.",

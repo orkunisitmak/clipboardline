@@ -191,6 +191,16 @@ import XCTest
         let html = "<meta property='og:image:secure_url' content='http://public.example.org/secure.png'><meta property='og:image' content='/a.png'>"
         XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url).thumbnailURL?.absoluteString, "https://public.example.org/a.png")
     }
+
+    func testGreaterThanInsideQuotedMetaValueKeepsTheTitle() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let html = "<meta property=\"og:title\" content=\"Tips > Tricks\"><meta property='og:image' content='/a.png'><title>Page</title>"
+        let parsed = try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url)
+        XCTAssertEqual(parsed.title, "Tips > Tricks")
+        XCTAssertEqual(parsed.thumbnailURL?.absoluteString, "https://public.example.org/a.png")
+        let single = "<meta property='og:title' content='Tips > Tricks'><title>Page</title>"
+        XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(single.utf8), url: url).title, "Tips > Tricks")
+    }
 }
 
 #if !STANDALONE_TESTS
