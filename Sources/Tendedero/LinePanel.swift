@@ -152,9 +152,17 @@ final class LinePanel: NSPanel {
     /// for a while, macOS can leave that window bound to a single Space, and
     /// ordering it in on any other desktop then does nothing. A relaunch
     /// fixes it only because the window is new, so this makes the new window:
-    /// same content, callbacks, frame and shown or hidden state. This window
-    /// is ordered out and keeps an empty compositor.
+    /// same content, callbacks, frame and shown or hidden state, typing still
+    /// waiting for the search field, and child windows such as the command
+    /// palette and the pickers. This window is ordered out and keeps an empty
+    /// compositor.
     func makeReplacement() -> LinePanel {
+        if let editor = firstResponder as? NSTextView, let field = editor.delegate as? ShelfSearchTextField {
+            field.editorWillStayBehind(editor)
+        }
+        // Ordering a parent out orders its children out with it.
+        let children = childWindows ?? []
+        children.forEach { removeChildWindow($0) }
         orderOut(nil)
         let fresh = LinePanel(content: hostedContent, reduceMotion: reduceMotion)
         fresh.keyboardFocusAllowed = keyboardFocusAllowed
@@ -164,10 +172,14 @@ final class LinePanel: NSPanel {
         fresh.onScroll = onScroll
         fresh.onScrollLocation = onScrollLocation
         fresh.searchEditorTarget = searchEditorTarget
+        fresh.pendingSearchTarget = pendingSearchTarget
+        fresh.pendingSearchKeys = pendingSearchKeys
+        pendingSearchTarget = nil; pendingSearchKeys.removeAll()
         fresh.contentHeight = contentHeight
         fresh.setFrame(frame, display: false)
         fresh.ignoresMouseEvents = ignoresMouseEvents
         if shelfRevealed { fresh.setShelfRevealed(true, animated: false) }
+        children.forEach { fresh.addChildWindow($0, ordered: .above) }
         return fresh
     }
 

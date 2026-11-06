@@ -666,6 +666,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if wasKey { panel.makeKeyAndOrderFront(nil) } else if wasVisible { panel.orderFrontRegardless() }
     }
 
+    /// Where a child window gives focus back when it closes. The palette or a
+    /// picker opened over the shelf can outlive that shelf window, since
+    /// keepPanelOnActiveSpace makes a new one, so it asks for the shelf then.
+    static func focusReturn(to parent: NSWindow?, shelf: @escaping () -> NSWindow?) -> () -> NSWindow? {
+        guard let parent else { return { nil } }
+        if parent === shelf() { return shelf }
+        return { [weak parent] in parent }
+    }
+    private func focusReturn(to parent: NSWindow?) -> () -> NSWindow? {
+        Self.focusReturn(to: parent) { [weak self] in self?.panel }
+    }
+
     @objc private func toggle() {
         let start = ProcessInfo.processInfo.systemUptime
         let opening = !isRevealed
@@ -1300,10 +1312,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let parent = textPreview?.window ?? linkPreview?.window ?? preview?.window ?? panel
             let picker = try PinFolderPicker(store: store, ids: ids); pinFolderPicker = picker
             picker.window.onBeforeMouseKeyFocus = { [weak self] in self?.capturePasteTarget() }
-            picker.onClose = { [weak self, weak parent] in
+            let returnFocus = focusReturn(to: parent)
+            picker.onClose = { [weak self] in
                 guard let self else { return }; self.pinFolderPicker = nil
                 if let session = self.previewSession { self.updatePreview(session) }
-                if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) }
+                if let parent = returnFocus(), parent.isVisible { parent.makeKeyAndOrderFront(nil) }
             }
             picker.show(relativeTo: parent)
         } catch { line.notice = error.localizedDescription }
@@ -1546,10 +1559,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let parent = previewWindow ?? panel
             let picker = try TagPicker(store: store, ids: ids); tagPicker = picker
             picker.window.onBeforeMouseKeyFocus = { [weak self] in self?.capturePasteTarget() }
-            picker.onClose = { [weak self, weak parent] in
+            let returnFocus = focusReturn(to: parent)
+            picker.onClose = { [weak self] in
                 self?.tagPicker = nil
                 if let self, let session = self.previewSession { self.updatePreview(session) }
-                if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) }
+                if let parent = returnFocus(), parent.isVisible { parent.makeKeyAndOrderFront(nil) }
             }
             picker.show(relativeTo: parent)
         } catch { line.notice = error.localizedDescription }
@@ -1568,10 +1582,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 picker.onAdvance = { [weak self] id in self?.line.focusNameAndPinTarget(id, on: shelf) }
                 line.focusNameAndPinTarget(picker.id, on: shelf)
             }
-            picker.onClose = { [weak self, weak parent] in
+            let returnFocus = focusReturn(to: parent)
+            picker.onClose = { [weak self] in
                 guard let self else { return }; self.nameAndPinPicker = nil
                 if let session = self.previewSession { self.updatePreview(session) }
-                if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) }
+                if let parent = returnFocus(), parent.isVisible { parent.makeKeyAndOrderFront(nil) }
             }
             picker.show(relativeTo: parent)
         } catch { line.notice = error.localizedDescription }
@@ -1632,9 +1647,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         palette.onSearchContents = { [weak self] in self?.searchContents(from: snapshot) }
         palette.window.onBeforeMouseKeyFocus = { [weak self] in self?.capturePasteTarget() }
         commandPalette = palette
-        palette.onClose = { [weak self, weak parent, weak palette] in
+        let returnFocus = focusReturn(to: parent)
+        palette.onClose = { [weak self, weak palette] in
             self?.commandPalette = nil
-            if palette?.shouldRestoreParentFocus == true, parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) }
+            if palette?.shouldRestoreParentFocus == true, let parent = returnFocus(), parent.isVisible { parent.makeKeyAndOrderFront(nil) }
         }
         palette.show(relativeTo: parent)
     }

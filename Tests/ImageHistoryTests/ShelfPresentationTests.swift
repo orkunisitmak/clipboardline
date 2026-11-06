@@ -193,6 +193,39 @@ import XCTest
         }
     }
 
+    /// The command palette and the pickers are child windows of the shelf.
+    /// Ordering the old shelf out would take them with it, and closing one
+    /// would give focus back to a window that is gone.
+    func testReplacementCarriesChildWindowsAndTheirFocusReturn() throws {
+        _ = NSApplication.shared
+        let old = LinePanel(content: NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 40)), reduceMotion: { true })
+        old.setFrame(NSRect(x: -10000, y: -10000, width: 200, height: 40), display: false)
+        old.orderFrontRegardless()
+        let palette = NSPanel(contentRect: NSRect(x: -10000, y: -10000, width: 40, height: 40),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        let preview = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 40, height: 40),
+                               styleMask: [.borderless], backing: .buffered, defer: false)
+        old.addChildWindow(palette, ordered: .above); palette.orderFrontRegardless()
+        var shelf: NSWindow? = old
+        let toShelf = AppDelegate.focusReturn(to: old) { shelf }
+        let toPreview = AppDelegate.focusReturn(to: preview) { shelf }
+
+        let fresh = old.makeReplacement(); shelf = fresh
+        defer {
+            fresh.removeChildWindow(palette); palette.orderOut(nil); fresh.orderOut(nil)
+            fresh.contentView = nil; old.contentView = nil
+        }
+        XCTAssertFalse(old.isVisible)
+        XCTAssertTrue(old.childWindows?.isEmpty ?? true)
+        XCTAssertTrue(palette.parent === fresh, "The palette moves to the new shelf")
+        XCTAssertTrue(palette.isVisible, "and is not ordered out with the old one")
+        fresh.orderFrontRegardless()
+        XCTAssertTrue(palette.isVisible)
+        XCTAssertTrue(toShelf() === fresh, "Closing it gives focus to the shelf as it is now")
+        XCTAssertTrue(toPreview() === preview, "Any other parent is kept")
+        XCTAssertNil(AppDelegate.focusReturn(to: nil) { shelf }())
+    }
+
     /// Reproduces the window server fault behind "the shelf only comes down
     /// on one desktop": the shelf window is still visible to AppKit, but it
     /// belongs to one Space only, so ordering it in on another does nothing.
