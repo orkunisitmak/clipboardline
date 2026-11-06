@@ -8,6 +8,8 @@ const PUBLIC_KEY = 's9DO901wav4VK/hfnLROxJYk4+oNFYvxdOK974E3PgI=';
 const REPOSITORY = 'orkunisitmak/clipboardline-desktop';
 const UPDATE_ARGUMENTS=Object.freeze(['/S','--updated','--force-run']);
 const REFRESH_THROTTLE=60_000;
+// Match the macOS Sparkle cache grace period while preserving the active package.
+const UPDATE_CACHE_RETENTION=10*24*60*60*1000;
 // Offline OCR/semantic models increase the signed installer size. Permit a
 // bounded five-minute socket wait; the authenticated exact byte/PE/hash gates
 // still apply and feed checks retain their short network timeout.
@@ -64,6 +66,16 @@ class Updates {
     finally{if(fs.existsSync(temporary))fs.unlinkSync(temporary);}
   }
   saveQuietly(){try{this.save();}catch(err){console.warn('Update cache save error:',err?.message||err);}}
+  pruneInstallerCache(keepFile){
+    try{
+      this.safeDirectory();const now=this.clock();if(!Number.isFinite(now))return;const cutoff=now-UPDATE_CACHE_RETENTION;
+      for(const name of fs.readdirSync(this.directory)){
+        if(!/^ClipBoardLine-Setup-\d+\.exe$/.test(name)&&!/^ClipBoardLine-Setup-\d+\.exe\.tmp-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(name))continue;
+        const file=path.join(this.directory,name);if(keepFile&&path.resolve(file)===path.resolve(keepFile))continue;
+        try{const stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink()||stat.mtimeMs>=cutoff)continue;fs.unlinkSync(file);}catch{}
+      }
+    }catch{}
+  }
   restore(){
     try{
       if(fs.lstatSync(this.directory).isSymbolicLink())return;const cache=this.cachePath(),stat=fs.lstatSync(cache);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>400000)return;
@@ -108,7 +120,7 @@ class Updates {
     if(!this.manifest)return Promise.reject(new Error('Check for a signed update first'));
     const manifest={...this.manifest};
     const operation=Promise.resolve().then(async()=>{
-      if(this.installer){try{return verifiedInstaller(this.installer,manifest);}catch{this.installer=null;}}
+      if(this.installer){try{const file=verifiedInstaller(this.installer,manifest);this.pruneInstallerCache(file);return file;}catch{this.installer=null;}}
       this.set({status:'downloading',message:'Downloading verified update…',error:null});
       let temporary;
       try {
@@ -117,7 +129,7 @@ class Updates {
         this.safeDirectory();const destination=path.join(this.directory,`ClipBoardLine-Setup-${manifest.build}.exe`);
         if(fs.existsSync(destination)&&fs.lstatSync(destination).isSymbolicLink())throw new Error('Unsafe update installer');
         temporary=destination+'.tmp-'+crypto.randomUUID();fs.writeFileSync(temporary,response.bytes,{flag:'wx',mode:0o600});fs.renameSync(temporary,destination);temporary=null;
-        this.installer=verifiedInstaller(destination,manifest);this.save();this.set({status:'ready',message:'Verified update is ready to install.',error:null});return destination;
+        this.installer=verifiedInstaller(destination,manifest);this.save();this.pruneInstallerCache(this.installer);this.set({status:'ready',message:'Verified update is ready to install.',error:null});return destination;
       } catch(error) {this.installer=null;this.set({status:'available',error:String(error.message).slice(0,300),message:'Update download failed: '+String(error.message).slice(0,300)});throw error;}
       finally{if(temporary&&fs.existsSync(temporary))fs.unlinkSync(temporary);}
     });
