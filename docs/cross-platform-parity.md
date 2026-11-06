@@ -57,6 +57,8 @@ declared character set (byte-order mark, `Content-Type`, XHTML declaration, earl
 Turkish letters.
 `image-recopy-dedupe` requires copying the same image again to keep one Library item,
 moved to the front with its pin, name, tags and folders.
+`text-with-nul` requires a text that reaches the Text shelf with a NUL character to be stored on both
+platforms; a Windows copy from another app ends at its first NUL, because CF_UNICODETEXT does.
 `mixed-selection-pin` requires Pin on a
 selection of pinned and unpinned items to pin all of them, and to unpin only
 when every selected item is already pinned; the Library keyboard contract executes
