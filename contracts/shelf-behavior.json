@@ -30,6 +30,12 @@
     ],
     "sharedBehaviors": [
       {
+        "id": "rich-linked-url-capture",
+        "behavior": "When link capture is enabled, copying a rich link with a display label stores the safe HTTP(S) destination as a link instead of the label. If link capture is disabled, the original text stays text; private clipboard markers and ambiguous links are not admitted.",
+        "macos": "TextClipboardWatcher prefers NSPasteboard.URL over the accompanying string representation, validates with LinkIdentity.standalone and respects capture settings and private types.",
+        "windows": "readClipboardContent prefers the native Electron bookmark, then one valid text/uri-list URL or HTML anchor href over the plain-text label, validates with plainURL and checks the clipboard generation. clipboard-admission.test.cjs covers the shared synthetic representation cases."
+      },
+      {
         "id": "localized-notices",
         "behavior": "Main-process notices (copy, export, import and error results) and the browsing-shortcut conflict message are shown in the language selected in Settings, using the shared catalog keys, including the \"Exported %d · failed %d\" and \"This shortcut is already used for %@\" templates with their real counts and action names.",
         "macos": "Notices and the shortcut conflict use L(...) and String(format:) with the shared Localizable.strings catalog.",
