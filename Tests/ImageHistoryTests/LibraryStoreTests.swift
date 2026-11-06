@@ -8,6 +8,33 @@ import XCTest
     private func store(_ f: SyntheticFixture) throws -> LibraryStore {
         try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date }, moveToTrash: fixtureTrash(f.folder))
     }
+    func testPruneDropsAnUnsavedScreenshotWhoseFileWasDeleted() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let deletedFile = try f.image(owned: false), keptFile = try f.image(owned: false)
+        let deleted = try library.captureImage(deletedFile)
+        f.date.addTimeInterval(1)
+        let kept = try library.captureImage(keptFile)
+        try FileManager.default.removeItem(at: deletedFile)
+        try library.prune()
+        XCTAssertNotNil(try library.item(deleted.id)?.deletedAt)
+        XCTAssertFalse(try library.item(deleted.id)?.onShelf == true)
+        XCTAssertNil(try library.item(kept.id)?.deletedAt)
+        XCTAssertTrue(try library.item(kept.id)?.onShelf == true)
+    }
+    func testPruneKeepsASavedScreenshotWhoseFileWasDeleted() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let record = try library.captureImage(try f.image(owned: false))
+        try library.retain([record.id])
+        let saved = try XCTUnwrap(try library.item(record.id))
+        let savedPath = try XCTUnwrap(saved.path)
+        try FileManager.default.removeItem(atPath: savedPath)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: savedPath))
+        try library.prune()
+        XCTAssertNil(try library.item(record.id)?.deletedAt)
+        XCTAssertTrue(try library.item(record.id)?.onShelf == true)
+    }
     func testMigrationPreservesTextBytesDatesFavoritesIDsAndOriginals() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let image = try f.image(owned: false), bytes = try Data(contentsOf: image)
