@@ -217,8 +217,8 @@ function focusFirst({preferImages=false}={}) {
  }
  const first=currentItems()[0];ui.selected=new Set(first?[first.id]:[]);ui.focus=first?.id||null;ui.anchor=ui.focus;ui.pages={image:0,text:0,link:0};
 }
-function clearShelfSession(){ui.search='';ui.searchOpen=false;ui.searchEditing=false;ui.selecting=false;ui.selected.clear();ui.focus=null;ui.anchor=null;ui.pages={image:0,text:0,link:0};}
-function resetShelfSession(){clearShelfSession();focusFirst({preferImages:true});}
+function clearShelfSession(){document.body?.classList?.remove?.('dragging-out');ui.search='';ui.searchOpen=false;ui.searchEditing=false;ui.selecting=false;ui.selected.clear();ui.focus=null;ui.anchor=null;ui.pages={image:0,text:0,link:0};}
+function resetShelfSession(){document.body?.classList?.remove?.('dragging-out');clearShelfSession();focusFirst({preferImages:true});}
 function reconcileVisibleShelves(previousKinds){
  if(ui.view!=='shelves')return;
  const kinds=visibleKinds();for(const kind of kinds)if(!previousKinds.includes(kind))ui.pages[kind]=0;
@@ -266,6 +266,7 @@ function applyState(next,{initial=false}={}) {
  if(previousView==='library'&&next.view&&next.view!=='library')librarySelection={focus:ui.focus,anchor:ui.anchor,selected:[...ui.selected]};
  const wasHidden=lastVisibility===false&&next.windowVisible===true; lastVisibility=next.windowVisible ?? lastVisibility; const previousSettings=state.settings;state=next;for(const [property,key]of Object.entries({list:'libraryListMode',inspectorVisible:'libraryInspectorVisible',sidebarVisible:'librarySidebarVisible',sidebarWidth:'librarySidebarWidth',inspectorWidth:'libraryInspectorWidth',listColumns:'libraryListColumns'})){if(next.settings[key]!=null&&(firstState||(property==='listColumns'?JSON.stringify(previousSettings?.[key])!==JSON.stringify(next.settings[key]):previousSettings?.[key]!==next.settings[key])))ui[property]=next.settings[key];} if(['shelves','library','settings'].includes(next.view))ui.view=next.view;
  const fresh=wasHidden||previousView!==ui.view||firstState;
+  if(wasHidden)document.body?.classList?.remove?.('dragging-out');
  if(ui.view==='shelves'&&next.windowVisible===false)clearShelfSession();
  else if(fresh&&!ui.preview){if(ui.view==='shelves')resetShelfSession();else if(ui.view==='library'){if(previousView!=='library'){ui.focus=librarySelection?.focus||null;ui.anchor=librarySelection?.anchor||null;ui.selected=new Set(librarySelection?.selected||[]);}reconcileLibraryFocus();}else focusFirst();}
  else if(JSON.stringify(previousKinds)!==JSON.stringify(visibleKinds()))reconcileVisibleShelves(previousKinds);
@@ -296,8 +297,8 @@ function topbar(){
 function shelfPageSize(){const width=Number(window.innerWidth)||1600, cardWidth={small:120,medium:150,large:202}[state.settings.cardSize||'medium'];return Math.max(1,Math.min(9,Math.floor((width-48+24)/(cardWidth+24))));}
 function card(value,index,library=false,staticSelection=false) {
  const image=thumbnail(value),name=title(value),dragHint=t(library?'Drag to add to a folder · Alt+drag to export file copies':value.kind==='image'?'Drag to export file copies':'Drag to insert text · Alt+drag to export file copies');
- const media=value.kind==='image'?`<img src="${attr(image)}" alt="${attr(name)}" loading="lazy" draggable="false">${recording(value)?`<span class="recording-badge" aria-label="${attr(t('Video'))}">${icon('play')}<span>${mediaTime(value.durationMs)}</span></span>`:''}`:value.kind==='text'?`<div class="card-body">${esc(value.text)}</div>`:`${image?`<img class="link-thumb" src="${attr(image)}" alt="" loading="lazy" draggable="false">`:`<div class="link-placeholder">${icon('link')}</div>`}<div class="card-title">${esc(name)}</div><div class="card-caption">${esc(hostname(value.url))}</div>`;
- const body=library&&ui.list?`<div class="list-title"><div class="list-thumbnail kind-${value.kind}">${value.kind==='text'?icon('text'):image?`<img src="${attr(image)}" alt="" loading="lazy" draggable="false">`:icon(value.kind)}</div><span class="card-title">${esc(name)}</span></div><span class="list-kind">${esc(t(TITLES[value.kind]))}</span><span class="list-tags">${esc((value.tags||[]).join(', '))}</span><time class="list-added" datetime="${attr(new Date(value.createdAt).toISOString())}">${esc(new Date(value.createdAt).toLocaleDateString())}</time>`:library?`<div class="library-media">${media}</div><div class="library-card-info"><div class="card-title">${esc(name)}</div><span class="card-caption">${icon(value.kind)}${esc(value.kind==='link'?hostname(value.url):t(TITLES[value.kind]))}</span>${value.tags?.length?`<span class="card-tags">${value.tags.slice(0,2).map(tag=>`<span class="tag">${esc(tag)}</span>`).join('')}</span>`:''}</div>`:`${value.kind==='text'&&value.name?`<div class="card-title">${esc(value.name)}</div>`:''}${media}${value.kind==='image'&&value.name?`<div class="card-caption">${esc(value.name)}</div>`:''}`;
+ const media=value.kind==='image'?`<img src="${attr(image)}" alt="${attr(name)}" loading="lazy">${recording(value)?`<span class="recording-badge" aria-label="${attr(t('Video'))}">${icon('play')}<span>${mediaTime(value.durationMs)}</span></span>`:''}`:value.kind==='text'?`<div class="card-body">${esc(value.text)}</div>`:`${image?`<img class="link-thumb" src="${attr(image)}" alt="" loading="lazy">`:`<div class="link-placeholder">${icon('link')}</div>`}<div class="card-title">${esc(name)}</div><div class="card-caption">${esc(hostname(value.url))}</div>`;
+ const body=library&&ui.list?`<div class="list-title"><div class="list-thumbnail kind-${value.kind}">${value.kind==='text'?icon('text'):image?`<img src="${attr(image)}" alt="" loading="lazy">`:icon(value.kind)}</div><span class="card-title">${esc(name)}</span></div><span class="list-kind">${esc(t(TITLES[value.kind]))}</span><span class="list-tags">${esc((value.tags||[]).join(', '))}</span><time class="list-added" datetime="${attr(new Date(value.createdAt).toISOString())}">${esc(new Date(value.createdAt).toLocaleDateString())}</time>`:library?`<div class="library-media">${media}</div><div class="library-card-info"><div class="card-title">${esc(name)}</div><span class="card-caption">${icon(value.kind)}${esc(value.kind==='link'?hostname(value.url):t(TITLES[value.kind]))}</span>${value.tags?.length?`<span class="card-tags">${value.tags.slice(0,2).map(tag=>`<span class="tag">${esc(tag)}</span>`).join('')}</span>`:''}</div>`:`${value.kind==='text'&&value.name?`<div class="card-title">${esc(value.name)}</div>`:''}${media}${value.kind==='image'&&value.name?`<div class="card-caption">${esc(value.name)}</div>`:''}`;
  const width=Number(window.innerWidth)||1600,cw={small:120,medium:150,large:202}[state.settings.cardSize||'medium'],fraction=Math.max(0,Math.min(1,(24+cw/2+index*(cw+24))/width)),sag=4*Math.min(30,width*.018)*fraction*(1-fraction);
  return `<article class="card kind-${value.kind} ${!staticSelection&&ui.focus===value.id?'focused':''} ${!staticSelection&&ui.selected.has(value.id)?'selected':''} ${library?'library-card':''} ${recording(value)?'recording-card':''}" ${!library?`style="--sag:${sag.toFixed(2)}px"`:''} data-item-id="${attr(value.id)}" tabindex="${library?(ui.focus===value.id?0:-1):0}" role="option" aria-selected="${!staticSelection&&ui.selected.has(value.id)}" aria-label="${attr(name)}" aria-description="${attr(dragHint)}" title="${attr(dragHint)}" draggable="true">${body}<div class="card-controls">${library?iconButton('card-copy','copy','Copy',`data-id="${value.id}" tabindex="-1"`):''}<button data-action="card-pin" data-id="${value.id}" class="${value.pinned?'pinned':''}" ${library?'tabindex="-1"':''} aria-label="${attr(t(value.pinned?'Unpin':'Pin'))}" title="${attr(t(value.pinned?'Unpin':'Pin'))}">${icon('pin')}</button><button data-action="card-remove" data-id="${value.id}" ${library?'tabindex="-1"':''} aria-label="${attr(t('Take down'))}" title="${attr(t('Take down'))}">${icon('close')}</button></div>${!library&&index<9?`<span class="card-number" aria-hidden="true">${index+1}</span>`:''}</article>`;
 }
@@ -412,8 +413,8 @@ function updateShelfSelection(){
   if(card.getAttribute('aria-selected')!==String(selected))card.setAttribute('aria-selected',String(selected));
  }
 }
-function render() { if(preserveLibraryDrag())return;const libraryFocus=libraryFocusIdentity();const scrollPositions=captureScrollPositions();queueLibraryImageSearch();const focused=document.activeElement;const detailID=focused?.dataset?.detailId;const selected=detailID?selectedIds():[];const reuseDetail=!!detailID&&ui.view==='library'&&ui.inspectorVisible&&!ui.preview&&!ui.modal&&state.windowVisible!==false&&selected.length===1&&selected[0]===detailID;const identity=focused?.dataset?.focus;const focusedId=focused?.id;const oldValue=isEditor(focused)?focused.value:null;const selection=(identity||focusedId)&&typeof focused.selectionStart==='number'?[focused.selectionStart,focused.selectionEnd]:null;document.body.className=`view-${ui.view}`;root.className=`${state.settings.theme==='neutral'?'neutral':''} size-${state.settings.cardSize||'medium'}`;const html=`<div class="shell ${ui.view==='shelves'?'shelf-shell':'normal-shell'}">${topbar()}${ui.view==='settings'?settings():ui.view==='library'?library():shelves()}${ui.view==='library'?`<footer class="statusbar"><span>${esc(selectedLabel(selectedIds().length))}</span><div class="grow"></div><div class="key-legend"><span><kbd>Space</kbd> ${esc(t('Preview'))}</span><span><kbd>Enter</kbd> ${esc(t('Copy'))}</span><span>${keyHint('pin')} ${esc(t('Pin'))}</span><span>${keyHint('actions')} ${esc(t('Actions'))}</span></div></footer>`:''}</div>`;if(!renderShelfTree(html)&&!renderWithActiveInspector(html,focused,reuseDetail))root.innerHTML=html;updateShelfSelection();root.setAttribute('aria-busy','false');renderOverlay();if(identity||focusedId){let next=focusedId?(detailID?root.querySelector('#'+focusedId):document.getElementById(focusedId)):root.querySelector(`[data-focus="${identity}"]`);if(detailID)next=null;else if(next&&oldValue!=null&&isEditor(next))next.value=oldValue;next?.focus({preventScroll:true});if(selection&&next?.setSelectionRange)try{next.setSelectionRange(...selection);}catch{}}restoreScrollPositions(scrollPositions);restoreLibraryFocus(libraryFocus);}
-// Folded-name order of the native Library, by code point: the same fold as search, so ligatures and circled digits stay as typed.
+function render() { if(preserveLibraryDrag())return;const libraryFocus=libraryFocusIdentity();const scrollPositions=captureScrollPositions();queueLibraryImageSearch();const focused=document.activeElement;const detailID=focused?.dataset?.detailId;const selected=detailID?selectedIds():[];const reuseDetail=!!detailID&&ui.view==='library'&&ui.inspectorVisible&&!ui.preview&&!ui.modal&&state.windowVisible!==false&&selected.length===1&&selected[0]===detailID;const identity=focused?.dataset?.focus;const focusedId=focused?.id;const oldValue=isEditor(focused)?focused.value:null;const selection=(identity||focusedId)&&typeof focused.selectionStart==='number'?[focused.selectionStart,focused.selectionEnd]:null;const draggingClass=document.body?.classList?.contains?.('dragging-out')?' dragging-out':'';document.body.className=`view-${ui.view}${draggingClass}`;root.className=`${state.settings.theme==='neutral'?'neutral':''} size-${state.settings.cardSize||'medium'}`;const html=`<div class="shell ${ui.view==='shelves'?'shelf-shell':'normal-shell'}">${topbar()}${ui.view==='settings'?settings():ui.view==='library'?library():shelves()}${ui.view==='library'?`<footer class="statusbar"><span>${esc(selectedLabel(selectedIds().length))}</span><div class="grow"></div><div class="key-legend"><span><kbd>Space</kbd> ${esc(t('Preview'))}</span><span><kbd>Enter</kbd> ${esc(t('Copy'))}</span><span>${keyHint('pin')} ${esc(t('Pin'))}</span><span>${keyHint('actions')} ${esc(t('Actions'))}</span></div></footer>`:''}</div>`;if(!renderShelfTree(html)&&!renderWithActiveInspector(html,focused,reuseDetail))root.innerHTML=html;updateShelfSelection();root.setAttribute('aria-busy','false');renderOverlay();if(identity||focusedId){let next=focusedId?(detailID?root.querySelector('#'+focusedId):document.getElementById(focusedId)):root.querySelector(`[data-focus="${identity}"]`);if(detailID)next=null;else if(next&&oldValue!=null&&isEditor(next))next.value=oldValue;next?.focus({preventScroll:true});if(selection&&next?.setSelectionRange)try{next.setSelectionRange(...selection);}catch{}}restoreScrollPositions(scrollPositions);restoreLibraryFocus(libraryFocus);}
+// Folded-name order of the native Library: NFKD, no marks, locale-independent lower case, by code point.
 const foldedCodes=value=>Array.from(fold(value),character=>character.codePointAt(0));
 const compareFoldedOnly=(a,b)=>{const left=foldedCodes(a),right=foldedCodes(b);for(let at=0;at<Math.min(left.length,right.length);at++)if(left[at]!==right[at])return left[at]-right[at];return left.length-right.length;};
 const compareFolded=(a,b)=>compareFoldedOnly(a,b)||(a<b?-1:a>b?1:0);
@@ -946,9 +947,34 @@ document.addEventListener('dragstart',event=>{
  if(!ui.selected.has(value.id))select(value);
  const values=selectedIds().map(item).filter(value=>value&&!value.trashedAt),ids=values.map(value=>value.id);
  if(!ids.length){event.preventDefault();if(deferred)render();return;}
- const text=values.filter(value=>value.kind!=='image').map(value=>value.kind==='link'?value.url:value.text).join('\n\n');event.dataTransfer.effectAllowed='copy';if(text)event.dataTransfer.setData('text/plain',text);event.dataTransfer.setData(libraryDragType,JSON.stringify(ids));
- if(ui.view==='library'&&!event.altKey){libraryDragIDs=ids;libraryRenderDeferred=deferred;}
- else if(event.altKey||values.some(value=>value.kind==='image')){event.preventDefault();if(deferred)render();void command('startDrag',{ids}).then(result=>{if(!result)toast(t('Use Copy or Export to transfer these items.'));});}
+ if(typeof card?.addEventListener==='function'){
+  const onCardDragEnd=event=>{try{card.removeEventListener('dragend',onCardDragEnd);}catch{}document.body?.classList?.remove?.('dragging-out');clearLibraryDrag();const completed=Boolean(event?.dataTransfer&&event.dataTransfer.dropEffect!=='none');if(ui.view==='shelves')void command('dragEndOverlay',{completed});};
+  card.addEventListener('dragend',onCardDragEnd);
+ }
+  const text=values.filter(value=>value.kind!=='image').map(value=>value.kind==='link'?value.url:value.text).join('\n\n');
+ event.dataTransfer.effectAllowed='copy';
+ if(text){
+  try{event.dataTransfer.setData('text/plain',text);}catch{}
+  try{event.dataTransfer.setData('Text',text);}catch{}
+  try{event.dataTransfer.setData('text/html',esc(text));}catch{}
+ }
+ event.dataTransfer.setData(libraryDragType,JSON.stringify(ids));
+ const hasImage=values.some(value=>value.kind==='image');
+ if(ui.view==='library'&&!event.altKey){
+  libraryDragIDs=ids;libraryRenderDeferred=deferred;
+ }else if(hasImage||event.altKey){
+  event.preventDefault();
+  if(deferred)render();
+  if(ui.view==='shelves')document.body?.classList?.add?.('dragging-out');
+  void command('startDrag',{ids}).then(result=>{if(!result)toast(t('Use Copy or Export to transfer these items.'));}).finally(()=>{document.body?.classList?.remove?.('dragging-out');});
+ }else{
+  const links=values.filter(value=>value.kind==='link').map(value=>value.url);
+  if(links.length)try{event.dataTransfer.setData('text/uri-list',links.join('\r\n'));}catch{}
+  if(ui.view==='shelves'){
+   document.body?.classList?.add?.('dragging-out');
+   void command('dragStartOverlay');
+  }
+ }
 });
 document.addEventListener('dragover',event=>{const folder=libraryDropFolder(event);if(!folder){clearFolderDropTarget();return;}event.preventDefault();event.dataTransfer.dropEffect='copy';if(folderDropTarget!==folder.row){clearFolderDropTarget();folderDropTarget=folder.row;folderDropTarget.classList.add('folder-drop-target');}});
 document.addEventListener('dragleave',event=>{if(folderDropTarget&&!folderDropTarget.contains(event.relatedTarget))clearFolderDropTarget();});
@@ -962,7 +988,12 @@ document.addEventListener('drop',async event=>{
   await command('folder',{ids,folderId:folder.id,pinning:false});
  }finally{if(deferred)render();}
 });
-document.addEventListener('dragend',clearLibraryDrag);
+document.addEventListener('dragend',event=>{
+ document.body?.classList?.remove?.('dragging-out');
+ clearLibraryDrag();
+ const completed=Boolean(event.dataTransfer&&event.dataTransfer.dropEffect!=='none');
+ if(ui.view==='shelves')void command('dragEndOverlay',{completed});
+});
 window.addEventListener('blur',clearLibraryDrag);
 window.addEventListener('resize',()=>{if(ui.view==='shelves'&&!dirtyPreview()){const current=item(ui.focus);if(current)select(current);render();}});
 window.addEventListener('blur',()=>{if(ui.modal?.type==='record')closeModal();ui.spacePan=false;finishPointerGesture();});

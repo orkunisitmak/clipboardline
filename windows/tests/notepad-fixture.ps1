@@ -174,7 +174,12 @@ try {
   $keepRunning=$true
   while ($keepRunning) {
     if ([System.IO.File]::Exists($configuration.commands)) {
-      $command=[System.IO.File]::ReadAllText($configuration.commands)|ConvertFrom-Json
+      $command=$null
+      for ($readAttempt = 1; $readAttempt -le 20; $readAttempt++) {
+        try { $command=[System.IO.File]::ReadAllText($configuration.commands)|ConvertFrom-Json; break }
+        catch [System.IO.IOException] { Start-Sleep -Milliseconds 25 }
+      }
+      if ($null -eq $command) { continue }
       if ($command.serial -and $command.serial -ne $script:status.lastSerial) {
         $script:status.lastSerial=[string]$command.serial;$script:status.commandError=''
         try {
