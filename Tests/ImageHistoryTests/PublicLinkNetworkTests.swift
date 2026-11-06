@@ -164,6 +164,22 @@ import XCTest
         XCTAssertEqual(valid.thumbnailURL?.absoluteString, "https://public.example.org/a.png")
     }
 
+    func testTextareaMarkupIsNotPageMetadata() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let pages = [
+            "<textarea><meta property='og:title' content='injected'></textarea><title>real</title>",
+            "<title>real</title><textarea><meta property='og:title' content='injected'>",
+            "<script>const t = '<textarea>';</script><title>real</title>",
+            "<textarea-x></textarea-x><meta property='og:title' content='real'>",
+            "<textarea data=\(String(repeating: "x", count: 3000))><meta property='og:title' content='injected'></textarea><title>real</title>",
+            "<textarea\u{A0}x><meta property='og:title' content='real'>",
+            "<textarea data-x=\"> </textarea>\"><meta property='og:title' content='injected'></textarea><title>real</title>",
+        ]
+        for page in pages {
+            XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(page.utf8), url: url).title, "real", page)
+        }
+    }
+
     func testEmptyTitleCandidatesFallThroughToTheNextOne() throws {
         let url = URL(string: "https://public.example.org/page")!
         let twitter = try PublicLinkHTMLMetadata(data: Data("<title>Page</title><meta property='og:title' content='  '><meta name='twitter:title' content='Tweet'>".utf8), url: url)
