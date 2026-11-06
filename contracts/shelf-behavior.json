@@ -84,6 +84,12 @@
         "windows": "Store.modify('pin') pins every selected item when any is unpinned (targetPin); model.test.cjs covers a mixed selection and renderer-ui.test.cjs runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json."
       },
       {
+        "id": "search-sort",
+        "behavior": "Starting a Library search while the sort is Newest first switches the sort to Best match, and clearing the search while it is Best match returns it to Newest first, so matches by meaning are ranked by relevance.",
+        "macos": "LibraryModel.applyPendingSearch switches the query sort between newest and relevance when the search starts or is cleared; LibraryNativeTests.testClosingDuringSearchDebounceRestoresQueryAndFailedDraftBlocksSuspension covers it.",
+        "windows": "syncSearchSort() in renderer.js makes the same switch before each Library render; library-ui.test.cjs checks the sort select while typing and clearing a search."
+      },
+      {
         "id": "subfolder-title",
         "behavior": "The Library title of a subfolder is the names of all its ancestors and its own name, outermost first, joined with \" / \" (for example Parent / Child, or Parent / Middle / Child for imported deeper folders), so same-named subfolders of different parents can be told apart; a top-level folder shows only its name.",
         "macos": "LibraryModel.title builds the path by walking the whole LibraryCollection.parentID chain (cycle-safe) and shows it as the Library window title; LibraryInteractionTests.testSubfolderTitleIncludesItsParentLikeWindows covers it.",
