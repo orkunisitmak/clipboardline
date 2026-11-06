@@ -127,3 +127,83 @@ test('shared image cache miss reassigns indexing to the surviving duplicate reco
  assert.equal(f.search.state.indexing,false);
  await f.search.stop();
 });
+
+test('idle worker hibernates after ONNX inference to reclaim memory and respawns on demand',async()=>{
+ const workers=[];
+ const records=[{id,kind:'image',imageFile:key+'.png'}];
+ const search=new ImageSearch({
+  modelDirectory:'unused',
+  cacheDirectory:'unused',
+  idleTimeoutMs:20,
+  items:()=>records,
+  readImage:()=>({bitmap:new Uint8Array(128*128*4),width:128,height:128}),
+  workerFactory:()=>{const w=new FakeWorker();w.response=m=>m.action==='has'?false:m.action==='search'?{ids:[id],scores:[{id,score:.91}]}:true;workers.push(w);return w;}
+ });
+ await search.ready;
+ assert.equal(workers.length,1);
+ search.refresh();
+ for(let i=0;i<10;i++)await tick();
+ assert.equal(search.known.has(key),true);
+ await new Promise(resolve=>setTimeout(resolve,45));
+ assert.equal(workers[0].terminated,true,'idle worker must terminate to release WASM memory');
+ assert.equal(search.worker,null);
+ assert.equal(search.state.available,true);
+ const result=await search.search('red square',[id]);
+ assert.equal(workers.length,2,'search must transparently respawn worker');
+ assert.deepEqual(result.ids,[id]);
+ await search.stop();
+});
+
+test('real worker writes cached embedding before hibernation and respawned worker scores from disk cache',async()=>{
+ const crypto=require('node:crypto');
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-hibernate-cache-'));
+ const modelDirectory=path.join(directory,'models'),cacheDirectory=path.join(directory,'cache'),ortModule=path.join(directory,'mock-ort.cjs');
+ fs.mkdirSync(modelDirectory,{recursive:true});
+ const assetFiles={
+  'mobileclip-s2-image.onnx':'synthetic-image-model',
+  'mobileclip-s2-text.onnx':'synthetic-text-model',
+  'clip-vocab.json':JSON.stringify({'red</w>':11,'square</w>':12}),
+  'clip-merges.txt':'#version\nr e\nre d</w>\n',
+  'model-source.json':JSON.stringify({version:'synthetic-v1'})
+ };
+ const filesConfig={};
+ for(const [name,content]of Object.entries(assetFiles)){
+  const file=path.join(modelDirectory,name);
+  fs.writeFileSync(file,content);
+  const bytes=Buffer.byteLength(content),sha256=crypto.createHash('sha256').update(content).digest('hex');
+  filesConfig[name]={bytes,sha256};
+ }
+ fs.writeFileSync(ortModule,`'use strict';
+class Tensor{constructor(type,data,dims){this.type=type;this.data=data;this.dims=dims;}dispose(){}}
+const InferenceSession={async create(){return{outputNames:['embedding'],async run(){const data=new Float32Array(512);data[0]=1;return{embedding:new Tensor('float32',data,[1,512])};},async release(){}};}};
+module.exports={Tensor,InferenceSession,env:{logLevel:'error',wasm:{}}};
+`);
+ const records=[{id,kind:'image',imageFile:key+'.png'}];
+ let reads=0;
+ const search=new ImageSearch({
+  modelDirectory,
+  cacheDirectory,
+  ortModule,
+  modelConfig:{schemaVersion:1,version:'synthetic-v1',files:filesConfig},
+  idleTimeoutMs:40,
+  items:()=>records,
+  readImage:()=>{reads++;const bitmap=new Uint8Array(256*256*4);bitmap.fill(200);return{bitmap,width:256,height:256};}
+ });
+ try{
+  assert.equal(await search.ready,true);
+  search.refresh();
+  for(let i=0;i<40&&!search.known.has(key);i++)await new Promise(resolve=>setTimeout(resolve,15));
+  assert.equal(search.known.has(key),true);
+  assert.equal(reads,1);
+  assert.equal(fs.existsSync(path.join(cacheDirectory,key+'.bin')),true,'first worker must persist embedding to cacheDirectory');
+  for(let i=0;i<20&&search.worker!==null;i++)await new Promise(resolve=>setTimeout(resolve,15));
+  assert.equal(search.worker,null,'real worker must hibernate after indexing');
+  const result=await search.search('red square',[id]);
+  assert.equal(reads,1,'respawned worker must load cached embedding from disk without re-reading pixels');
+  assert.deepEqual(result.ids,[id]);
+  assert.ok(Math.abs(result.scores[0].score-1)<1e-5);
+ }finally{
+  await search.stop();
+  fs.rmSync(directory,{recursive:true,force:true});
+ }
+});
