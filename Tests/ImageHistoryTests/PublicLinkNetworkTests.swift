@@ -191,6 +191,14 @@ import XCTest
         let html = "<meta property='og:image:secure_url' content='http://public.example.org/secure.png'><meta property='og:image' content='/a.png'>"
         XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url).thumbnailURL?.absoluteString, "https://public.example.org/a.png")
     }
+
+    func testUnclosedScriptOgTitleIsNotThePreviewTitle() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let unclosed = try PublicLinkHTMLMetadata(data: Data(#"<html><title>Real</title><script><meta property='og:title' content='script'>"#.utf8), url: url)
+        XCTAssertEqual(unclosed.title, "Real")
+        let literalTitle = try PublicLinkHTMLMetadata(data: Data(#"<script>const m="<title>";<meta property='og:title' content='script'>"#.utf8), url: url)
+        XCTAssertNil(literalTitle.title)
+    }
 }
 
 #if !STANDALONE_TESTS
