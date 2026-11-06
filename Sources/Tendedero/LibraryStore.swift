@@ -780,6 +780,18 @@ extension String {
     }
     /// A mixed selection pins every item, as on Windows and as the action bar's
     /// Unpin title assumes; only a selection that is already fully pinned unpins.
+    /// True when every id exists and is pinned; reads only the favorite column, in chunks under SQLite's variable limit.
+    func allPinned(_ ids: [UUID]) throws -> Bool {
+        var seen = Set<UUID>(); let unique = ids.filter { seen.insert($0).inserted }
+        guard !unique.isEmpty else { return false }
+        var pinned = 0
+        for start in stride(from: 0, to: unique.count, by: 500) {
+            let chunk = unique[start..<min(start + 500, unique.count)]
+            let rows = try db.rows("SELECT COUNT(*) AS n FROM items WHERE favorite=1 AND id IN (" + chunk.map { _ in "?" }.joined(separator: ",") + ")", chunk.map { .text($0.uuidString) })
+            if case .integer(let count)? = rows.first?["n"] { pinned += Int(count) }
+        }
+        return pinned == unique.count
+    }
     func toggleFavorite(_ ids: [UUID]) throws {
         let pin = try records(ids).contains { !$0.favorite }
         try mutate(ids) { $0.favorite = pin; if pin && $0.retainedAt == nil { $0.retainedAt = self.now() } }
