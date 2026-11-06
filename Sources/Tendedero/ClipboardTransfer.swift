@@ -7,12 +7,14 @@ import AppKit
         case unreadableImage, tooLarge
         var errorDescription: String? { self == .tooLarge ? L("This selection is too large to copy; select fewer items") : L("Selected files could not be read; nothing was copied") }
     }
+    /// A stored image is copied at any size the shelf accepted; only the clipboard payload is bounded.
+    private static let maximumPayloadBytes = 128 * 1024 * 1024
     static func imageItems(_ urls: [URL]) throws -> [NSPasteboardItem] {
         var total = 0
         return try urls.map { url in
             guard HistoryFiles(inbox: url.deletingLastPathComponent()).isRegularFile(url),
                   let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-                  (isRecordingFile(url) || size <= ClipboardWatcher.maximumDataBytes) else { throw Failure.unreadableImage }
+                  (isRecordingFile(url) || size <= maximumPayloadBytes) else { throw Failure.unreadableImage }
             if isRecordingFile(url) {
                 let item = NSPasteboardItem()
                 item.setString(url.absoluteString, forType: .fileURL)
@@ -28,7 +30,7 @@ import AppKit
                 png = data
             }
             total += png.count
-            guard total <= 128 * 1024 * 1024 else { throw Failure.tooLarge }
+            guard total <= maximumPayloadBytes else { throw Failure.tooLarge }
             let item = NSPasteboardItem()
             item.setData(png, forType: .png)
             item.setString(url.absoluteString, forType: .fileURL)
