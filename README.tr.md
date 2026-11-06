@@ -23,6 +23,7 @@ Görseller, metinler ve linkler elinin altında. Son kopyalarını üç askıda 
 | Özellik | Ne yapar? |
 | --- | --- |
 | **Üç bağımsız askı** | Görselleri, Metinleri ve Linkleri ayrı yatay satırlarda görüntüle. Her askıyı açıp kapat, etkin askıyı değiştir, sabitlenenleri filtrele ve eski kopyalara kaydır. Açılışta yalnız ilk görsel seçilir; Görseller kapalı veya boşsa sonraki görünür dolu askının ilk öğesi seçilir. |
+| **Alan yakalama** | Yakalama kısayoluyla (Ayarlar ⌘9 önerir) tüm ekranlar dondurulup karartılır; fareyle alanı çiz, sonra taşı veya boyutlandır. Üzerine sekiz renkte ok, dikdörtgen, elips, çizgi, kalem, fosforlu kalem ve yazı ekle (A, R, O, D, B, H, T; Shift kare, daire ve 45° çizgi yapar; ⌘Z geri alır). Return, ⌘C ya da çift tıklama alanı PNG görsel olarak panoya kopyalar; ⌘S istediğin yere PNG dosyası olarak kaydeder; Esc veya sağ tık iptal eder. Her yakalama ipe de asılır. ⌘A tüm ekranı seçer, ok tuşları alanı kaydırır. |
 | **Ekran görüntüsü ve pano yakalama** | Ekran görüntülerini anında yakala, en fazla üç ek görsel klasörünü izle ve istersen kopyalanan görsel ya da metinleri topla. Pano görseli ve metni ayrı ayrı etkinleştirilir. Metin ve link kopyaları askıyı açmadan sessizce eklenir. |
 | **Yerel kütüphane** | Izgara ve sütunlu liste görünümleri, klasör/etiket kenar çubuğu ve değişiklikleri otomatik kaydeden ayrıntılar paneli içeren, boyutlandırılabilir normal pencere. Not oluştur; başlıkları ve içeriği düzenle; görsel, metin ve linkleri birlikte düzenle. Tam ekran isteğe bağlıdır. |
 | **Sabitle, adlandır, klasörle ve etiketle** | Sabitleme ve favorileme aynı işlemdir. Sabitlenen, klasöre eklenen veya etiketlenen öğeler normal geçmiş süresinden sonra da korunur. Sanal alt klasörler ve birden çok etiket kullan; seçili öğeleri sırayla adlandırıp sabitle. |
@@ -49,6 +50,7 @@ Bu tablo macOS varsayılanlarını gösterir. Aşağıdaki [Windows kısayol tab
 | --- | --- | --- |
 | `⌃⌥T` | Askıları göster/gizle | Genel; Ayarlar’dan değiştirilebilir. |
 | `⌃⌥S` | Askıları arama odakta aç | Genel; değiştirilebilir veya kapatılabilir. |
+| `Varsayılan kapalı` | Genel kısayolla alan yakala | Ayarlar ⌘9 önerir ya da kendi kısayolunu kaydet. Tüm ekranları karartır, fareyle alanı seçersin; ↩/⌘C panoya kopyalar, ⌘S PNG kaydeder, Esc iptal eder. Ekran Kaydı izni gerekir. |
 | `Varsayılan kapalı` | Kütüphaneyi genel kısayolla aç | Kendi kısayolunu ata; Ayarlar’da ⌃⌥L önerilir. |
 | `Varsayılan kapalı` | Son görseli genel kısayolla kopyala | Kendi kısayolunu ata; ⌃⌥C ve ⌃⇧C hazır seçenekleri bulunur. |
 
@@ -311,7 +313,7 @@ Geçmiş 1.7.2 sürümü; metin/görsel yapıştırma, odağı geri döndürme, 
 | Özellik | macOS | Windows |
 | --- | --- | --- |
 | İçerik askıları ve kütüphane | Yerel AppKit/SwiftUI; görsel/metin/link askıları, ızgara/liste, klasör, etiket ve sabitleme. | Saydam eğri askılar; birleşik araç çubuğu, ızgara/liste, klasör, etiket, sabitleme, not ve açılıp kapanan kenar/ayrıntı panelli normal boyutlandırılabilir kütüphane. |
-| Varsayılan genel kısayollar | ⌃⌥T askılar; ⌃⌥S arama. | Ctrl+Alt+T askılar; Ctrl+Alt+S arama; Ctrl+Alt+A ekran yakalama. Kütüphane ve son görseli kopyalama genel kısayolları atanabilir; varsayılan kapalıdır. |
+| Varsayılan genel kısayollar | ⌃⌥T askılar; ⌃⌥S arama. Alan yakalama ayarlanabilir, varsayılan kapalıdır. | Ctrl+Alt+T askılar; Ctrl+Alt+S arama; Ctrl+Alt+A ekran yakalama. Kütüphane ve son görseli kopyalama genel kısayolları atanabilir; varsayılan kapalıdır. |
 | Yerel kısayol değiştiricileri | Uygulama komutlarında Command (⌘); adlandırma/sayfalarda Option (⌥). | Command yerine Control; Option yerine Alt. Yerel ve genel kısayollar değiştirilebilir. |
 | Pano toplama | Görsel/metin isteğe bağlı; tek URL toplama varsayılan açık, ayarlanabilir. | Görsel/metin toplama varsayılan kapalı, tek URL toplama açıktır. Kaynaklar’dan değiştirilebilir; eski seçimler korunur. Metin ve linkler sessiz eklenir. |
 | Arama ve OCR | Apple Vision OCR; isteğe bağlı özgün MobileCLIP-S2 görsel anlam araması. | Yerel İngilizce/Türkçe Tesseract OCR ve ONNX/WASM ile özgün MobileCLIP-S2 görsel anlam araması. Kütüphanenin metin/görsel/birleşik modları ve kapsam filtreleri çevrimdışı çalışır. |

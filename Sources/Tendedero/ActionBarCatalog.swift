@@ -31,7 +31,7 @@ enum ActionBarMenuAction: String, CaseIterable {
     case searchAll, searchText, searchVisual, daysAny, days7, days30
     case refreshLink, openFile, quickLook, revealFile, saveToDesktop, takeDownLeft, takeDownRight, trimVideo
     case resetZoom, markupUndo, markupRedo, markupDelete, markupClear, markupSave, markupFinish, markupStyles
-    case toggleLine, copyLatestImage, openScreenshotsFolder, checkUpdates, installUpdate, upstreamReleases, quit
+    case toggleLine, captureArea, copyLatestImage, openScreenshotsFolder, checkUpdates, installUpdate, upstreamReleases, quit
 }
 
 @MainActor enum ActionBarCatalog {
@@ -62,6 +62,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         var canInstallUpdate = false
         var globalToggleHint = ""
         var copyLatestHint = ""
+        var captureAreaHint = ""
         var visibleShelves = Set<Shelf>()
         var libraryScope: LibraryQuery.Scope = .saved
         var collections = [LibraryCollection]()
@@ -407,7 +408,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .installUpdate: return require(c.canInstallUpdate, L("No update available"))
         case .clearUnsavedHistory: return require(c.libraryAvailable, L("Library unavailable"))
         case .settings, .settingsGeneral, .settingsHistory, .settingsSources, .settingsShortcuts, .settingsAbout,
-             .toggleLine, .openScreenshotsFolder, .upstreamReleases, .quit: return (true, "")
+             .toggleLine, .captureArea, .openScreenshotsFolder, .upstreamReleases, .quit: return (true, "")
         }
     }
 
@@ -417,6 +418,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .quit: return "⌘Q"
         case .toggleLine: return c.globalToggleHint
         case .copyLatestImage: return c.copyLatestHint
+        case .captureArea: return c.captureAreaHint
         case .markupUndo: return c.isMarkupEditing || (c.isPreview && c.canUndoMarkup) ? "⌘Z" : ""
         case .markupRedo: return c.isMarkupEditing || (c.isPreview && c.canRedoMarkup) ? "⇧⌘Z" : ""
         case .markupDelete: return c.isMarkupEditing ? "⌫ / ⌦" : ""
@@ -515,6 +517,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .markupFinish: return (L("Done") + " · " + L("Image markup"), markup, "checkmark", ["done", "finish", "markup", "bitti", "tamamla", "işaretleme"])
         case .markupStyles: return (L("Annotation style"), markup, "slider.horizontal.3", ["style", "color", "width", "fill", "font", "annotation", "stil", "renk", "kalınlık", "dolgu", "yazı", "işaretleme"])
         case .toggleLine: return (L("Show line"), app, "rectangle.3.group", ["show", "hide", "shelf", "line", "göster", "gizle", "askı"])
+        case .captureArea: return (L("Capture area"), app, "viewfinder", ["capture", "screenshot", "area", "region", "snip", "ekran görüntüsü", "alan", "yakala", "seç"])
         case .copyLatestImage: return (L("Copy latest image"), app, "doc.on.doc", ["copy", "latest", "image", "kopyala", "son", "görsel"])
         case .openScreenshotsFolder: return (L("Open screenshots folder"), app, "folder", ["screenshots", "folder", "open", "ekran görüntüsü", "klasör", "aç"])
         case .checkUpdates: return (L("Check for updates…"), app, "arrow.clockwise", ["check", "update", "release", "kontrol", "güncelleme", "sürüm"])
