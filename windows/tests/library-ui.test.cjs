@@ -455,3 +455,14 @@ test('Library domain filter ignores case, surrounding spaces and dots, www and a
  await f.input('domain-filter','other.org');assert.deepEqual(cards(f),[]);
  await f.input('domain-filter','  ');assert.deepEqual(cards(f),[f.image,f.link]);
 });
+test('the Trash inspector offers no pin, folder or tag actions for a trashed item',async()=>{
+ const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.state.items[1].trashedAt=900;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ await f.key('ArrowDown');
+ const inspector=()=>f.main.match(/<aside class="inspector"[\s\S]*?<\/aside>/)[0],actions=()=>[...inspector().matchAll(/data-action="([^"]+)"/g)].map(match=>match[1]);
+ assert.ok(actions().includes('copy')&&actions().includes('restore'),actions().join());
+ for(const action of ['pin','add-to-folder','tag'])assert.ok(!actions().includes(action),action);
+ assert.doesNotMatch(inspector(),/<h2>/,'a single selection has no multi-selection heading');
+ await f.key('KeyA',{ctrl:true});assert.equal(f.main.match(/class="[^"]*\bselected\b[^"]*"[^>]*data-item-id/g).length,2,'both trashed items are selected');
+ for(const action of ['pin','add-to-folder','tag'])assert.ok(!actions().includes(action),action+' multi');
+ assert.match(inspector(),/<h2>[^<]+<\/h2>/,'the inspector shows the multi-selection heading');
+});
