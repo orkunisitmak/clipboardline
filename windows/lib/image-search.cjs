@@ -87,6 +87,8 @@ class ImageSearch{
  failure(){this.clearIdleTimer();if(this.closed||this.broken)return;this.broken=true;this.state.available=false;this.state.indexing=false;this.state.pending=0;this.queue=[];this.active=null;this.state.error='Offline image search stopped. Reopen ClipBoardLine to try again.';this.resolveReady(false);for(const pending of this.requests.values()){clearTimeout(pending.timer);pending.reject(new Error(this.state.error));}this.requests.clear();this.changed({...this.state});const worker=this.worker;this.worker=null;void worker?.terminate();}
  /**
   * Sends one request to the worker, respawning a hibernated worker first.
+  * Every request waits for the current worker's ready event before posting,
+  * so a respawn's model verification never counts against the timeout.
   * A request that times out after 120 seconds marks search as failed.
   * @param {'has'|'prune'|'index'|'search'} action Worker operation.
   * @param {object} payload Operation input.
@@ -98,7 +100,7 @@ class ImageSearch{
   if(this.closed||this.broken||!this.state.available&&this.state.error)throw new Error('Offline image search is unavailable.');
   this.clearIdleTimer();
   if(!this.worker){const ready=await this.spawnWorker(false);if(!ready||this.closed||this.broken||!this.state.available)throw new Error('Offline image search is unavailable.');}
-  else if(!this.state.available){const ready=await this.ready;if(!ready||this.closed||this.broken||!this.state.available)throw new Error('Offline image search is unavailable.');}
+  else{const ready=await this.ready;if(!ready||this.closed||this.broken||!this.state.available)throw new Error('Offline image search is unavailable.');}
   if(action==='index'||action==='search')this.heavyWorkDone=true;
   const worker=this.worker,id=++this.sequence;
   return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.requests.delete(id);reject(new Error('Offline image search timed out.'));this.failure();void worker?.terminate();},120000);timer.unref?.();this.requests.set(id,{resolve,reject,timer});try{worker.postMessage({id,action,payload},transfer);}catch(error){this.requests.delete(id);clearTimeout(timer);reject(error);}});
