@@ -89,6 +89,7 @@ function shortcutAllowed(action,context=shortcutContext()){
  if(action==='undo')return context==='shelves'||context.endsWith('Preview')&&ui.view==='shelves';
  if(action==='open')return context==='library'||context==='linkPreview';
  if(action==='edit')return context==='textPreview'||context==='library';
+ if(action==='markup'&&context==='shelves')return true;
  if(['markup','crop'].includes(action))return context==='imagePreview'||context==='library';
  if(action==='copyOCR')return context==='shelves'||context==='library'||context==='imagePreview';
  return true;
@@ -699,7 +700,7 @@ case 'open':if(value?.kind==='link')await command('openLink',{id:value.id});brea
 case 'copyOCR':if(value?.kind==='image'&&!recording(value)){toast('Recognizing image text…');const result=await command('ocr',{id:value.id});if(result){const text=result.result?.text||item(value.id)?.ocrText||'';if(text){await command('copyOCR',{id:value.id}).then(copy=>{if(!copy)toast(text.slice(0,160));});}else toast('No readable text found.');}}break;
 case 'edit':if(value?.kind==='text'){if(!ui.preview)await openPreview(value.id);beginTextPreviewEditing(value);}break;
 case 'finish-text':case 'finishEditing':await finishText();break;
-case 'markup':if(recording(value)){if(ui.videoTrim)await cancelVideoTrim();else{if(!ui.preview)await openPreview(value.id);beginVideoTrim();}}else if(value?.kind==='image'){if(ui.editor)await saveImage(true);else{if(!ui.preview)await openPreview(value.id);await beginImageEdit('select');}}break;
+case 'markup':if(!ui.preview&&ui.view==='shelves'&&recording(value))break;if(recording(value)){if(ui.videoTrim)await cancelVideoTrim();else{if(!ui.preview)await openPreview(value.id);beginVideoTrim();}}else if(value?.kind==='image'){if(ui.editor)await saveImage(true);else{if(!ui.preview)await openPreview(value.id);await beginImageEdit('select');}}break;
 case 'crop':if(value?.kind==='image'&&!recording(value)){if(ui.editor?.tool==='crop')cancelImageCrop();else{if(!ui.preview)await openPreview(value.id);await beginImageEdit('crop');}}break;
 case 'actions':openModal({type:'actions',query:'',index:0,contextIds:[...ids],contextFocus:value?.id||null,contextSurface:shortcutContext()});break;
 case 'search':releaseShortcutRecording(ui.modal);ui.modal=null;if(ui.view==='settings')await command('show');if(ui.view!=='library')ui.searchOpen=true;ui.searchEditing=true;render();setTimeout(()=>document.getElementById('search-input')?.focus(),0);break;
