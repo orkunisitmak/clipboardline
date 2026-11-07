@@ -26,6 +26,10 @@ let application,installerObserver,observerOutput;
 let candidatePID=null,installRequestState={status:'not-requested'},candidatePhaseFile;
 const check=(name,details={})=>{report.checks.push({name,passed:true,...details});console.log('PASS '+name);};
 const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+// main.cjs reads the build counter from the packaged package.json, so that file inside the installed
+// archive is what the reopened application would report. The archive is binary, therefore the number is
+// taken from the bytes instead of parsing the container.
+function packedBuild(file){const bytes=fs.readFileSync(file),marker=bytes.indexOf('"clipboardLineBuild"');assert.ok(marker>=0,file+' carries no clipboardLineBuild');const tail=bytes.subarray(marker+19,marker+60).toString('latin1'),digits=/^"?\s*:\s*"?([0-9]+)/.exec(tail);assert.ok(digits,file+' has an unreadable clipboardLineBuild');return Number(digits[1]);}
 async function until(reader,predicate,timeout=120000){const end=Date.now()+timeout;let last;while(Date.now()<end){try{last=await reader();if(predicate(last))return last;}catch{}await new Promise(resolve=>setTimeout(resolve,300));}throw new Error('Timed out waiting for upgrade state: '+JSON.stringify(last));}
 // Resolve Windows 8.3 aliases before the exact WMI path comparison. The
 // temp directory can use RUNNER~1 while WMI reports the same file as runneradmin.
@@ -83,6 +87,8 @@ async function main(){
   const fixture=path.join(temporary,'signed-fixture.json');fs.writeFileSync(fixture,JSON.stringify(envelope));
   application=await electron.launch({executablePath:candidate,args:['--test-mode','--test-data='+userdata],timeout:60000});page=await application.firstWindow();await page.waitForFunction(()=>!!window.clipboardLine);
   await until(()=>application.evaluate(()=>!!global.__clipboardLineTest),Boolean);
+  const candidateState=await page.evaluate(()=>window.clipboardLine.state());assert.equal(candidateState.version,pkg.version);assert.equal(candidateState.build,pkg.clipboardLineBuild,'the running candidate must report the counter it ships with');
+  check('running candidate application reports build '+pkg.clipboardLineBuild+' through state()');
   await application.evaluate(({app},{userdata,publicKey,fixture,installer,previousVersion,previousBuild})=>{
     const fs=process.getBuiltinModule('node:fs'),path=process.getBuiltinModule('node:path');
     const appRequire=process.getBuiltinModule('node:module').createRequire(path.join(app.getAppPath(),'package.json'));
@@ -128,6 +134,8 @@ async function main(){
   check('actual old-install replacement retains text/image bytes, names, pins, tags, opt-out and per-kind retention after automatic reopen');
   const appVersion=execFileSync(powershell,['-NoProfile','-NonInteractive','-Command','(Get-Item ([Console]::In.ReadToEnd())).VersionInfo.ProductVersion'],{input:installed,encoding:'utf8',windowsHide:true,env:windowsEnvironment()}).trim();assert.ok(appVersion.startsWith(pkg.version));
   check('reopened executable is the actual new installed version in the prior installation directory');
+  assert.equal(packedBuild(path.join(installedDirectory,'resources','app.asar')),pkg.clipboardLineBuild,'the reopened installation must run the build counter under test');
+  check('installed application archive carries build '+pkg.clipboardLineBuild+' in the prior installation directory');
   report.completedAt=new Date().toISOString();report.passed=true;
 }
 main().catch(error=>{report.passed=false;report.error=String(error.stack||error.message);console.error(report.error);process.exitCode=1;}).finally(async()=>{
