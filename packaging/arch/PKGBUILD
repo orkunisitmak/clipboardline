@@ -1,7 +1,7 @@
 # Builds ClipBoardLine for Arch Linux, CachyOS, EndeavourOS and Manjaro from
 # this source tree. Run `makepkg -si` in this directory.
 pkgname=clipboardline
-pkgver=1.7.8
+pkgver=1.7.9
 pkgrel=1
 pkgdesc='Keyboard-first local clipboard shelves and saved library'
 arch=('x86_64')

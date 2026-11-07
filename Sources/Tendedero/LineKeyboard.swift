@@ -96,6 +96,11 @@ final class LineKeyboard {
                 else if line.activeShelf == .texts { if let id = line.texts.focusedID { onTextCopy(id) } }
                 else if let id = line.focusedID { onCopy(id) }
             } else { line.copySelection() }
+        case .markup:
+            if line.activeShelf == .images, let id = line.focusedID,
+               line.displayItems.contains(where: { $0.id == id && !$0.falling && !$0.isRecording }) {
+                line.markup(id)
+            }
         case .preview:
             if line.activeShelf == .links { if let id = line.links.focusedID { onLinkPreview(id) } }
             else if line.activeShelf == .texts { if let id = line.texts.focusedID { onTextPreview(id) } }

@@ -192,6 +192,12 @@ test('the action list keeps Copy enabled for Trash items while editing actions a
  const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image]);
  await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="copy" >/);assert.match(f.overlay,/data-command="pin" disabled>/);assert.match(f.overlay,/data-command="paste" disabled>/);assert.match(f.overlay,/data-command="preview" disabled>/);
 });
+test('the action list disables item details and Remove from folder for an item in Trash',async()=>{
+ const f=fixture();await f.ready();const a='20000000-0000-4000-8000-000000000001';f.state.folders=[{id:a,name:'Work'}];Object.assign(f.state.items[0],{trashedAt:1000,folderIds:[a]});f.api.emit({folders:f.state.folders,items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="edit-details" disabled>/);assert.match(f.overlay,new RegExp('data-command="folder.remove.'+a+'" disabled>'));assert.match(f.overlay,/Restore this item first/);
+ await f.key('Escape');f.state.items[0].trashedAt=null;f.state.items[0].retainedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.click('scope',{scope:'saved'});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="edit-details" >/);assert.match(f.overlay,new RegExp('data-command="folder.remove.'+a+'" >'));
+});
 test('the action list disables Move to Trash for an item already in Trash',async()=>{
  const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
  await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="trash" disabled>/);
