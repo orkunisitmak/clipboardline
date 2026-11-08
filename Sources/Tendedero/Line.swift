@@ -15,6 +15,7 @@ struct Pegged: Identifiable, Equatable {
     var managedCopy = false
     var originalPath: String?
     var title: String?
+    var exportName: String { HistoryFiles.exportName(for: url, originalPath: originalPath, title: title) }
     /// Every photo hangs a little crooked, like on a real line.
     let tilt = Double.random(in: -2.5...2.5)
     var falling = false
@@ -691,7 +692,7 @@ final class Line: ObservableObject {
         guard let folder else { return nil }
         guard onFlushPreview() else { throw HistoryFiles.Failure.unsafeFile }
         let sources = selectedItems.map { item in
-            (url: item.url, name: HistoryFiles.exportName(for: item.url, originalPath: item.originalPath))
+            (url: item.url, name: item.exportName)
         }
         return try history.files.export(sources, to: folder)
     }
