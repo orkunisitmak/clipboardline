@@ -12,7 +12,7 @@ final class PublicUpdateChannelTests: HistoryTestCase {
         ["CFBundleIdentifier": "local.clipboardline.review",
          "ClipboardLinePublicUpdateRepository": "orkunisitmak/clipboardline-desktop",
          "SUFeedURL": "https://github.com/orkunisitmak/clipboardline-desktop/releases/latest/download/appcast.xml",
-         "SUPublicEDKey": "s9DO901wav4VK/hfnLROxJYk4+oNFYvxdOK974E3PgI=",
+         "SUPublicEDKey": "ASY6h/Y7xsg4fUmA8TleW6XhbhOtn5M6ql4eqq8o3sE=",
          "SURequireSignedFeed": true, "SUVerifyUpdateBeforeExtraction": true,
          "SUSignedFeedFailureExpirationInterval": 0,
          "SUAllowsAutomaticUpdates": false, "SUAutomaticallyUpdate": false,

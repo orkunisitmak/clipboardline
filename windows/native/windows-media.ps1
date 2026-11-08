@@ -99,7 +99,7 @@ try{
   $stage='Runtime'
   Initialize-MediaRuntime
   $stage='Input'
-  $inputText=[Console]::In.ReadToEnd();if($inputText.Length -gt 20000){throw 'Invalid video request.'}
+  $inputText=(New-Object IO.StreamReader([Console]::OpenStandardInput(),[Text.Encoding]::UTF8)).ReadToEnd();if($inputText.Length -gt 20000){throw 'Invalid video request.'}
   $request=$inputText | ConvertFrom-Json
   $source=[IO.Path]::GetFullPath([string]$request.source)
   $directory=[IO.Path]::GetFullPath([string]$request.outputDirectory)
