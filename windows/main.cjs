@@ -26,7 +26,7 @@ const {decodeTextFile}=require('./lib/text-file.cjs');
 const native = require('./lib/native.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
-const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
+const {thumbnailFetch,linkMetadata} = require('./lib/network.cjs');
 const {Updates,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
 const {GlobalShortcuts}=require('./lib/global-shortcuts.cjs');
 const {ImageSearch,modelPaths}=require('./lib/image-search.cjs');
@@ -201,7 +201,7 @@ async function enrich(id,{refresh=false}={}) {
     const metadata=await linkMetadata(url);
     if(!current()||!store.data.items.includes(item)||item.trashedAt||item.url!==url)return;
     let thumbnail=null;
-    if(metadata.thumbnail){try{const response=await metadataFetch(metadata.thumbnail,{maximum:2*1024*1024});const image=nativeImage.createFromBuffer(response.bytes);if(!image.isEmpty()){const size=image.getSize();if(size.width*size.height<=16_000_000)thumbnail=image.resize({width:Math.min(size.width,640)}).toPNG();}}catch{}}
+    if(metadata.thumbnail){try{const response=await thumbnailFetch(metadata.thumbnail);const image=nativeImage.createFromBuffer(response.bytes);if(!image.isEmpty()){const size=image.getSize();if(size.width*size.height<=16_000_000)thumbnail=image.resize({width:Math.min(size.width,640)}).toPNG();}}catch{}}
     if(!current()||!store.data.items.includes(item)||item.trashedAt||item.url!==url)return;
     if(store.setLinkMetadata(item,url,{title:metadata.title,author:metadata.author,thumbnail}))broadcast();
   }catch(error){if(refresh&&current())throw new Error('Link preview could not be refreshed: '+error.message);}
@@ -372,7 +372,7 @@ async function command(action,payload={}) {
     await enrich(item.id,{refresh:true});result={id:item.id};
   }
   else if(action==='capture')result=await capture();
-  else if(action==='newNote'){const item=store.insert('text',payload.text||'New note');if(payload.title)store.modify('details',{id:item.id,name:payload.title});store.modify('retain',{ids:[item.id]});result={id:item.id};}
+  else if(action==='newNote'){result={id:store.createNote(payload).id};}
   else if(action==='import'){const response=await dialog.showOpenDialog(window,{properties:['openFile','multiSelections'],filters:[{name:mainText('Images, recordings and text'),extensions:['png','jpg','jpeg','webp','bmp','mov','mp4','txt','md']}]});const imported=[],failures=[];for(const file of response.filePaths){try{const item=await importFile(file);imported.push(item.id);if(item.kind==='link')void enrich(item.id);}catch(error){failures.push({filename:path.basename(file),error:error.message});}}result={ids:imported,failed:failures.length};if(failures.length){const [first,...others]=failures;const localizedError=mainText(first.error);const summary=imported.length?mainText('Imported %d · failed %d. %@: %@',imported.length,failures.length,first.filename,localizedError):`${first.filename}: ${localizedError}`;message=[summary,...others.map(failure=>`${failure.filename}: ${mainText(failure.error)}`)].join('; ');}}
   else if(action==='searchImages'){if(!imageSearch)throw new Error('Offline image search is unavailable.');result=await imageSearch.search(payload.query,payload.eligibleIds);}
   else if(action==='ocr')result=await ocr(payload.id);

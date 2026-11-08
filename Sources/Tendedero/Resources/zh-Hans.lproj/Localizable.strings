@@ -449,12 +449,14 @@
 /* Searchable action bar. */
 "Actions" = "操作";
 "Available on the shelves" = "可在置物架中使用";
+"Available in Library" = "可在资料库中使用";
 "Available on the shelves or in Library" = "可在置物架或资料库中使用";
 "Edit item details" = "编辑项目详情";
 "Finish editing first" = "请先完成编辑";
 "Library unavailable" = "资料库不可用";
 "Library views" = "资料库视图";
 "No annotations to clear" = "没有可清除的标注";
+"No filters to clear" = "没有可清除的筛选";
 "No images on the line" = "置物架中没有图像";
 "No items in this view" = "此视图中没有项目";
 "No items to the left" = "左侧没有项目";

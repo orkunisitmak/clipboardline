@@ -1,5 +1,6 @@
 {
   "az": {
+    "Automatic link metadata needs a named host.": "Avtomatik keçid metadatası üçün host adı tələb olunur.",
     "System language": "Sistem dili",
     "Card size": "Kart ölçüsü",
     "Open after screenshot": "Ekran görüntüsündən sonra aç",
@@ -335,6 +336,7 @@
     "Shortcut %@ is unavailable. %@": "%@ qısayolu əlçatan deyil. %@"
   },
   "en": {
+    "Automatic link metadata needs a named host.": "Automatic link metadata needs a named host.",
     "System language": "System language",
     "Card size": "Card size",
     "Open after screenshot": "Open after screenshot",
@@ -670,6 +672,7 @@
     "Shortcut %@ is unavailable. %@": "Shortcut %@ is unavailable. %@"
   },
   "es": {
+    "Automatic link metadata needs a named host.": "Los metadatos automáticos de enlaces requieren un nombre de host.",
     "System language": "Idioma del sistema",
     "Card size": "Tamaño de la tarjeta",
     "Open after screenshot": "Abrir después de hacer una captura",
@@ -1005,6 +1008,7 @@
     "Shortcut %@ is unavailable. %@": "El atajo %@ no está disponible. %@"
   },
   "fr": {
+    "Automatic link metadata needs a named host.": "Les métadonnées automatiques des liens nécessitent un nom d’hôte.",
     "System language": "Langue du système",
     "Card size": "Taille des cartes",
     "Open after screenshot": "Ouvrir après la capture d’écran",
@@ -1340,6 +1344,7 @@
     "Shortcut %@ is unavailable. %@": "Le raccourci %@ n’est pas disponible. %@"
   },
   "ja": {
+    "Automatic link metadata needs a named host.": "リンクのメタデータを自動取得するにはホスト名が必要です。",
     "System language": "システム言語",
     "Card size": "カードサイズ",
     "Open after screenshot": "スクリーンショットの撮影後に開く",
@@ -1675,6 +1680,7 @@
     "Shortcut %@ is unavailable. %@": "ショートカット %@ は使用できません。%@"
   },
   "ko": {
+    "Automatic link metadata needs a named host.": "자동 링크 메타데이터를 가져오려면 호스트 이름이 필요합니다.",
     "System language": "시스템 언어",
     "Card size": "카드 크기",
     "Open after screenshot": "스크린샷 촬영 후 열기",
@@ -2010,6 +2016,7 @@
     "Shortcut %@ is unavailable. %@": "단축키 %@을(를) 사용할 수 없습니다. %@"
   },
   "pt-BR": {
+    "Automatic link metadata needs a named host.": "Os metadados automáticos de links exigem um nome de host.",
     "System language": "Idioma do sistema",
     "Card size": "Tamanho do cartão",
     "Open after screenshot": "Abrir após a captura de tela",
@@ -2345,6 +2352,7 @@
     "Shortcut %@ is unavailable. %@": "O atalho %@ não está disponível. %@"
   },
   "tr": {
+    "Automatic link metadata needs a named host.": "Bağlantı meta verisinin otomatik alınması için bir ana makine adı gerekir.",
     "System language": "Sistem dili",
     "Card size": "Kart boyutu",
     "Open after screenshot": "Ekran görüntüsünden sonra aç",
@@ -2680,6 +2688,7 @@
     "Shortcut %@ is unavailable. %@": "%@ kısayolu kullanılamıyor. %@"
   },
   "zh-Hans": {
+    "Automatic link metadata needs a named host.": "自动获取链接元数据需要主机名。",
     "System language": "系统语言",
     "Card size": "卡片大小",
     "Open after screenshot": "截图后打开",

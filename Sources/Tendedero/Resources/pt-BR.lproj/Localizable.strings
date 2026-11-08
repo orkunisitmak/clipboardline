@@ -449,12 +449,14 @@
 /* Searchable action bar. */
 "Actions" = "Ações";
 "Available on the shelves" = "Disponível nas prateleiras";
+"Available in Library" = "Disponível na biblioteca";
 "Available on the shelves or in Library" = "Disponível nas prateleiras ou na biblioteca";
 "Edit item details" = "Editar detalhes do item";
 "Finish editing first" = "Conclua a edição primeiro";
 "Library unavailable" = "Biblioteca indisponível";
 "Library views" = "Visualizações da biblioteca";
 "No annotations to clear" = "Nenhuma anotação para limpar";
+"No filters to clear" = "Nenhum filtro para limpar";
 "No images on the line" = "Nenhuma imagem no varal";
 "No items in this view" = "Nenhum item nesta visualização";
 "No items to the left" = "Nenhum item à esquerda";

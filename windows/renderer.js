@@ -27,7 +27,7 @@ Object.assign(TR,{'Drag to export file copies':'Dosya kopyalarını aktarmak iç
 Object.assign(TR,{'Drag to add to a folder · Alt+drag to export file copies':'Klasöre eklemek için sürükle · Dosya kopyaları için Alt+sürükle'});
 Object.assign(TR,{'Remove this folder and its subfolders? Item content remains in the library.':'Bu klasör ve alt klasörleri kaldırılsın mı? Öğelerin içeriği kütüphanede kalır.'});
 Object.assign(TR,{'Tag actions':'Etiket işlemleri','Rename tag':'Etiketi yeniden adlandır','Remove this tag?':'Bu etiket kaldırılsın mı?','Its contents stay in your library.':'İçerikleri kütüphanende kalır.'});
-Object.assign(TR,{'Add':'Ekle'});
+Object.assign(TR,{'Add':'Ekle','No filters to clear':'Temizlenecek filtre yok'});
 Object.assign(TR,{'Video':'Video','Trim video':'Videoyu kırp','Start time':'Başlangıç','End time':'Bitiş','Wait for the video to load.':'Videonun yüklenmesini bekle.','Saving trimmed video…':'Kırpılan video kaydediliyor…','Saving…':'Kaydediliyor…','Enter saves · Esc cancels':'Enter kaydeder · Esc iptal eder','The trim could not be canceled. Try again.':'Kırpma iptal edilemedi. Tekrar dene.','The video could not be saved. Keep this range and try again.':'Video kaydedilemedi. Bu aralığı koruyup tekrar dene.','Select a still image first.':'Önce bir fotoğraf seç.'});
 Object.assign(TR,{"Copies to clear": "Temizlenecek kopyalar", "%d unsaved copies": "%d kaydedilmemiş kopya", "Clear unsaved copies…": "Kaydedilmemiş kopyaları temizle…", "Clear unsaved copies?": "Kaydedilmemiş kopyalar temizlensin mi?", "%d unsaved copies will move to recoverable Library Trash. Pinned items, saved items, folders, tags and original files are kept.": "%d kaydedilmemiş kopya, Kütüphane’deki geri alınabilir Çöp Kutusu’na taşınacak. Sabitlenen ve kaydedilen öğeler, klasörler, etiketler ve orijinal dosyalar korunur."});
 const ui = {view:'shelves',active:'image',selected:new Set(),focus:null,anchor:null,pages:{image:0,text:0,link:0},pinned:{image:false,text:false,link:false},search:'',searchOpen:false,scope:'saved',favoritesOnly:false,type:'all',folder:null,tag:null,filterTags:[],searchMode:'all',days:0,domain:'',sort:'newest',list:false,preview:null,editingText:false,textDraft:'',editor:null,videoTrim:null,modal:null,settingsTab:'general',historyCleanupKind:'all',shortcutsQuery:'',sidebarVisible:true,inspectorVisible:true,sidebarWidth:220,inspectorWidth:300,listColumns:{title:300,kind:80,tags:150,created:130},filtersOpen:false,selecting:false,searchEditing:false,zoom:1,pan:{x:0,y:0},lastEvent:'',undoFocus:[],busy:false};
@@ -53,7 +53,7 @@ const attr = esc;
 // and ￣ maps to ¯ as on the Mac instead of NFKC's space + macron. Then strip
 // diacritics and use a locale-independent lower case: a Turkish default locale must
 // not turn a typed I into dotless ı.
-const fold = value => String(value || '').replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const fold = value => String(value || '').replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').normalize('NFC').toLowerCase();
 let indexedItems=null,itemIndex=new Map();
 const item = id => {if(indexedItems!==state.items){indexedItems=state.items;itemIndex=new Map(state.items.map(value=>[value.id,value]));}return itemIndex.get(id);};
 const saved = value => value.pinned || value.retainedAt!=null || value.folderIds?.length || value.tags?.length;
@@ -89,6 +89,7 @@ function shortcutAllowed(action,context=shortcutContext()){
  if(action==='undo')return context==='shelves'||context.endsWith('Preview')&&ui.view==='shelves';
  if(action==='open')return context==='library'||context==='linkPreview';
  if(action==='edit')return context==='textPreview'||context==='library';
+ if(action==='markup'&&context==='shelves')return true;
  if(['markup','crop'].includes(action))return context==='imagePreview'||context==='library';
  if(action==='copyOCR')return context==='shelves'||context==='library'||context==='imagePreview';
  return true;
@@ -126,9 +127,11 @@ function visibleKinds() { return state.settings.visibleKinds?.length ? KINDS.fil
 let tokenQuery=null,searchTokens=[];
 function matches(value,query) { const hay=fold([value.name,value.title,value.text,value.url,value.note,value.ocrText,...(value.tags||[])].join(' '));if(tokenQuery!==query){tokenQuery=query;searchTokens=fold(query).trim().split(/\s+/);}return searchTokens.every(token=>hay.includes(token)); }
 let shelfItemsSource=null,shelfItemsQuery=null,shelfRows=new Map();
+// A link saved by an earlier build had its createdAt renewed on a re-copy, so the newer of the two decides its place.
+const linkTouched=value=>Math.max(value.lastCopiedAt??0,value.createdAt);
 function rowItems(kind) {
  if(shelfItemsSource!==state.items||shelfItemsQuery!==ui.search){shelfItemsSource=state.items;shelfItemsQuery=ui.search;shelfRows.clear();}
- const key=kind+':'+!!ui.pinned[kind];if(!shelfRows.has(key))shelfRows.set(key,state.items.filter(value=>value.kind===kind&&!value.trashedAt&&!value.hiddenFromShelf&&(!ui.pinned[kind]||value.pinned)&&(!ui.search||matches(value,ui.search))).sort((a,b)=>b.createdAt-a.createdAt));return shelfRows.get(key);
+ const key=kind+':'+!!ui.pinned[kind];if(!shelfRows.has(key))shelfRows.set(key,state.items.filter(value=>value.kind===kind&&!value.trashedAt&&!value.hiddenFromShelf&&(!ui.pinned[kind]||value.pinned)&&(!ui.search||matches(value,ui.search))).sort((a,b)=>kind==='link'?linkTouched(b)-linkTouched(a):b.createdAt-a.createdAt));return shelfRows.get(key);
 }
 function folderIncludes(value,id) { const ids=new Set([id]); let changed=true; while(changed){changed=false; for(const folder of state.folders)if(ids.has(folder.parentId)&&!ids.has(folder.id)){ids.add(folder.id);changed=true;}} return value.folderIds?.some(folder=>ids.has(folder)); }
 function libraryBaseItems() { return state.items.filter(value=>{
@@ -147,7 +150,7 @@ function libraryBaseItems() { return state.items.filter(value=>{
  if(wanted){try{const host=new URL(value.url).hostname.replace(/^www\./,'');if(host!==wanted&&!host.endsWith('.'+wanted))return false;}catch{return false;}}
  return true;
  }); }
-function libraryItems(){const values=libraryBaseItems().filter(value=>{if(!ui.search)return true;const textMatch=matches(value,ui.search),visualMatch=value.kind==='image'&&libraryImageSearch.ids.has(value.id);return ui.searchMode==='visual'?visualMatch:ui.searchMode==='text'?textMatch:textMatch||visualMatch;});return values.sort((a,b)=>ui.sort==='oldest'?a.createdAt-b.createdAt:ui.sort==='title'?title(a).localeCompare(title(b)):ui.sort==='titleDescending'?title(b).localeCompare(title(a)):ui.sort==='relevance'?libraryRelevance(b)-libraryRelevance(a)||b.createdAt-a.createdAt:ui.sort==='copied'?(b.lastCopiedAt??b.createdAt)-(a.lastCopiedAt??a.createdAt):b.createdAt-a.createdAt);}
+function libraryItems(){const values=libraryBaseItems().filter(value=>{if(!ui.search)return true;const textMatch=matches(value,ui.search),visualMatch=value.kind==='image'&&libraryImageSearch.ids.has(value.id);return ui.searchMode==='visual'?visualMatch:ui.searchMode==='text'?textMatch:textMatch||visualMatch;});return values.sort((a,b)=>ui.sort==='oldest'?a.createdAt-b.createdAt:ui.sort==='title'?compareFoldedOnly(title(a),title(b))||b.createdAt-a.createdAt:ui.sort==='titleDescending'?compareFoldedOnly(title(b),title(a))||b.createdAt-a.createdAt:ui.sort==='relevance'?libraryRelevance(b)-libraryRelevance(a)||b.createdAt-a.createdAt:ui.sort==='copied'?(b.lastCopiedAt??b.createdAt)-(a.lastCopiedAt??a.createdAt):b.createdAt-a.createdAt);}
 function libraryRelevance(value){return (ui.searchMode==='visual'?0:relevance(value))+(libraryImageSearch.scores.get(value.id)||0)*10;}
 function libraryImageSearchKey(){if(ui.view!=='library'||!ui.search.trim()||ui.searchMode==='text')return'';const ids=libraryBaseItems().filter(value=>value.kind==='image').map(value=>value.id).sort();return JSON.stringify([ui.search.trim(),ids,state.imageSearch?.revision||0]);}
 function queueLibraryImageSearch(){const key=libraryImageSearchKey();if(key===libraryImageSearch.key)return;clearTimeout(imageSearchTimer);const generation=++imageSearchGeneration;libraryImageSearch={key,ids:new Set(),scores:new Map(),available:false,indexing:!!key};if(!key)return;imageSearchTimer=setTimeout(async()=>{const [query,eligibleIds]=JSON.parse(key);if(query.length>2048){libraryImageSearch.indexing=false;render();return;}try{const reply=await api.command('searchImages',{query,eligibleIds});if(generation!==imageSearchGeneration||key!==libraryImageSearchKey())return;const result=reply?.result||{};const allowed=new Set(eligibleIds);libraryImageSearch={key,ids:new Set((result.ids||[]).filter(id=>allowed.has(id))),scores:new Map((result.scores||[]).filter(value=>allowed.has(value.id)&&Number.isFinite(value.score)).map(value=>[value.id,value.score])),available:result.available===true,indexing:result.indexing===true};if(ui.focus&&!libraryItems().some(value=>value.id===ui.focus))focusFirst();render();}catch{if(generation!==imageSearchGeneration)return;libraryImageSearch.indexing=false;libraryImageSearch.available=false;render();}},200);}
@@ -413,9 +416,10 @@ function updateShelfSelection(){
  }
 }
 function render() { if(preserveLibraryDrag())return;const libraryFocus=libraryFocusIdentity();const scrollPositions=captureScrollPositions();queueLibraryImageSearch();const focused=document.activeElement;const detailID=focused?.dataset?.detailId;const selected=detailID?selectedIds():[];const reuseDetail=!!detailID&&ui.view==='library'&&ui.inspectorVisible&&!ui.preview&&!ui.modal&&state.windowVisible!==false&&selected.length===1&&selected[0]===detailID;const identity=focused?.dataset?.focus;const focusedId=focused?.id;const oldValue=isEditor(focused)?focused.value:null;const selection=(identity||focusedId)&&typeof focused.selectionStart==='number'?[focused.selectionStart,focused.selectionEnd]:null;document.body.className=`view-${ui.view}`;root.className=`${state.settings.theme==='neutral'?'neutral':''} size-${state.settings.cardSize||'medium'}`;const html=`<div class="shell ${ui.view==='shelves'?'shelf-shell':'normal-shell'}">${topbar()}${ui.view==='settings'?settings():ui.view==='library'?library():shelves()}${ui.view==='library'?`<footer class="statusbar"><span>${esc(selectedLabel(selectedIds().length))}</span><div class="grow"></div><div class="key-legend"><span><kbd>Space</kbd> ${esc(t('Preview'))}</span><span><kbd>Enter</kbd> ${esc(t('Copy'))}</span><span>${keyHint('pin')} ${esc(t('Pin'))}</span><span>${keyHint('actions')} ${esc(t('Actions'))}</span></div></footer>`:''}</div>`;if(!renderShelfTree(html)&&!renderWithActiveInspector(html,focused,reuseDetail))root.innerHTML=html;updateShelfSelection();root.setAttribute('aria-busy','false');renderOverlay();if(identity||focusedId){let next=focusedId?(detailID?root.querySelector('#'+focusedId):document.getElementById(focusedId)):root.querySelector(`[data-focus="${identity}"]`);if(detailID)next=null;else if(next&&oldValue!=null&&isEditor(next))next.value=oldValue;next?.focus({preventScroll:true});if(selection&&next?.setSelectionRange)try{next.setSelectionRange(...selection);}catch{}}restoreScrollPositions(scrollPositions);restoreLibraryFocus(libraryFocus);}
-// Folded-name order of the native Library: NFKD, no marks, locale-independent lower case, by code point.
-const foldedCodes=value=>Array.from(String(value||'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase(),character=>character.codePointAt(0));
-const compareFolded=(a,b)=>{const left=foldedCodes(a),right=foldedCodes(b);for(let at=0;at<Math.min(left.length,right.length);at++)if(left[at]!==right[at])return left[at]-right[at];return left.length-right.length||(a<b?-1:a>b?1:0);};
+// Folded-name order of the native Library, by code point: the same fold as search, so ligatures and circled digits stay as typed.
+const foldedCodes=value=>Array.from(fold(value),character=>character.codePointAt(0));
+const compareFoldedOnly=(a,b)=>{const left=foldedCodes(a),right=foldedCodes(b);for(let at=0;at<Math.min(left.length,right.length);at++)if(left[at]!==right[at])return left[at]-right[at];return left.length-right.length;};
+const compareFolded=(a,b)=>compareFoldedOnly(a,b)||(a<b?-1:a>b?1:0);
 // Display order follows the native Library's folded-name/ID order while
 // retaining parent/child groups. Never reorder the persisted folder array.
 function sortedFolders(){
@@ -535,14 +539,14 @@ function actionCommands(){
  const commands=keyboard.map(id=>{
   let reason='';
   if(selectedActions.has(id)&&!hasSelection)reason='Select an item first.';
-  else if(deleted&&['paste','preview','pin','folder','name','tag','remove','markup','crop','copyOCR','edit'].includes(id))reason='Restore this item first.';
+  else if(deleted&&['paste','preview','pin','folder','name','tag','remove','trash','markup','crop','copyOCR','edit'].includes(id))reason='Restore this item first.';
   else if(['crop',...Object.keys(MARKUP_TOOLS),'copyOCR'].includes(id)&&(!image||video))reason='Select a still image first.';
   else if(id==='markup'&&!image)reason='Select an image first.';
   else if(id==='edit'&&!text)reason='Select a text item first.';
   else if(id==='open'&&!link)reason='Select a link first.';
   else if(id==='finishEditing'&&!ui.editingText)reason='Start editing text first.';
-  else if((id==='undo'&&!state.canUndo)||(id==='undoTrash'&&!state.canUndoTrash))reason='Nothing to undo.';
   else if(!['search','library','edit','markup','crop',...Object.keys(MARKUP_TOOLS)].includes(id)&&!shortcutAllowed(id,context))reason=['librarySearch','allTypes','images','texts','links','focusNextPane','focusPreviousPane','newNote','newFolder','undoTrash'].includes(id)?'Available in Library.':'Available on the shelves.';
+  else if((id==='undo'&&!state.canUndo)||(id==='undoTrash'&&!state.canUndoTrash))reason='Nothing to undo.';
   if(id==='search'&&library)return{id,title:'Search contents',key:effectiveShortcut('librarySearch',context),detail:'Search this Library view',aliases:'ara arama içerik kütüphane',disabled:false};
   const allPinned=hasSelection&&ids.every(id=>item(id)?.pinned);
   return{id,title:id==='remove'&&library?'Move to Trash':id==='pin'&&allPinned?'Unpin':id==='markup'&&video?'Trim video':ACTION_TITLES[id],key:actionShortcut(id,context),detail:reason||(selectedActions.has(id)?selectedLabel(ids.length):(['previous','next','up','down','first','last','previousPage','nextPage'].includes(id)?'Browse selected items':'')),aliases:t(ACTION_TITLES[id])+' '+id,disabled:!!reason};
@@ -554,8 +558,9 @@ function actionCommands(){
   ...[['saved','My library'],['recent','Recent copies'],['pinned','Pinned'],['unorganized','Unorganized'],['trash','Trash']].map(([scope,title])=>menu('scope-'+scope,title)),
   menu('retain','Keep in Library',!hasSelection?'Select an item first.':deleted?'Restore this item first.':''),
   menu('restore','Restore',hasSelection&&deleted?'':'Select an item in Trash first.'),menu('delete','Delete permanently',hasSelection&&deleted?'':'Select an item in Trash first.'),
-  menu('edit-details','Edit item details',single?'':'Select one item first.'),
-  ...[['grid','Grid view'],['list','List view'],['toggle-sidebar','Toggle sidebar'],['toggle-inspector','Toggle inspector'],['toggle-filters','Filters'],['clear-filters','Clear filters']].map(([id,title])=>menu(id,title,libraryReason)),
+  menu('edit-details','Edit item details',!single?'Select one item first.':deleted?'Restore this item first.':''),
+  ...[['grid','Grid view'],['list','List view'],['toggle-sidebar','Toggle sidebar'],['toggle-inspector','Toggle inspector'],['toggle-filters','Filters']].map(([id,title])=>menu(id,title,libraryReason)),
+  menu('clear-filters','Clear filters',libraryReason||(libraryHasFilters()?'':'No filters to clear')),
   ...[['newest','Newest first'],['oldest','Oldest first'],['title','Title A–Z'],['titleDescending','Title Z–A'],['copied','Recently copied'],['relevance','Most relevant']].map(([sort,title])=>menu('sort-'+sort,title,libraryReason)),
   ...[[0,'Any date'],[7,'Last 7 days'],[30,'Last 30 days']].map(([days,title])=>menu('days-'+days,title,libraryReason)),
   menu('refresh-link','Refresh link metadata',link?'':'Select a link first.'),menu('open-item-file','Open file',image?'':'Select an image first.'),menu('reveal-item-file','Show in folder',image?'':'Select an image first.'),
@@ -566,7 +571,7 @@ function actionCommands(){
   ...[['general','General'],['history','History'],['sources','Sources'],['shortcuts','Keyboard shortcuts'],['updates','Updates'],['about','About']].map(([section,title])=>menu('settings-'+section,t('Settings')+' · '+t(title))),
   menu('clear-history','Clear unsaved copies…'),menu('settings','Settings'),menu('check-updates','Check for updates'),menu('install-update','Update and reopen',state.update?.canInstall||['available','ready'].includes(state.update?.status)?'':'No update available.'),menu('hide','Hide'),menu('quit','Quit ClipBoardLine')
  );
- for(const folder of sortedFolders()){commands.push(menu('folder.rename.'+folder.id,t('Rename folder')+' · '+folderPath(folder.id)));if(!folder.parentId)commands.push(menu('folder.new.'+folder.id,t('New subfolder')+' · '+folderPath(folder.id)));commands.push(menu('folder.delete.'+folder.id,t('Remove folder')+' · '+folderPath(folder.id)));commands.push(menu('folder.open.'+folder.id,t('Open folder')+' · '+folderPath(folder.id)));commands.push(menu('folder.assign.'+folder.id,t('Add to folder')+' · '+folderPath(folder.id),hasSelection&&!deleted?'':'Select an item first.'));if(ids.some(id=>item(id)?.folderIds?.includes(folder.id)))commands.push(menu('folder.remove.'+folder.id,t('Remove from folder')+' · '+folderPath(folder.id)));}
+ for(const folder of sortedFolders()){commands.push(menu('folder.rename.'+folder.id,t('Rename folder')+' · '+folderPath(folder.id)));if(!folder.parentId)commands.push(menu('folder.new.'+folder.id,t('New subfolder')+' · '+folderPath(folder.id)));commands.push(menu('folder.delete.'+folder.id,t('Remove folder')+' · '+folderPath(folder.id)));commands.push(menu('folder.open.'+folder.id,t('Open folder')+' · '+folderPath(folder.id)));commands.push(menu('folder.assign.'+folder.id,t('Add to folder')+' · '+folderPath(folder.id),hasSelection&&!deleted?'':'Select an item first.'));if(ids.some(id=>item(id)?.folderIds?.includes(folder.id)))commands.push(menu('folder.remove.'+folder.id,t('Remove from folder')+' · '+folderPath(folder.id),deleted?'Restore this item first.':''));}
  for(const tag of [...new Set(state.items.flatMap(value=>value.tags||[]))].sort(compareFolded)){commands.push(menu('tag.open.'+encodeURIComponent(tag),t('Open tag')+' · '+tag));commands.push(menu('tag.rename.'+encodeURIComponent(tag),t('Rename tag')+' · '+tag));commands.push(menu('tag.delete.'+encodeURIComponent(tag),t('Remove tag')+' · '+tag));}
  return commands;
 }
@@ -697,7 +702,7 @@ case 'open':if(value?.kind==='link')await command('openLink',{id:value.id});brea
 case 'copyOCR':if(value?.kind==='image'&&!recording(value)){toast(t('Recognizing image text…'));const result=await command('ocr',{id:value.id});if(result){const text=result.result?.text||item(value.id)?.ocrText||'';if(text){await command('copyOCR',{id:value.id}).then(copy=>{if(!copy)toast(text.slice(0,160));});}else toast(t('No readable text found.'));}}break;
 case 'edit':if(value?.kind==='text'){if(!ui.preview)await openPreview(value.id);beginTextPreviewEditing(value);}break;
 case 'finish-text':case 'finishEditing':await finishText();break;
-case 'markup':if(recording(value)){if(ui.videoTrim)await cancelVideoTrim();else{if(!ui.preview)await openPreview(value.id);beginVideoTrim();}}else if(value?.kind==='image'){if(ui.editor)await saveImage(true);else{if(!ui.preview)await openPreview(value.id);await beginImageEdit('select');}}break;
+case 'markup':if(!ui.preview&&ui.view==='shelves'&&recording(value))break;if(recording(value)){if(ui.videoTrim)await cancelVideoTrim();else{if(!ui.preview)await openPreview(value.id);beginVideoTrim();}}else if(value?.kind==='image'){if(ui.editor)await saveImage(true);else{if(!ui.preview)await openPreview(value.id);await beginImageEdit('select');}}break;
 case 'crop':if(value?.kind==='image'&&!recording(value)){if(ui.editor?.tool==='crop')cancelImageCrop();else{if(!ui.preview)await openPreview(value.id);await beginImageEdit('crop');}}break;
 case 'actions':openModal({type:'actions',query:'',index:0,contextIds:[...ids],contextFocus:value?.id||null,contextSurface:shortcutContext()});break;
 case 'search':releaseShortcutRecording(ui.modal);ui.modal=null;if(ui.view==='settings')await command('show');if(ui.view!=='library')ui.searchOpen=true;ui.searchEditing=true;render();setTimeout(()=>document.getElementById('search-input')?.focus(),0);break;
@@ -741,7 +746,7 @@ default:
  else if(action.startsWith('tag.rename.'))openTagAction('rename-tag',decodeURIComponent(action.slice(11)));
  else if(action.startsWith('tag.delete.'))openTagAction('remove-global-tag',decodeURIComponent(action.slice(11)));
  else if(action.startsWith('folder.open.')){if(!await flushPreview())break;ui.preview=null;ui.scope='folder';ui.folder=action.slice(12);ui.search='';await command('library');focusFirst();render();}
- else if(action.startsWith('folder.assign.')){if(ids.length)await command('folder',{ids,folderId:action.slice(14)});}
+ else if(action.startsWith('folder.assign.')){if(ids.length)await command('folder',{ids,folderId:action.slice(14),pinning:false});}
  else if(action.startsWith('folder.remove.')){if(ids.length)await command('unassign',{ids,folderId:action.slice(14)});}
  else if(action.startsWith('tag.open.')){if(!await flushPreview())break;ui.preview=null;ui.scope='tag';ui.tag=decodeURIComponent(action.slice(9));ui.search='';await command('library');focusFirst();render();}
  break;

@@ -38,9 +38,24 @@ function signedFixture(){const {privateKey,publicKey}=crypto.generateKeyPairSync
 test('Windows updater accepts only pinned-signed correct-platform manifest',()=>{const f=signedFixture();assert.equal(verifyEnvelope(f.sign(f.payload),f.key).build,63);assert.throws(()=>verifyEnvelope(f.sign({...f.payload,repository:'orkunisitmak/clipboardline-app'}),f.key));assert.throws(()=>verifyEnvelope(f.sign({...f.payload,platform:'darwin'}),f.key));assert.throws(()=>verifyEnvelope(f.sign({...f.payload,url:'https://evil.example/setup.exe'}),f.key));const envelope=JSON.parse(f.sign(f.payload));envelope.payload=Buffer.from(JSON.stringify({...f.payload,build:999})).toString('base64');assert.throws(()=>verifyEnvelope(Buffer.from(JSON.stringify(envelope)),f.key),/signature/);});
 test('updater verifies signature before downloading, enforces SHA/size and uses distinct Windows feed',async()=>{const f=signedFixture(),dir=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-update-'));try{let calls=[];const updater=new Updates(dir,{build:62,publicKey:f.key,fetcher:async url=>{calls.push(url);return{bytes:url===FEED?f.sign(f.payload):f.binary};}});await updater.check();assert.equal(updater.state.status,'available');const file=await updater.download();assert.equal(fs.readFileSync(file).toString('hex'),f.binary.toString('hex'));assert.equal(calls[0],FEED);assert.equal(calls.length,2);assert.equal(updater.state.status,'ready');const bad=new Updates(path.join(dir,'bad-payload'),{publicKey:f.key,fetcher:async url=>({bytes:url===FEED?f.sign(f.payload):Buffer.alloc(f.binary.length)})});await bad.check();await assert.rejects(bad.download(),/integrity/);}finally{fs.rmSync(dir,{recursive:true,force:true});}});
 test('failed signature never offers update or causes an installer fetch',async()=>{let count=0;const updater=new Updates(os.tmpdir(),{fetcher:async()=>{count++;return{bytes:Buffer.from('{"payload":"aA==","signature":"AAAA"}')};}});await updater.check();assert.equal(updater.state.status,'error');await assert.rejects(updater.download());assert.equal(count,1);});
+test('metadata titles keep joiners but drop bidirectional overrides, raw or as numeric references',async()=>{
+ const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'}),title=async html=>(await linkMetadata('https://example.com',page(html))).title;
+ assert.equal(await title('<title>\u{1F468}\u200D\u{1F469}\u200D\u{1F467} می\u200Cخواهم</title>'),'\u{1F468}\u200D\u{1F469}\u200D\u{1F467} می\u200Cخواهم');
+ assert.equal(await title('<title>&#x1F468;&#x200D;&#x1F4BB; dev&#8204;x</title>'),'\u{1F468}\u200D\u{1F4BB} dev\u200Cx');
+ assert.equal(await title('<title>invoice\u202Efdp.exe \u2066x\u2069</title>'),'invoicefdp.exe x');
+ assert.equal(await title('<title>a&#x202E;b&#8294;c&#x2069;</title>'),'abc');
+ assert.equal(await title('<title>a\u200Eb\u200Fc\u061Cd&#x200E;e&#8207;f&#x61C;g</title>'),'abcdefg');
+ assert.equal(await title('<title>x&#X200D;y&#X200C;z</title>'),'x\u200Dy\u200Cz');
+ assert.equal(await title('<meta property="og:title" content="\u202A\u202B\u202C\u202D x\u2067\u2068">'),'x');
+});
 test('og:title whitespace collapses without rewriting the og:image URL',async()=>{
  const response=await linkMetadata('https://example.com',async()=>({bytes:Buffer.from('<meta property="og:title" content="  Hello\n   world  "><meta property="og:image" content="https://cdn.example.com/a  b.png?x=1&amp;y=2">'),url:'https://example.com/',type:'text/html'}));
  assert.equal(response.title,'Hello world');assert.equal(response.thumbnail,'https://cdn.example.com/a%20%20b.png?x=1&y=2');
+});
+test('a whitespace-only og:image gives no thumbnail',async()=>{
+ const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'});
+ assert.equal((await linkMetadata('https://example.com',page('<meta property="og:image" content="   ">'))).thumbnail,'');
+ assert.equal((await linkMetadata('https://example.com',page('<meta property="og:image" content="/a.png">'))).thumbnail,'https://example.com/a.png');
 });
 test('metadata titles decode numeric references and collapse layout whitespace',async()=>{
  const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'});
@@ -58,3 +73,5 @@ test('YouTube Music links use oEmbed through the canonical host',async()=>{
  assert.equal(result.title,'Song');
  assert.equal(new URL(requested).searchParams.get('url'),'https://www.youtube.com/watch?v=abc123');
 });
+test('control characters are dropped from a link title like on macOS',async()=>{const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/p',type:'text/html'});assert.equal((await linkMetadata('https://example.com/p',page('<title>Invoice\u0007\u0000 due\u0085 now</title>'))).title,'Invoice due now');assert.equal((await linkMetadata('https://example.com/p',page('<meta property="og:title" content="a\u0007b">'))).title,'ab');});
+test('thumbnail downloads accept a 3 MB image like the Mac and refuse one over 5 MB',async()=>{const http=require('node:http'),https=require('node:https'),{thumbnailFetch}=require('../lib/network.cjs');const sizes={'/small':3*1024*1024,'/large':6*1024*1024};const server=http.createServer((request,response)=>{const body=Buffer.alloc(sizes[request.url],1);response.writeHead(200,{'Content-Type':'image/png','Content-Length':body.length});response.end(body);});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const original=https.get,resolver=async()=>[{address:'8.8.8.8',family:4}];try{https.get=(url,options,callback)=>http.get('http://127.0.0.1:'+server.address().port+new URL(url).pathname,{timeout:options.timeout},callback);const image=await thumbnailFetch('https://example.com/small',{resolver});assert.equal(image.bytes.length,3*1024*1024);await assert.rejects(thumbnailFetch('https://example.com/large',{resolver}),/too large|size limit/);await assert.rejects(thumbnailFetch('https://example.com/large',{resolver,maximum:8*1024*1024}),/too large|size limit/);}finally{https.get=original;server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}});

@@ -19,13 +19,24 @@ import XCTest
 
     func testDestinationRequiresNamedHTTPSAndStripsFragmentWithoutLeakingSecrets() throws {
         let syntheticUserInfo = "synthetic-user" + ":" + "synthetic-password" + "@"
-        for value in ["http://example.com/a", "https://127.1/a", "https://8.8.8.8/a", "https://[2606:4700::1111]/a", "https://" + syntheticUserInfo + "example.com/a", "https://example.com:8443/a", "https://localhost/a", "https://host.local/a", "https://host.internal/a", "https://host.home.arpa/a", "https://host.onion/a", "https://host.invalid/a", "https://example.com./a", "https://-bad.example.com/a", "https://example.com/?%74oken=secret", "https://example.com/?X-Amz-Signature=secret", "https://example.com/?api_key=secret", "https://example.com/?accessToken=secret", "https://example.com/?sessionId=secret"] {
+        for value in ["http://example.com/a", "https://127.1/a", "https://8.8.8.8/a", "https://[2606:4700::1111]/a", "https://" + syntheticUserInfo + "example.com/a", "https://example.com:8443/a", "https://localhost/a", "https://host.local/a", "https://host.internal/a", "https://host.home.arpa/a", "https://host.onion/a", "https://host.invalid/a", "https://example.com./a", "https://-bad.example.com/a", "https://example.com/?%74oken=secret", "https://example.com/?X-Amz-Signature=secret", "https://example.com/?api_key=secret", "https://example.com/?api.key=secret", "https://example.com/?session.id=secret", "https://example.com/?api%CC%81.key=secret", "https://example.com/?accessToken=secret", "https://example.com/?sessionId=secret"] {
             XCTAssertNil(PublicLinkDestination(try XCTUnwrap(URL(string: value))), value)
         }
         let destination = try XCTUnwrap(PublicLinkDestination(URL(string: "https://Example.com:443/articles?q=hello%20world#private-fragment")!))
         XCTAssertEqual(destination.hostname, "example.com")
         XCTAssertEqual(destination.url.absoluteString, "https://example.com/articles?q=hello%20world")
         XCTAssertEqual(destination.requestTarget, "/articles?q=hello%20world")
+    }
+
+    func testInternationalHostsUsePunycodeAndBlockedNamesStayBlockedInOtherSpellings() throws {
+        for value in ["https://münchen.de/a", "https://xn--mnchen-3ya.de/a", "https://XN--MNCHEN-3YA.de/a"] {
+            let destination = try XCTUnwrap(PublicLinkDestination(try XCTUnwrap(URL(string: value))))
+            XCTAssertEqual(destination.hostname, "xn--mnchen-3ya.de", value)
+            XCTAssertEqual(destination.url.absoluteString, "https://xn--mnchen-3ya.de/a", value)
+        }
+        for value in ["https://ｌｏｃａｌｈｏｓｔ/", "https://foo.ｌｏｃａｌ/", "https://foo.loc%61l/"] {
+            XCTAssertNil(URL(string: value).flatMap { PublicLinkDestination($0) }, value)
+        }
     }
 
     func testPinnedEndpointUsesNumericCaseButTLSAndHostHeaderUseOriginalHostname() throws {
@@ -82,6 +93,8 @@ import XCTest
         let url = URL(string: "https://public.example.org/page")!
         let parsed = try PublicLinkHTMLMetadata(data: Data("<title>G&uuml;nl&uuml;k &mdash; &Ccedil;i&ccedil;ek &unknown;</title>".utf8), url: url)
         XCTAssertEqual(parsed.title, "Günlük — Çiçek &unknown;")
+        let hex = try PublicLinkHTMLMetadata(data: Data("<title>A&#x2014;B &#X2014;C &#8212;D</title>".utf8), url: url)
+        XCTAssertEqual(hex.title, "A—B —C —D")
     }
 
     func testHTMLHonorsDeclaredMetaCharsetAndFallsBackToWindows1252() throws {
@@ -109,6 +122,27 @@ import XCTest
         XCTAssertEqual(try page("<title>\(title)</title>", .utf8).title, title)
     }
 
+    func testHTMLTitleKeepsJoinersButDropsControlsAndBidirectionalOverrides() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let family = "👨\u{200D}👩\u{200D}👧", persian = "می\u{200C}خواهم"
+        func parsed(_ html: String) throws -> PublicLinkHTMLMetadata { try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url) }
+        func title(_ html: String) throws -> String? { try parsed(html).title }
+        // Joiners build emoji sequences and Persian words; numeric references to them decode, as on Windows.
+        XCTAssertEqual(try title("<title>\(family) \(persian)</title>"), "\(family) \(persian)")
+        XCTAssertEqual(try title("<meta property='og:title' content='\(family)'>"), family)
+        XCTAssertEqual(try title("<title>&#x1F468;&#x200D;&#x1F4BB; dev&#8204;x</title>"), "👨\u{200D}💻 dev\u{200C}x")
+        // Control characters are still removed (or left literal as a reference).
+        XCTAssertEqual(try title("<title>a\u{7}b\u{85}c\n d &#0;&#x85;</title>"), "ab c d &#0;&#x85;")
+        // Bidirectional embeddings, overrides and isolates can reorder a title to spoof another one: dropped raw or as references.
+        XCTAssertEqual(try title("<title>invoice\u{202E}fdp.exe \u{2066}x\u{2069}</title>"), "invoicefdp.exe x")
+        XCTAssertEqual(try title("<title>a&#x202E;b&#8294;c&#x2069;</title>"), "abc")
+        // The implicit LRM, RLM and ALM marks reorder neighbouring text the same way; uppercase hex references decode like lowercase.
+        XCTAssertEqual(try title("<title>a\u{200E}b\u{200F}c\u{061C}d&#x200E;e&#8207;f&#x61C;g</title>"), "abcdefg")
+        XCTAssertEqual(try title("<title>x&#X200D;y&#X200C;z</title>"), "x\u{200D}y\u{200C}z")
+        XCTAssertEqual(try title("<meta property='og:title' content='\u{202A}\u{202B}\u{202C}\u{202D}x\u{2067}\u{2068}'>"), "x")
+        XCTAssertEqual(try parsed("<meta name=author content='Wri\u{202E}ter'>").author, "Writer")
+    }
+
     func testHTMLExtractsBoundedTextAndOneSafeThumbnailWithoutExecutingOrFollowingOtherResources() throws {
         let url = URL(string: "https://public.example.org/page")!
         let html = #"<html><!--<meta property='og:title' content='comment'>--><script><meta property='og:title' content='script'>fetch('http://localhost')</script><title>fallback</title><meta content='A &amp; B &#x1F30D;' property='og:title'><meta name=author content='Writer'><meta property='og:image' content='/cover.png'><img src='http://localhost/tracking'><iframe src='http://localhost'></iframe></html>"#
@@ -119,6 +153,43 @@ import XCTest
         let long = try PublicLinkHTMLMetadata(data: Data(("<meta property='og:title' content='" + String(repeating: "a", count: 3000) + "'>").utf8), url: url)
         XCTAssertEqual(long.title?.count, 500)
         XCTAssertThrowsError(try PublicLinkHTMLMetadata(data: Data(repeating: 65, count: 512 * 1024 + 1), url: url))
+    }
+
+    func testWhitespaceOnlyOpenGraphImageGivesNoThumbnailAndValidOneIsKept() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        for blank in ["", "   ", "\n\t"] {
+            XCTAssertNil(try PublicLinkHTMLMetadata(data: Data("<meta property='og:image' content='\(blank)'>".utf8), url: url).thumbnailURL)
+        }
+        let valid = try PublicLinkHTMLMetadata(data: Data("<meta property='og:image' content='/a.png'>".utf8), url: url)
+        XCTAssertEqual(valid.thumbnailURL?.absoluteString, "https://public.example.org/a.png")
+    }
+
+    func testEmptyTitleCandidatesFallThroughToTheNextOne() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let twitter = try PublicLinkHTMLMetadata(data: Data("<title>Page</title><meta property='og:title' content='  '><meta name='twitter:title' content='Tweet'>".utf8), url: url)
+        XCTAssertEqual(twitter.title, "Tweet")
+        let page = try PublicLinkHTMLMetadata(data: Data("<title>Page</title><meta property='og:title' content=''><meta name='twitter:title' content=' '>".utf8), url: url)
+        XCTAssertEqual(page.title, "Page")
+    }
+
+    func testBlankSecureImageFallsBackToOpenGraphImage() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        for blank in ["", "   "] {
+            let html = "<meta property='og:image:secure_url' content='\(blank)'><meta property='og:image' content='/a.png'>"
+            XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url).thumbnailURL?.absoluteString, "https://public.example.org/a.png")
+        }
+    }
+
+    func testPaddedSecureImageIsTrimmedBeforeResolving() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let html = "<meta property='og:image:secure_url' content=' /secure.png '><meta property='og:image' content='/a.png'>"
+        XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url).thumbnailURL?.absoluteString, "https://public.example.org/secure.png")
+    }
+
+    func testNonHTTPSSecureImageFallsBackToOpenGraphImage() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let html = "<meta property='og:image:secure_url' content='http://public.example.org/secure.png'><meta property='og:image' content='/a.png'>"
+        XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url).thumbnailURL?.absoluteString, "https://public.example.org/a.png")
     }
 }
 
@@ -144,6 +215,22 @@ final class PublicLinkNetworkAsyncTests: XCTestCase {
         do { _ = try await client(probe).fetch(URL(string: "https://public.example.org/a")!, limit: 100); XCTFail("Private DNS answer accepted") }
         catch { XCTAssertEqual(error as? PublicLinkError, .blockedAddress) }
         let count = await probe.plans.count; XCTAssertEqual(count, 0)
+    }
+    func testDeadlineSpansRedirectsInsteadOfRestartingPerHop() async throws {
+        let probe = PublicLinkProbe(answers: Array(repeating: [PublicLinkAddress("93.184.216.34")!], count: 4),
+            responses: Array(repeating: PublicLinkHTTPResponse(status: 302, headers: ["location": "/next"], body: Data()), count: 4))
+        let slow = PublicLinkNetwork(resolve: { try await probe.resolve($0) }, exchange: { plan, _ in
+            try await Task.sleep(for: .milliseconds(200)); return try await probe.exchange(plan) })
+        let started = ContinuousClock.now
+        do { _ = try await slow.fetch(URL(string: "https://public.example.org/a")!, limit: 100, deadline: .milliseconds(300)); XCTFail("Chain outlived its deadline") }
+        catch { XCTAssertEqual(error as? PublicLinkError, .timeout) }
+        XCTAssertLessThan(ContinuousClock.now - started, .milliseconds(700))
+        let plans = await probe.plans; XCTAssertLessThanOrEqual(plans.count, 2)
+    }
+    func testFetchWithinTheDeadlineStillReturnsTheResponse() async throws {
+        let probe = PublicLinkProbe(answers: [[PublicLinkAddress("93.184.216.34")!]], responses: [PublicLinkHTTPResponse(status: 200, headers: [:], body: Data("ok".utf8))])
+        let result = try await client(probe).fetch(URL(string: "https://public.example.org/a")!, limit: 100, deadline: .seconds(5))
+        XCTAssertEqual(result.body, Data("ok".utf8))
     }
     func testRedirectRebindingRevalidatesDNSBeforeSendingAnotherHTTPRequest() async throws {
         let probe = PublicLinkProbe(answers: [[PublicLinkAddress("93.184.216.34")!], [PublicLinkAddress("127.0.0.1")!]],

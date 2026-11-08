@@ -1,11 +1,17 @@
 'use strict';
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const os=require('node:os');const path=require('node:path');
-const {Store,plainURL,protectDirectory}=require('../lib/model.cjs');
+const {execFileSync}=require('node:child_process');
+const {Store,plainURL,protectDirectory,protectionFailureDetail}=require('../lib/model.cjs');
+const {windowsEnvironment}=require('../lib/windows-environment.cjs');
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
 function fixture(fn){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-model-'));let now=1000;try{const store=new Store(dir,{clock:()=>now});return fn(store,value=>{now=value;},dir);}finally{fs.rmSync(dir,{recursive:true,force:true});}}
+test('exact image recopy moves the image in front of another image and preserves saved organization',()=>fixture((s,time)=>{const other=Buffer.concat([png,Buffer.from([0])]);const first=s.insert('image',png);s.modify('name',{id:first.id,name:'Logo'});const folder=s.modify('createFolder',{name:'Work'});s.modify('folder',{ids:[first.id],folderId:folder.id});s.modify('tag',{ids:[first.id],tags:['brand']});time(1500);const second=s.insert('image',other);assert.notEqual(second.id,first.id);time(2000);const latest=s.insert('image',png);assert.equal(s.data.items.filter(i=>i.kind==='image').length,2);assert.equal(latest.id,first.id);assert.equal(latest.name,'Logo');assert.equal(latest.pinned,true);assert.deepEqual(latest.folderIds,[folder.id]);assert.deepEqual(latest.tags,['brand']);assert.equal(latest.createdAt,2000);assert.deepEqual(s.data.items.filter(i=>i.kind==='image').map(i=>i.id),[first.id,second.id]);}));
 test('exact recopy moves a text to front and preserves saved organization',()=>fixture((s,time)=>{const first=s.insert('text','API key exact value');s.modify('name',{id:first.id,name:'Service key'});const folder=s.modify('createFolder',{name:'Work'});s.modify('folder',{ids:[first.id],folderId:folder.id});s.modify('tag',{ids:[first.id],tags:['api']});time(2000);s.insert('text','something else');time(3000);const latest=s.insert('text','API key exact value');assert.equal(s.data.items.length,2);assert.equal(latest.id,first.id);assert.equal(latest.name,'Service key');assert.deepEqual(latest.folderIds,[folder.id]);assert.deepEqual(latest.tags,['api']);assert.equal(latest.createdAt,3000);assert.equal(s.data.items[0].id,first.id);}));
+test('copying a stored link again keeps its date added and records the copy, so it leads the Link shelf but not Newest first',()=>fixture((s,time)=>{const first=s.insert('link','https://a.example.com/');time(2000);s.insert('link','https://b.example.com/');time(3000);const again=s.insert('link','https://a.example.com/');assert.equal(again.id,first.id);assert.equal(s.data.items.length,2);assert.equal(again.createdAt,1000);assert.equal(again.lastCopiedAt,3000);assert.equal(again.updatedAt,3000);assert.deepEqual(s.data.items.filter(i=>i.kind==='link').sort((a,b)=>b.createdAt-a.createdAt).map(i=>i.url),['https://b.example.com/','https://a.example.com/']);}));
+test('a link copied again after the retention window stays, like macOS, while an untouched one expires',()=>fixture((s,time)=>{s.insert('link','https://a.example.com/');s.insert('link','https://b.example.com/');time(1000+31*86400000);const again=s.insert('link','https://a.example.com/');assert.equal(again.createdAt,1000);assert.equal(again.trashedAt,null);s.expire(false);const live=s.data.items.filter(i=>!i.trashedAt).map(i=>i.url);assert.deepEqual(live,['https://a.example.com/']);}));
 test('dedup normalizes selection newlines while preserving spaces and case',()=>fixture(s=>{for(const value of ['foo','foo ','Foo','foo\n'])s.insert('text',value);assert.equal(s.data.items.length,3);assert.equal(s.data.items[0].text,'foo\n');}));
 test('URLs must be a sole public-protocol URL, normal prose stays text',()=>{assert.equal(plainURL('hello https://example.com'),null);assert.equal(plainURL('javascript:alert(1)'),null);assert.equal(plainURL('https://secret@example.com'),null);assert.equal(plainURL('https://example.com'), 'https://example.com/');});
+test('Hostless scheme-only copies stay text like the Mac',()=>{for(const value of ['https:/example.com/a','https:example.com','https:///example.com','http:\\\\example.com'])assert.equal(plainURL(value),null);});
 test('a URL copied with surrounding whitespace keeps its link identity like macOS',()=>{
  assert.equal(plainURL('https://example.com/path\n'),'https://example.com/path');assert.equal(plainURL('  https://example.com \r\n'),'https://example.com/');
  assert.equal(plainURL('https://example.com/a b'),null);assert.equal(plainURL(' \n '),null);
@@ -17,6 +23,12 @@ test('sibling folder names are unique ignoring case and diacritics like macOS',(
  const other=s.modify('createFolder',{name:'Personal'});assert.throws(()=>s.modify('renameFolder',{id:other.id,name:'WORK'}),/already exists/);assert.equal(s.data.folders.find(folder=>folder.id===other.id).name,'Personal');
  s.modify('renameFolder',{id:work.id,name:'work'});assert.equal(s.data.folders.find(folder=>folder.id===work.id).name,'work');
 }));
+test('a failed PNG write never leaves a truncated file under the content hash',()=>fixture(s=>{
+ const original=fs.writeFileSync;let failed=false;
+ fs.writeFileSync=function(target,data,...rest){if(!failed&&typeof target==='string'&&target.startsWith(s.mediaDirectory)){failed=true;original.call(fs,target,data.subarray(0,10),...rest);throw Object.assign(new Error('synthetic disk full'),{code:'ENOSPC'});}return original.call(fs,target,data,...rest);};
+ try{assert.throws(()=>s.insert('image',png),/disk full/);}finally{fs.writeFileSync=original;}
+ const item=s.insert('image',png);assert.deepEqual(fs.readFileSync(s.mediaPath(item.id)),png);assert.deepEqual(fs.readdirSync(s.mediaDirectory),[item.imageFile]);
+}));
 test('folder names share the macOS 64-grapheme and control-character rule',()=>fixture(s=>{
  const limit='f'.repeat(64),flags='\u{1F1F9}\u{1F1F7}'.repeat(64),folder=s.modify('createFolder',{name:limit});assert.equal(folder.name,limit);
  assert.equal(s.modify('createFolder',{name:flags}).name,flags);
@@ -27,6 +39,30 @@ test('folder names share the macOS 64-grapheme and control-character rule',()=>f
 }));
 test('retention is per-kind; pinned/folder/tag records remain permanent',()=>fixture((s,time)=>{const text=s.insert('text','expiring text'),link=s.insert('link','https://example.com'),saved=s.insert('text','tagged');s.modify('tag',{ids:[saved.id],tags:['keep']});s.modify('setSettings',{patch:{retentionDays:{text:1,link:3,image:0}}});time(2*86400000);s.expire();assert.ok(text.trashedAt);assert.equal(link.trashedAt,null);assert.equal(saved.trashedAt,null);}));
 test('remove hides saved items, trashes temporary ones; undo preserves later edits',()=>fixture(s=>{const saved=s.insert('text','saved'),temp=s.insert('text','temporary');s.modify('pin',{ids:[saved.id]});s.modify('remove',{ids:[saved.id,temp.id]});assert.equal(saved.hiddenFromShelf,true);assert.ok(temp.trashedAt);s.modify('name',{id:saved.id,name:'Later name'});s.modify('undo');assert.equal(saved.hiddenFromShelf,false);assert.equal(temp.trashedAt,null);assert.equal(saved.name,'Later name');}));
+test('New note always creates a new retained record, even with the default or an existing text',()=>fixture(s=>{
+ const copied=s.insert('text','Meeting agenda');
+ const a=s.createNote(),b=s.createNote({}),c=s.createNote({text:'Meeting agenda',title:'Agenda'});
+ assert.equal(new Set([copied.id,a.id,b.id,c.id]).size,4);assert.equal(s.data.items.length,4);
+ assert.deepEqual([a.text,b.text,c.text],['New note','New note','Meeting agenda']);
+ for(const note of [a,b,c])assert.equal(s.data.items.find(i=>i.id===note.id),note);
+ assert.equal(c.name,'Agenda');assert.ok([a,b,c].every(note=>Number.isFinite(note.retainedAt)));assert.equal(copied.retainedAt,null);
+}));
+test('a capture or import of a note\'s text never merges or removes notes, also after reopening',()=>fixture((s,time,dir)=>{
+ const copied=s.insert('text','Meeting agenda');
+ time(2000);const a=s.createNote(),b=s.createNote({title:'Second'}),c=s.createNote({text:'Meeting agenda',title:'Agenda'});
+ s.modify('details',{id:a.id,note:'Keep this note'});
+ const before=JSON.stringify([a,b,c].map(note=>s.data.items.find(i=>i.id===note.id)));
+ time(3000);const captured=s.insert('text','New note');const recopied=s.insert('text','Meeting agenda');
+ assert.ok(![a.id,b.id,c.id].includes(captured.id));assert.equal(recopied.id,copied.id);
+ assert.equal(JSON.stringify([a,b,c].map(note=>s.data.items.find(i=>i.id===note.id))),before);
+ assert.ok([a,b,c].every(note=>!s.data.items.find(i=>i.id===note.id).trashedAt));
+ const reopened=new Store(dir,{clock:()=>4000});assert.ok([a,b,c].every(note=>reopened.data.items.find(i=>i.id===note.id)?.createdAsNote===true));
+ reopened.insert('text','New note');assert.equal(reopened.data.items.filter(i=>i.createdAsNote&&!i.trashedAt).length,3);
+}));
+test('a note keeps its marker on disk even when creation stops after the first write',()=>fixture((s,_time,dir)=>{
+ s.modify=()=>{throw new Error('stopped');};assert.throws(()=>s.createNote({title:'Agenda'}),/stopped/);
+ const note=new Store(dir).data.items.find(i=>i.text==='New note');assert.equal(note?.createdAsNote,true);
+}));
 test('explicit Trash invalidates removal undo and deletion requires Trash',()=>fixture(s=>{const item=s.insert('text','text');assert.throws(()=>s.modify('delete',{ids:[item.id]}));s.modify('remove',{ids:[item.id]});s.modify('restore',{ids:[item.id]});assert.equal(s.undoStack.length,0);s.modify('trash',{ids:[item.id]});s.modify('delete',{ids:[item.id]});assert.equal(s.data.items.length,0);}));
 test('batch operations are atomic when one content kind is invalid',()=>fixture(s=>{const text=s.insert('text','before'),image=s.insert('image',png);assert.throws(()=>s.modify('editText',{ids:[text.id,image.id],text:'after'}));assert.equal(s.item(text.id).text,'before');}));
 test('a failed command rolls back in place so background jobs keep the item objects they hold',()=>fixture(s=>{
@@ -63,6 +99,8 @@ test('pin-picker recents are bounded, success-only, atomic and pruned after remo
 test('recent folder preference validation rejects invalid or oversized IDs and sanitizes stale IDs on restore and load',()=>fixture((s,_clock,directory)=>{const existing=s.modify('createFolder',{name:'Kept'}),missing='00000000-0000-4000-8000-000000000099';s.modify('setSettings',{patch:{recentPinFolderIds:[missing,existing.id,existing.id]}});assert.deepEqual(s.data.settings.recentPinFolderIds,[existing.id]);for(const value of [[existing.id,...Array(8).fill(missing)],['../private'],null])assert.throws(()=>s.modify('setSettings',{patch:{recentPinFolderIds:value}}));s.data.settings.recentPinFolderIds=[missing,existing.id];s.persist();assert.deepEqual(new Store(directory).data.settings.recentPinFolderIds,[existing.id]);}));
 test('settings merge nested retention and shortcut maps, rejecting prototype and filesystem injection',()=>fixture(s=>{s.modify('setSettings',{patch:{retentionDays:{text:7},localShortcuts:{pin:'O'}}});assert.equal(s.data.settings.retentionDays.image,30);assert.equal(s.data.settings.localShortcuts.pin,'O');assert.throws(()=>s.modify('setSettings',{patch:JSON.parse('{"localShortcuts":{"__proto__":"oops"}}')}));assert.throws(()=>s.modify('setSettings',{patch:{watchFolders:['../private']}}));}));
 
+test('a watched folder that is unavailable stays saved when another folder is added or removed like macOS',()=>fixture((s,_clock,dir)=>{const unmounted=path.join(dir,'unmounted'),present=path.join(dir,'present');s.modify('setSettings',{patch:{watchFolders:[unmounted]}});s.modify('setSettings',{patch:{watchFolders:[...s.data.settings.watchFolders,present]}});assert.deepEqual(s.data.settings.watchFolders,[unmounted,present]);s.modify('setSettings',{patch:{watchFolders:s.data.settings.watchFolders.filter(folder=>folder!==present)}});assert.deepEqual(s.data.settings.watchFolders,[unmounted]);}));
+
 test('permanent deletion purges orphan managed rasters and refreshes both JSON snapshots',()=>fixture((s,_time,dir)=>{
   const item=s.insert('image',png),original=item.imageFile;
   const edited=Buffer.from(png);edited[edited.length-1]^=1;
@@ -80,6 +118,26 @@ test('permanent deletion keeps rasters referenced by live items or recoverable T
   const second=s.insert('image',png);s.modify('delete',{ids:[first.id]});assert.ok(fs.existsSync(file));
   s.modify('trash',{ids:[second.id]});const third=s.insert('image',png);s.modify('trash',{ids:[third.id]});
   s.modify('delete',{ids:[second.id]});assert.ok(fs.existsSync(file));s.modify('restore',{ids:[third.id]});assert.deepEqual(fs.readFileSync(s.mediaPath(third.id)),png);
+}));
+test('opening the library removes temporary copies a killed process left behind',()=>fixture((_s,_time,dir)=>{
+  const id='12345678-1234-4234-8234-123456789abc',left=['library.json.tmp-'+id,'library.json.backup.tmp-'+id],other='library.json.tmp-notes';
+  for(const name of [...left,other])fs.writeFileSync(path.join(dir,name),'deleted text');
+  new Store(dir,{clock:()=>1000});
+  for(const name of left)assert.equal(fs.existsSync(path.join(dir,name)),false);assert.ok(fs.existsSync(path.join(dir,other)));
+}));
+test('a temporary library copy that cannot be removed is reported',()=>fixture((_s,_time,dir)=>{
+  const file=path.join(dir,'library.json.tmp-12345678-1234-4234-8234-123456789abc'),unlink=fs.unlinkSync;fs.writeFileSync(file,'deleted text');
+  fs.unlinkSync=target=>{if(target===file)throw Object.assign(new Error('Synthetic lock'),{code:'EPERM'});return unlink(target);};
+  try{assert.match(new Store(dir,{clock:()=>1000}).privacyWarning,/temporary copy of the library/);}finally{fs.unlinkSync=unlink;}
+  assert.ok(fs.existsSync(file));
+}));
+test('restoring one item of a Take down batch leaves Undo take down for the rest',()=>fixture(s=>{
+  const first=s.insert('text','First'),second=s.insert('text','Second');s.modify('remove',{ids:[first.id,second.id]});
+  s.modify('restore',{ids:[first.id]});assert.equal(s.publicState().canUndo,true);s.modify('undo');assert.equal(s.item(second.id).trashedAt,null);assert.equal(s.publicState().canUndo,false);
+}));
+test('deleting one item of a Take down batch leaves Undo take down for the rest',()=>fixture(s=>{
+  const first=s.insert('text','First'),second=s.insert('text','Second');s.modify('remove',{ids:[first.id,second.id]});
+  s.modify('delete',{ids:[first.id]});assert.equal(s.publicState().canUndo,true);s.modify('undo');assert.equal(s.item(second.id).trashedAt,null);
 }));
 test('ordinary removal and retention preserve managed images for undo and Trash recovery',()=>fixture((s,time)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('remove',{ids:[item.id]});assert.ok(fs.existsSync(file));s.modify('undo');assert.equal(item.trashedAt,null);
@@ -102,6 +160,29 @@ test('application data protection retries only a timed-out PowerShell start once
  let calls=[];assert.equal(protectDirectory('C:\\data',{...options,run:(_file,args,settings)=>{calls.push(settings.timeout);if(calls.length===1)throw timeout();assert.deepEqual(args.slice(-2),['-Directory','C:\\data']);return 'ok';}}),'ok');assert.deepEqual(calls,[15000,45000]);
  calls=[];assert.throws(()=>protectDirectory('C:\\data',{...options,run:(_file,_args,settings)=>{calls.push(settings.timeout);throw Object.assign(new Error('Access denied'),{status:1});}}),/Access denied/);assert.deepEqual(calls,[15000]);
  calls=[];assert.throws(()=>protectDirectory('C:\\data',{...options,run:(_file,_args,settings)=>{calls.push(settings.timeout);throw timeout();}}),/ETIMEDOUT/);assert.deepEqual(calls,[15000,45000]);
+});
+test('application data protection failure text is redacted, one line and bounded',()=>{
+ const directory='C:\\Users\\Şeyma\\ClipBoardLine';
+ assert.equal(protectionFailureDetail({stderr:Buffer.from(`İşlem için ayrıcalık gerekli:\r\n'${directory}'\n`)},directory),"İşlem için ayrıcalık gerekli: '[application data]' ");
+ assert.equal(protectionFailureDetail({stderr:Buffer.from('ğ'.repeat(1000))},directory).length,900);
+ assert.equal(protectionFailureDetail(new Error('spawn failed'),directory),'spawn failed');
+});
+test('a real protection script failure stays readable in Turkish under any console code page',{skip:process.platform!=='win32'},t=>{
+ const parent=fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-protect-'))),directory=path.join(parent,'ğüşİıöç-missing');
+ const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe'),script=path.join(__dirname,'..','native','protect-directory.ps1');
+ const turkishConsole=(file,args,settings)=>execFileSync(process.env.ComSpec,['/d','/s','/c',`"chcp 857>nul && "${file}" ${args.map(arg=>`"${arg}"`).join(' ')}"`],{...settings,windowsVerbatimArguments:true});
+ const runs={default:(file,args,settings)=>execFileSync(file,[...args,'-Check'],settings),'OEM 857':(file,args,settings)=>turkishConsole(file,[...args,'-Check'],settings)};
+ try{
+  for(const [name,run] of Object.entries(runs)){
+   let failure;try{protectDirectory(directory,{powershell,script,run});}catch(error){failure=error;}
+   assert.equal(failure?.status,1,name);const stderr=String(failure.stderr);
+   assert.ok(stderr.includes(directory),`${name}: ${stderr}`);assert.ok(!stderr.includes('\uFFFD'),`${name}: ${stderr}`);
+   const detail=protectionFailureDetail(failure,directory);assert.ok(detail.includes('[application data]'),`${name}: ${detail}`);assert.ok(!detail.includes(directory),`${name}: ${detail}`);assert.ok(!/[\r\n]/.test(detail),name);
+  }
+  // Records the reported cause in the CI log: PowerShell's own error stream on a Turkish OEM console.
+  try{turkishConsole(powershell,['-NoProfile','-NonInteractive','-Command',"throw 'ğüşİ'"],{windowsHide:true,stdio:['ignore','pipe','pipe'],env:windowsEnvironment()});}
+  catch(error){t.diagnostic(`PowerShell's own stderr on OEM 857 decoded as UTF-8 has replacement characters: ${String(error.stderr).includes('\uFFFD')}`);}
+ }finally{fs.rmSync(parent,{recursive:true,force:true});}
 });
 test('image unlink failure remains pending and retries safely on next startup',()=>fixture((s,_time,dir)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('trash',{ids:[item.id]});const unlink=fs.unlinkSync;
@@ -171,6 +252,15 @@ test('selection lookups keep request order and reject missing items',()=>fixture
  assert.throws(()=>s.selected([first.id,'00000000-0000-4000-8000-000000000000']),/no longer exists/);
  s.modify('trash',{ids:[first.id]});s.modify('delete',{ids:[first.id]});assert.deepEqual(s.data.items.map(item=>item.id),[second.id]);
 }));
+test('opening the Store removes stale .png-/.video- temporaries from a killed process and leaves everything else',()=>fixture((s,_time,dir)=>{
+ const id='0f8fad5b-d9cb-469f-a165-70867728950e',media=s.mediaDirectory,stale=['.png-'+id,'.video-'+id],keep=['.png-'+id+'.x','.png-nope','x.png-'+id,'.video-'+id.slice(1)];
+ for(const name of [...stale,...keep])fs.writeFileSync(path.join(media,name),'x');
+ const dirLike='.png-'+id.replace(/^0/,'1');fs.mkdirSync(path.join(media,dirLike));fs.writeFileSync(path.join(media,dirLike,'inner'),'x');
+ let link='';try{fs.symlinkSync(path.join(dir,'library.json'),path.join(media,link='.video-'+id.replace(/^0/,'2')));}catch{link='';}
+ const item=s.insert('image',png),reopened=new Store(dir);
+ assert.deepEqual(fs.readdirSync(media).sort(),[...keep,dirLike,...(link?[link]:[]),item.imageFile].sort());
+ assert.ok(fs.existsSync(path.join(media,dirLike,'inner')));assert.deepEqual(fs.readFileSync(reopened.mediaPath(item.id)),png);
+}));
 test('link preview metadata stores its thumbnail only while the link still exists',()=>fixture((s,time,dir)=>{
  const files=()=>fs.readdirSync(path.join(dir,'media')),url='https://example.com/a';
  const gone=s.insert('link',url);s.modify('trash',{ids:[gone.id]});assert.equal(s.setLinkMetadata(gone,url,{title:'T',thumbnail:png}),false);assert.deepEqual(files(),[]);assert.equal(gone.title,'');
@@ -184,3 +274,5 @@ test('pin on a mixed selection pins every item and only a fully pinned selection
  s.modify('pin',{ids:[a.id]});s.modify('pin',{ids:[a.id,b.id]});assert.deepEqual(pinned(),[true,true]);
  s.modify('pin',{ids:[a.id,b.id]});assert.deepEqual(pinned(),[false,false]);
 }));
+test('a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS',()=>fixture(s=>{const item=s.insert('text','x');const big='ş'.repeat(600000);assert.throws(()=>s.modify('note',{ids:[item.id],note:big}),/Invalid text/);assert.throws(()=>s.modify('editText',{ids:[item.id],text:big}),/Invalid text/);assert.throws(()=>s.insert('text',big),/Invalid text/);s.modify('note',{ids:[item.id],note:'ş'.repeat(500000)});assert.equal(s.data.items[0].note.length,500000);}));
+test('an item can get a 51st tag, like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello');for(let i=1;i<=51;i++)s.modify('tag',{ids:[item.id],tags:[...s.item(item.id).tags,'tag'+i]});assert.equal(s.item(item.id).tags.length,51);}));

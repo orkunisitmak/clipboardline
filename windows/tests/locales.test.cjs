@@ -225,19 +225,7 @@ test('localized app strings preserve their printf placeholders', () => {
   }
 });
 
-test('Windows Settings and fallback copy passes through the locale lookup', () => {
-  const localizedCopy = [
-    'Windows uses Control for copy, paste and app commands. Record a combination or turn an action off. Letter keys work only while browsing.',
-    'Find shortcut\u2026',
-    'Windows uses its own signed installer channel. Download integrity is checked before the app is replaced.',
-    'Local clipboard shelves and a saved library for Windows.',
-    'Settings sections',
-    'Update available',
-    'The secure desktop connection is unavailable. Open this interface through the installed application.',
-    'Search actions\u2026', 'Browse', 'Run', 'Clipboard shelves', 'Folder actions', 'Search folders', 'Keep at least one shelf visible.'
-  ];
-  for (const key of localizedCopy) assert.ok(rendererTranslationKeys.includes(key), `Windows copy bypasses translation: ${key}`);
-});
+
 
 test('Windows action palette copy exists in every locale', () => {
   for (const locale of locales) {

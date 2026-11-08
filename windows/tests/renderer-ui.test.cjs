@@ -358,7 +358,7 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
    else throw new Error('Unsupported shared contract action: '+step.action);
    await f.ready();
    const active=activeKind(f),focusedAlias=aliases.get(focusedCard(f)),actual={activeKind:active,focused:kinds.get(focusedAlias)===active?focusedAlias:null,selected:selectedCards(f).map(id=>aliases.get(id)||id).sort(),visibleKinds:[...f.main.matchAll(/<section class="shelf(?: active-shelf)?\s*" data-shelf="([^"]+)"/g)].map(match=>match[1]),searchEditing:/class="search-hud"/.test(f.main)};
-   if(step.action==='command')actual.effects=[...f.commands.slice(commandsBefore).map(value=>value.action),...(f.overlay?['preview']:[])];
+   if(step.action==='command')actual.effects=[...f.commands.slice(commandsBefore).map(value=>value.action),...(f.overlay?[/id="markup-canvas"/.test(f.overlay)?'markup':'preview']:[])];
    observations.push({scenarioId:scenario.id,step:index,actual});
    try{assert.deepEqual(actual,step.expect);}catch(error){errors.push(scenario.id+' step '+index+': '+error.message);}
   }
@@ -533,6 +533,29 @@ for(const [width,height]of[[3840,2160],[7680,4320]])test('retained '+width+'×'+
  assert.equal(f.paintCalls.filter(value=>value.canvas==='markup-canvas'&&value.operation==='clearRect').length,1);assert.equal(f.paintCalls.filter(value=>value.canvas==='markup-canvas'&&value.operation==='drawImage').length,0);assert.equal(f.imageLoads.length,1);
  await f.key('KeyS',{ctrl:true});const saved=f.commands.find(value=>value.action==='saveImage');assert.ok(saved);assert.equal(saved.payload.annotations[0].points.length,97);assert.deepEqual(saved.payload.annotations[0].points[0],{x:width*.1,y:height*.2});assert.ok(Math.abs(saved.payload.annotations[0].points.at(-1).x-width*666/900)<1e-7);
 });
+test('Settings and Actions show localized copy in the rendered UI',async()=>{
+ const f=fixture();await f.ready();const tr=require('../locales.js').tr;
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.api.command('settings');await f.ready();
+ assert.ok(f.main.includes(tr['Settings sections']));
+ await f.click('settings-tab',{tab:'shortcuts'});
+ assert.ok(f.main.includes(tr['Windows uses Control for copy, paste and app commands. Record a combination or turn an action off. Letter keys work only while browsing.']));
+ assert.ok(f.main.includes(tr['Find shortcut…']));
+ await f.click('settings-tab',{tab:'updates'});
+ assert.ok(f.main.includes(tr['Windows uses its own signed installer channel. Download integrity is checked before the app is replaced.']));
+ await f.key('KeyK',{ctrl:true});
+ for(const key of ['Search actions…','Browse','Run'])assert.ok(f.overlay.includes(tr[key]),key);
+});
+
+test('disabled action availability hints use selected language',async()=>{
+ const f=fixture();await f.ready();
+ const tr=require('../locales.js').tr;
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.key('KeyK',{ctrl:true});
+ assert.ok(f.overlay.includes(tr['Available in Library.']),'disabled Library-only action hint should be localized');
+ assert.ok(!f.overlay.includes('Available in Library'),'untranslated hint must not be shown');
+});
+
 test('Turkish Settings toggles use the same localized visible and accessible label',async()=>{const f=fixture();await f.ready();await f.api.command('settings');await f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();assert.match(f.main,/aria-label="Sesler"/);assert.doesNotMatch(f.main,/aria-label="Sounds"/);});
 
 test('closing an editor before its scheduled frame prevents stale overlay painting',async()=>{const f=fixture({queuedAnimationFrames:true});await f.ready();await f.key('Space');f.flushAnimationFrames();await f.key('KeyM');assert.equal(f.animationFrames.length,1);await f.key('Escape');assert.doesNotMatch(f.overlay,/id="markup-canvas"/);f.paintCalls.length=0;f.flushAnimationFrames();assert.equal(f.paintCalls.filter(value=>value.canvas==='markup-canvas').length,0);assert.match(f.overlay,/id="preview-dialog"/);});
@@ -817,3 +840,29 @@ test('the Move to Trash confirmation uses the shared localized catalog entry',as
  f.api.emit({settings:{...f.state.settings,language:'en'}});await f.click('close-modal');await f.click('trash');
  assert.match(f.overlay,/Move 1 items to recoverable Trash\?/);
 });
+
+test('shelf M opens focused photo for marker drawing and Escape saves editable marks',async()=>{
+ const f=fixture();await f.ready();
+ const other={...structuredClone(f.state.items.find(value=>value.id===f.image)),id:'20000000-0000-4000-8000-000000000099',name:'Another photo',mediaUrl:'appmedia://media/20000000-0000-4000-8000-000000000099/image'};
+ f.api.emit({items:[other,...f.state.items]});await f.ready();await f.cardClick(f.image);assert.equal(focusedCard(f),f.image);
+ await f.key('KeyM');assert.match(f.overlay,/id="markup-canvas"/);assert.ok(f.imageLoads.at(-1).url.includes(f.image));
+ await f.key('KeyH');await f.pointer('pointerdown',60,40);await f.pointer('pointermove',250,100);await f.pointer('pointerup',250,100);
+ await f.key('Escape');const saved=f.state.items.find(value=>value.id===f.image);
+ assert.equal(saved.annotations.length,1);assert.equal(saved.annotations[0].type,'marker');assert.ok(saved.annotations[0].points.length>=2);
+ assert.doesNotMatch(f.overlay,/id="markup-canvas"/);await f.key('Escape');await f.key('KeyM');
+ await f.key('Escape');assert.equal(f.state.items.find(value=>value.id===f.image).annotations[0].type,'marker');
+ });
+
+test('shelf markup does not consume M in native editors or open text and link items',async()=>{
+ for(const name of ['search-input','detail-note','modal-value']){
+  const f=fixture();await f.ready();const editor=f.editor(name);const event=await f.key('KeyM',{target:editor});
+  assert.ok(!event.prevented,name);assert.equal(f.overlay,'');assert.equal(f.commands.length,0);
+ }
+ for(const kind of ['text','link']){
+  const f=fixture();await f.ready();await f.cardClick(kind==='text'?f.text1:f.link);await f.key('KeyM');assert.equal(f.overlay,'');
+ }
+ const f=fixture();await f.ready();f.api.emit({settings:{...f.state.settings,localShortcuts:{markup:'X'}}});await f.ready();
+ await f.key('KeyM');assert.equal(f.overlay,'');await f.key('KeyX');assert.match(f.overlay,/id="markup-canvas"/);
+ await f.key('Escape');await f.key('Escape');f.api.emit({settings:{...f.state.settings,localShortcuts:{markup:''}}});await f.ready();
+ await f.key('KeyM');await f.key('KeyX');assert.equal(f.overlay,'');
+ });

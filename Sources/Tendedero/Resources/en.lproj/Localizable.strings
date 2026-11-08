@@ -449,12 +449,14 @@
 /* Searchable action bar. */
 "Actions" = "Actions";
 "Available on the shelves" = "Available on the shelves";
+"Available in Library" = "Available in Library";
 "Available on the shelves or in Library" = "Available on the shelves or in Library";
 "Edit item details" = "Edit item details";
 "Finish editing first" = "Finish editing first";
 "Library unavailable" = "Library unavailable";
 "Library views" = "Library views";
 "No annotations to clear" = "No annotations to clear";
+"No filters to clear" = "No filters to clear";
 "No images on the line" = "No images on the line";
 "No items in this view" = "No items in this view";
 "No items to the left" = "No items to the left";

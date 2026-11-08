@@ -45,6 +45,8 @@ struct LibraryRecord: Codable, Equatable, Identifiable {
     var author: String?
     var metadataState = "pending"
     var metadataAttemptedAt: Date?
+    /// The name the user gave, or nil when it is blank, so shelf cards fall back to the content like the Library card.
+    var shelfName: String? { let name = title.trimmingCharacters(in: .whitespacesAndNewlines); return name.isEmpty ? nil : name }
     var displayTitle: String {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !name.isEmpty { return name }
@@ -260,7 +262,10 @@ extension String {
         try backfillTextIdentity()
         try db.execute("PRAGMA user_version=1")
         drainMarkupGarbage()
+        expire()
     }
+    /// Copies past their retention leave the shelves at launch and after every capture, as in the Windows store.
+    private func expire() { try? prune() }
     private func migrateLegacy() throws {
         guard try db.rows("SELECT value FROM metadata WHERE key='migration-v1'").isEmpty else { return }
         // Decode before writing any record or applying expiry. A damaged
@@ -451,12 +456,48 @@ extension String {
         try db.transaction { try put(record) }; changed(); return record
     }
     @discardableResult func captureImage(_ url: URL, capturedAt: Date? = nil) throws -> LibraryRecord {
+        defer { expire() }
         if let existing = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE path=? AND deleted IS NULL", [.text(url.standardizedFileURL.path)])).first { return existing }
         guard files.isRegularFile(url) else { throw HistoryFiles.Failure.unsafeFile }
-        let date = capturedAt ?? now(); var item = LibraryRecord(id: UUID(), kind: .image, createdAt: date, updatedAt: date); item.path = url.standardizedFileURL.path; item.captureRevision = UUID()
-        try db.transaction { try put(item) }; changed([item.id]); return item
+        let date = capturedAt ?? now()
+        // The same pixels copied again move the existing item to the front and keep its pin, tags and folders, as on Windows.
+        // Match and insert in one write transaction, so two app instances copying the same image cannot both insert it.
+        var fresh = LibraryRecord(id: UUID(), kind: .image, createdAt: date, updatedAt: date); fresh.path = url.standardizedFileURL.path; fresh.captureRevision = UUID()
+        var moved: LibraryRecord?
+        try db.transaction {
+            if let match = try identicalImage(to: url), var existing = try item(match.id), existing.deletedAt == nil {
+                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.captureRevision = UUID()
+                try put(existing); moved = existing
+            } else { try put(fresh) }
+        }
+        if let moved {
+            if files.isClipboardCopy(url) { _ = try? files.trashAppCopy(url) }
+            invalidateShelfUndo([moved.id]); changed([moved.id]); return moved
+        }
+        changed([fresh.id]); return fresh
+    }
+    /// The capture time, nudged just past the newest shelf image when the clock has not moved on since it.
+    private func frontDate(_ date: Date) throws -> Date {
+        if case let .real(newest)? = try db.rows("SELECT created FROM items WHERE kind='image' AND shelf=1 AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1").first?["created"],
+           date.timeIntervalSince1970 <= newest { return Date(timeIntervalSince1970: newest.nextUp) }
+        return date
+    }
+    /// A live image whose original bytes equal this file's. Size narrows the candidates before any file is hashed.
+    private func identicalImage(to url: URL) throws -> LibraryRecord? {
+        func size(_ url: URL) -> Int? { (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? nil }
+        guard let wanted = size(url) else { return nil }
+        var digest: SHA256.Digest?
+        let rows = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='image' AND deleted IS NULL ORDER BY created DESC,rowid DESC"))
+        for record in rows where record.recordingOriginalPath == nil {
+            guard let original = (record.markupBasePath ?? record.path).map({ URL(fileURLWithPath: $0) }),
+                  original.path != url.standardizedFileURL.path, size(original) == wanted else { continue }
+            if digest == nil { digest = SHA256.hash(data: try Data(contentsOf: url)) }
+            if let bytes = try? Data(contentsOf: original), SHA256.hash(data: bytes) == digest { return record }
+        }
+        return nil
     }
     @discardableResult func captureText(_ text: String) throws -> LibraryRecord? {
+        defer { expire() }
         guard !text.isEmpty, text.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
         let date = now()
         var affected = [UUID]()
@@ -521,9 +562,12 @@ extension String {
         return captured
     }
     @discardableResult func captureLink(_ url: URL) throws -> LibraryRecord {
+        defer { expire() }
         guard let normalized = LinkIdentity.normalized(url) else { throw HistoryFiles.Failure.unsafeFile }
         if var item = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE normalized=? AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1", [.text(normalized)])).first {
             item.onShelf = true; item.updatedAt = now(); item.lastCopiedAt = now(); item.lastCapturedAt = now(); item.captureRevision = UUID()
+            // Copying a link again asks for its preview again, so a failed attempt does not hold the retry back for an hour.
+            if item.metadataState == "failed" { item.metadataAttemptedAt = nil }
             try db.transaction { try put(item) }; changed([item.id]); return item
         }
         let date = now(); var item = LibraryRecord(id: UUID(), kind: .link, createdAt: date, updatedAt: date)
