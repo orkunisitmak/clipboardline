@@ -29,13 +29,19 @@ versioned behavioral specification. Its synthetic items use portable aliases and
 are listed newest first. Every step contains an expected active row, focused
 item, complete selection, visible rows and native search-editing state.
 
-The current fifteen scenarios (93 observations per platform) cover one selected image on opening, reopening,
+The current seventeen scenarios (102 observations per platform) cover one selected image on opening, reopening,
 hidden/empty/filtered image fallback, column-preserving vertical navigation and
 clamping, hidden/empty row skipping, horizontal navigation, adding and hiding
 rows, search caret keys, empty shelves, remapping, disabling and restoring defaults,
 and Enter, S, P, Space and Ctrl/Command+C doing nothing on an empty active shelf
 while other shelves hold items (`command` steps also observe their `effects`:
-any copy, preview, pin or take down; the expected list is empty). The
+any copy, preview, pin or take down; the expected list is empty). M also opens markup for the focused shelf photo directly; empty and non-image shelves ignore it. Marker drag, saved marks and native text input guards are covered by the nearby annotation interaction tests on both platforms.
+Mac preview mouse coverage sends down/drag/up events through the real nonactivating
+panel and checks recorded vectors and composited pixels; a control view verifies
+window-level delivery in the test process. The canvas accepts first mouse during
+markup/crop so a non-key preview can draw. Windows uses its existing renderer
+pointer handlers and has no AppKit first-mouse gate.
+The
 `tracking-parameter-links` scenario copies links through the real stores
 (`LibraryStore.captureLink`, `Store.insert`); its `copyLink` steps report which stored
 link (numbered by first appearance) the copy resolved to and that link's stored address.
@@ -71,6 +77,11 @@ this on both platforms with an image, a text and a link selected.
 `subfolder-title` requires the Library title of a subfolder to list every
 ancestor, outermost first (`Parent / Child`, `Parent / Middle / Child`), so
 same-named subfolders of different parents can be told apart.
+`link-title-format-characters` requires a fetched page title to keep the
+zero-width joiner and non-joiner (emoji sequences, Persian words) while removing
+the bidirectional marks, embeddings, overrides and isolates that can spoof a title,
+whether written directly or as numeric references; numeric references to control
+code points stay literal.
 `trash-restore-selection` requires restoring items from Library Trash to move
 focus and selection to the first item that remains in Trash and to clear the
 details panel when none remain.
@@ -85,10 +96,15 @@ library only when the open view is that folder or one of its subfolders.
 platforms, not 1 MiB of UTF-16 units on Windows.
 `name-fold-keeps-script-marks` requires tag and folder names that differ only by a kana voiced mark or a
 Devanagari or Thai vowel sign to stay distinct on both platforms.
+`width-insensitive-search` also keeps a voiced kana and a Hangul syllable whole, so searching は or 하 does
+not find ばら or 한국 on either platform.
 `item-display-title` requires an unnamed text to be titled by its first non-blank
 line, trimmed and capped at 120 grapheme clusters (Untitled note when every line is
 blank), and a link without a fetched title by its host name (Link when the stored URL
 does not parse).
+`unavailable-watched-folder` requires a watched folder that is unavailable, such as one on an
+unmounted volume, to stay in the saved list while it is skipped, so adding or removing another
+watched folder does not forget it.
 
 The adapters execute application behavior:
 

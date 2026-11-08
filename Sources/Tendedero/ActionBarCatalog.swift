@@ -190,9 +190,9 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .export: return require(c.hasSelection, L("Select an item first"))
         case .trash: return require(selected, L("Select an item first"))
         case .removeFromLine: return require(!c.isLibrary && selected, c.isLibrary ? L("Available on the shelves") : L("Select an item first"))
-        case .undoRemoveFromLine: return require(!c.isLibrary && c.canUndoShelfRemoval, L("Nothing to undo"))
-        case .undoTrash: return require(c.isLibrary && c.canUndoLibraryTrash, L("Nothing to undo"))
-        case .focusNextPane, .focusPreviousPane: return require(c.origin == .library, L("Library unavailable"))
+        case .undoRemoveFromLine: return require(!c.isLibrary && c.canUndoShelfRemoval, c.isLibrary ? L("Available on the shelves") : L("Nothing to undo"))
+        case .undoTrash: return require(c.isLibrary && c.canUndoLibraryTrash, c.isLibrary ? L("Nothing to undo") : L("Available in Library"))
+        case .focusNextPane, .focusPreviousPane: return require(c.origin == .library, L("Available in Library"))
         case .newNote, .newFolder: return require(c.libraryAvailable, L("Library unavailable"))
         case .close: return require(browsing && (c.lineRevealed || c.isLibrary || c.isPreview), L("Open a shelf or Library first"))
         case .switchShelf: return require(c.origin == .line, L("Available on the shelves"))
@@ -236,6 +236,7 @@ enum ActionBarMenuAction: String, CaseIterable {
             return c.isPreview ? hint : sequence([context.map { bindings.title(.preview, in: $0) } ?? "", hint])
         }
         if action == .markup {
+            if context == .line { return bindings.title(action, in: .line) }
             if c.origin == .library { return bindings.title(action, in: .library) }
             let hint = bindings.title(.markup, in: c.isMarkupEditing ? .imageMarkup : .imagePreview)
             return c.isPreview ? hint : sequence([context.map { bindings.title(.preview, in: $0) } ?? "", hint])
@@ -243,7 +244,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         if tools.contains(action) {
             let tool = bindings.title(action, in: .imageMarkup)
             if c.isMarkupEditing { return tool }
-            let prefix = c.isPreview ? [] : [context.map { bindings.title(.preview, in: $0) } ?? ""]
+            let prefix = c.isPreview || context == .line ? [] : [context.map { bindings.title(.preview, in: $0) } ?? ""]
             return sequence(prefix + [bindings.title(.markup, in: .imagePreview), tool])
         }
         if action == .editText && !c.isPreview {
@@ -391,8 +392,10 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .refreshLink: return require(c.isLink, L("Select a link first"))
         case .openFile, .quickLook, .revealFile: return require(c.singleSelection && c.kind == .image && c.hasFile, L("Select one image first"))
         case .saveToDesktop: return require(!c.isLibrary && c.singleSelection && c.kind == .image && c.inInbox && !c.isDeleted, L("Select an image in the screenshots inbox first"))
-        case .takeDownLeft: return require(!c.isLibrary && c.singleSelection && c.kind == .image && c.canTakeDownLeft, L("No items to the left"))
-        case .takeDownRight: return require(!c.isLibrary && c.singleSelection && c.kind == .image && c.canTakeDownRight, L("No items to the right"))
+        case .takeDownLeft, .takeDownRight:
+            let canTakeDown = action == .takeDownLeft ? c.canTakeDownLeft : c.canTakeDownRight
+            let reason = c.isLibrary ? L("Available on the shelves") : !(c.singleSelection && c.kind == .image) ? L("Select one image first") : action == .takeDownLeft ? L("No items to the left") : L("No items to the right")
+            return require(!c.isLibrary && c.singleSelection && c.kind == .image && canTakeDown, reason)
         case .trimVideo: return require(c.singleSelection && c.kind == .image && c.hasFile && c.isRecording && !c.isDeleted, L("Select a video first"))
         case .resetZoom, .markupStyles: return require(c.isImage, L("Select one image first"))
         case .markupUndo: return require((c.isMarkupEditing || (c.isPreview && c.isImage)) && c.canUndoMarkup, L("Nothing to undo"))

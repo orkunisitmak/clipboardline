@@ -28,7 +28,8 @@ const edgeConsumer=require('./consumer-edge-acceptance.cjs');
 const notepadConsumer=require('./notepad-acceptance.cjs');
 if(process.platform!=='win32')throw new Error('Run native acceptance on the actual Windows runner.');
 const output=path.resolve(process.env.CLIPBOARDLINE_VALIDATION||'validation');fs.mkdirSync(output,{recursive:true});
-const data=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-runtime-'));
+// A non-ASCII data folder sends such paths through every native helper in source, packaged and installed runs.
+const data=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-çalışma-'));
 const report={platform:process.platform,arch:process.arch,node:process.version,sourceRevision:process.env.GITHUB_SHA||'',packaged:!!process.env.CLIPBOARDLINE_EXECUTABLE,checks:[],startedAt:new Date().toISOString()};
 let application,fixture,otherFixture,activePage;
 const check=(name,details={})=>{report.checks.push({name,passed:true,...details});console.log('PASS '+name);};
@@ -341,10 +342,11 @@ async function main(){
   const secondImage=await application.evaluate(({nativeImage},value)=>{const h=global.__clipboardLineTest;return h.store.insert('image',nativeImage.createFromDataURL(value).crop({x:0,y:0,width:150,height:100}).toPNG()).id;},edited);
   // The original and this PNG are different managed originals, so the FileDrop
   // batch contains two actual files, with the first raster as an app fallback.
-  const batch=await page.evaluate(ids=>window.clipboardLine.command('copy',{ids,keepOpen:true}),[imageItem.id,secondImage]);assert.ok(!batch.result?.error,batch.result?.error);
-  await until(fixtureState,s=>s.dropCount===2&&s.pngAvailable);
+  const batchText=await application.evaluate(()=>global.__clipboardLineTest.store.insert('text','şğü ıİ').id);
+  const batch=await page.evaluate(ids=>window.clipboardLine.command('copy',{ids,keepOpen:true}),[imageItem.id,secondImage,batchText]);assert.ok(!batch.result?.error,batch.result?.error);
+  await until(fixtureState,s=>s.dropCount===2&&s.pngAvailable);assert.equal(await application.evaluate(async({clipboard})=>clipboard.readText()),'şğü ıİ');
   await application.evaluate(()=>global.__clipboardLineTest.readClipboard());assert.equal((await page.evaluate(()=>window.clipboardLine.state())).items.length,batch.items.length);
-  check('multi-image copy supplies native Windows FileDrop batch and full-resolution PNG fallback without recapture');
+  await page.evaluate(ids=>window.clipboardLine.command('trash',{ids}),[batchText]);await page.evaluate(ids=>window.clipboardLine.command('delete',{ids}),[batchText]);check('multi-image copy supplies native Windows FileDrop batch and full-resolution PNG fallback without recapture');
   const copied=await page.evaluate(id=>window.clipboardLine.command('copy',{ids:[id]}),textItem.id);assert.ok(!copied.result?.error);assert.equal(await application.evaluate(()=>global.__clipboardLineTest.getWindow().isVisible()),false);check('plain Enter copy dismisses shelves/preview host and restores previous application');
   await fixtureCommand({action:'focus',target:'plain'});await application.evaluate(()=>global.__clipboardLineTest.command('show'));
   const closedTarget=await application.evaluate(()=>global.__clipboardLineTest.getTarget());assert.ok(closedTarget.editable);

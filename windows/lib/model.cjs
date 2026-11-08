@@ -155,6 +155,8 @@ class Store {
     this.pruneRecentFolders();
     this.privacyWarning='';
     if(this.data.pendingBackupRefresh||this.data.pendingDeletionFiles?.length)try{this.finishPermanentDeletion();}catch(error){this.privacyWarning=error.message;}
+    // A killed process can leave a full copy of the library here, with text deleted since; exact names, regular files only.
+    for(const name of fs.readdirSync(this.directory))if(/^library\.json(?:\.backup)?\.tmp-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(name))try{const file=path.join(this.directory,name);if(fs.lstatSync(file).isFile())fs.unlinkSync(file);}catch(error){if(error.code!=='ENOENT')this.privacyWarning||='A temporary copy of the library could not be removed.';}
     this.expire();
   }
   pruneRecentFolders(){const known=new Set(this.data.folders.map(folder=>folder.id));this.data.settings.recentPinFolderIds=(this.data.settings.recentPinFolderIds||[]).filter(id=>known.has(id));}
@@ -528,7 +530,7 @@ class Store {
     }
     if(action==='folder'&&payload.rememberRecent===true)this.data.settings.recentPinFolderIds=[payload.folderId,...this.data.settings.recentPinFolderIds.filter(id=>id!==payload.folderId)].slice(0,8);
     if (action === 'delete') { const removed = new Set(items); this.data.items = this.data.items.filter(i => !removed.has(i)); }
-    if (['delete', 'trash', 'restore'].includes(action)) this.undoStack = this.undoStack.filter(batch => !batch.some(old => items.some(i => i.id === old.id)));
+    if (['delete', 'trash', 'restore'].includes(action)) {const affected=new Set(items.map(i=>i.id));this.undoStack=this.undoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
     if(action==='delete')this.preparePermanentDeletion();
     this.persist();
     {const affected=new Set(items.map(item=>item.id));this.trashUndoStack=this.trashUndoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}

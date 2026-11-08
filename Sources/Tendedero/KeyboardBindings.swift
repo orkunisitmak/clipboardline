@@ -22,7 +22,7 @@ enum KeyboardAction: String, CaseIterable, Identifiable {
     }
     var scopeTitle: String {
         if contexts == [.imageMarkup] { return L("Image markup") }
-        if self == .markup || self == .cropImage { return L("Image preview") }
+        if self == .cropImage { return L("Image preview") }
         if contexts == [.line] { return L("On the line") }
         if contexts == [.library] { return L("Library") }
         if contexts == [.textPreview] { return L("Text preview") }
@@ -71,7 +71,8 @@ enum KeyboardAction: String, CaseIterable, Identifiable {
     }
     var contexts: Set<KeyboardContext> {
         switch self {
-        case .markup, .cropImage: [.library, .imagePreview, .imageMarkup]
+        case .markup: [.line, .library, .imagePreview, .imageMarkup]
+        case .cropImage: [.library, .imagePreview, .imageMarkup]
         case .markupSelect, .markupPen, .markupMarker, .markupRectangle, .markupEllipse, .markupArrow, .markupLine, .markupText: [.imageMarkup]
         case .copy, .paste, .commandPalette: Set(KeyboardContext.allCases)
         case .library, .switchShelf, .toggleShelves, .toggleLinks, .toggleTexts, .toggleImages, .searchShelf: [.line]

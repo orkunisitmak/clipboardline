@@ -99,6 +99,8 @@ test('pin-picker recents are bounded, success-only, atomic and pruned after remo
 test('recent folder preference validation rejects invalid or oversized IDs and sanitizes stale IDs on restore and load',()=>fixture((s,_clock,directory)=>{const existing=s.modify('createFolder',{name:'Kept'}),missing='00000000-0000-4000-8000-000000000099';s.modify('setSettings',{patch:{recentPinFolderIds:[missing,existing.id,existing.id]}});assert.deepEqual(s.data.settings.recentPinFolderIds,[existing.id]);for(const value of [[existing.id,...Array(8).fill(missing)],['../private'],null])assert.throws(()=>s.modify('setSettings',{patch:{recentPinFolderIds:value}}));s.data.settings.recentPinFolderIds=[missing,existing.id];s.persist();assert.deepEqual(new Store(directory).data.settings.recentPinFolderIds,[existing.id]);}));
 test('settings merge nested retention and shortcut maps, rejecting prototype and filesystem injection',()=>fixture(s=>{s.modify('setSettings',{patch:{retentionDays:{text:7},localShortcuts:{pin:'O'}}});assert.equal(s.data.settings.retentionDays.image,30);assert.equal(s.data.settings.localShortcuts.pin,'O');assert.throws(()=>s.modify('setSettings',{patch:JSON.parse('{"localShortcuts":{"__proto__":"oops"}}')}));assert.throws(()=>s.modify('setSettings',{patch:{watchFolders:['../private']}}));}));
 
+test('a watched folder that is unavailable stays saved when another folder is added or removed like macOS',()=>fixture((s,_clock,dir)=>{const unmounted=path.join(dir,'unmounted'),present=path.join(dir,'present');s.modify('setSettings',{patch:{watchFolders:[unmounted]}});s.modify('setSettings',{patch:{watchFolders:[...s.data.settings.watchFolders,present]}});assert.deepEqual(s.data.settings.watchFolders,[unmounted,present]);s.modify('setSettings',{patch:{watchFolders:s.data.settings.watchFolders.filter(folder=>folder!==present)}});assert.deepEqual(s.data.settings.watchFolders,[unmounted]);}));
+
 test('permanent deletion purges orphan managed rasters and refreshes both JSON snapshots',()=>fixture((s,_time,dir)=>{
   const item=s.insert('image',png),original=item.imageFile;
   const edited=Buffer.from(png);edited[edited.length-1]^=1;
@@ -116,6 +118,26 @@ test('permanent deletion keeps rasters referenced by live items or recoverable T
   const second=s.insert('image',png);s.modify('delete',{ids:[first.id]});assert.ok(fs.existsSync(file));
   s.modify('trash',{ids:[second.id]});const third=s.insert('image',png);s.modify('trash',{ids:[third.id]});
   s.modify('delete',{ids:[second.id]});assert.ok(fs.existsSync(file));s.modify('restore',{ids:[third.id]});assert.deepEqual(fs.readFileSync(s.mediaPath(third.id)),png);
+}));
+test('opening the library removes temporary copies a killed process left behind',()=>fixture((_s,_time,dir)=>{
+  const id='12345678-1234-4234-8234-123456789abc',left=['library.json.tmp-'+id,'library.json.backup.tmp-'+id],other='library.json.tmp-notes';
+  for(const name of [...left,other])fs.writeFileSync(path.join(dir,name),'deleted text');
+  new Store(dir,{clock:()=>1000});
+  for(const name of left)assert.equal(fs.existsSync(path.join(dir,name)),false);assert.ok(fs.existsSync(path.join(dir,other)));
+}));
+test('a temporary library copy that cannot be removed is reported',()=>fixture((_s,_time,dir)=>{
+  const file=path.join(dir,'library.json.tmp-12345678-1234-4234-8234-123456789abc'),unlink=fs.unlinkSync;fs.writeFileSync(file,'deleted text');
+  fs.unlinkSync=target=>{if(target===file)throw Object.assign(new Error('Synthetic lock'),{code:'EPERM'});return unlink(target);};
+  try{assert.match(new Store(dir,{clock:()=>1000}).privacyWarning,/temporary copy of the library/);}finally{fs.unlinkSync=unlink;}
+  assert.ok(fs.existsSync(file));
+}));
+test('restoring one item of a Take down batch leaves Undo take down for the rest',()=>fixture(s=>{
+  const first=s.insert('text','First'),second=s.insert('text','Second');s.modify('remove',{ids:[first.id,second.id]});
+  s.modify('restore',{ids:[first.id]});assert.equal(s.publicState().canUndo,true);s.modify('undo');assert.equal(s.item(second.id).trashedAt,null);assert.equal(s.publicState().canUndo,false);
+}));
+test('deleting one item of a Take down batch leaves Undo take down for the rest',()=>fixture(s=>{
+  const first=s.insert('text','First'),second=s.insert('text','Second');s.modify('remove',{ids:[first.id,second.id]});
+  s.modify('delete',{ids:[first.id]});assert.equal(s.publicState().canUndo,true);s.modify('undo');assert.equal(s.item(second.id).trashedAt,null);
 }));
 test('ordinary removal and retention preserve managed images for undo and Trash recovery',()=>fixture((s,time)=>{
   const item=s.insert('image',png),file=s.mediaPath(item.id);s.modify('remove',{ids:[item.id]});assert.ok(fs.existsSync(file));s.modify('undo');assert.equal(item.trashedAt,null);
