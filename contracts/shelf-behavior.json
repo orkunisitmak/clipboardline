@@ -43,9 +43,9 @@
       },
       {
         "id": "width-insensitive-search",
-        "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I.",
-        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift).",
-        "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac; shelf-render.test.cjs checks both through the shipped renderer."
+        "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I. A voiced kana or a Hangul syllable is one letter, so は does not find ばら and 하 does not find 한국.",
+        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift); ShelfSearchTests.testShelfSearchKeepsAVoicedKanaAndAHangulSyllableWholeLikeWindows covers the kana and Hangul cases.",
+        "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac, and recomposes the text so a bare は or 하 does not match inside ば or 한; shelf-render.test.cjs checks these through the shipped renderer."
       },
       {
         "id": "link-title-charset",
@@ -148,12 +148,24 @@
         "behavior": "Name and pin trims the name and accepts 1 to 160 characters (grapheme clusters), at most 1024 UTF-8 bytes, with no control, line-separator or paragraph-separator characters. Any other name, including an empty one, is rejected with the shared \"Enter a name (1–160 characters)\" message and the item is left unchanged.",
         "macos": "LibraryStore.nameAndPin validates the trimmed name with these limits and throws the localized \"Enter a name (1–160 characters)\" error. The Library inspector is outside this rule: LibraryModel.flushEdits stores its title field as typed, so an empty field clears the name and a whitespace-only one is kept unvalidated.",
         "windows": "The Store 'name' action and a non-blank name in 'details' validate through itemName with the same limits and error; model.test.cjs checks accepted names at the limits and rejects empty, oversized, multi-line, control-character, NUL and non-string names with the exact message. A blank or whitespace-only name in 'details' clears the name instead."
+      },
+      {
+        "id": "unavailable-watched-folder",
+        "behavior": "A watched folder that is unavailable (for example on an unmounted volume) is skipped while watching but stays in the saved list, so adding or removing another watched folder does not forget it.",
+        "macos": "AppDelegate.extraFolders returns every saved folder and existingExtraFolders is the subset that is watched, re-evaluated when a volume mounts; SettingsTests.testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable covers it.",
+        "windows": "main.cjs skips a watchFolders entry that is not a directory without changing the list; model.test.cjs checks that adding and removing folders keeps an unavailable entry."
         },
         {
         "id": "disabled-undo-names-the-surface",
         "behavior": "A disabled undo row first says where it is available: Undo trash on the shelves reads \"Available in Library\" and Undo take down in the Library reads \"Available on the shelves\"; \"Nothing to undo\" is shown only on the surface where the undo exists.",
         "macos": "ActionBarMenuAction.undoRemoveFromLine and .undoTrash pick the surface reason before \"Nothing to undo\"; ActionBarCatalogTests.testDisabledRowsNameTheSurfaceOrSelectionThatIsMissing covers it.",
         "windows": "actionCommands() in renderer.js runs the surface check before the \"Nothing to undo.\" branch; library-ui.test.cjs checks both rows on the shelves and in the Library."
+      },
+      {
+        "id": "shelf-image-markup-shortcut",
+        "behavior": "M on the focused selected still photo in the active image shelf opens its editable markup preview directly. Hover alone does not retarget keyboard actions. H selects the translucent marker; pointer drags draw editable marks. Escape saves and finishes markup (a later Escape closes preview); crop Escape cancels the crop. Saved marks survive reopening. M in search, note, annotation text and rename editors stays native text input. Empty and non-image shelves do not open markup. Remapped or disabled markup keys remain respected.",
+        "macos": "LineKeyboard routes markup to Line.markup for the focused visible still image. MarkupKeyboardTests and ImageMarkupInteractionTests execute typing guards, remapping, real preview-panel sendEvent mouse delivery, hit testing, composited marker pixels, Escape/save and reopen. The nonactivating panel's canvas accepts the first mouse click while editing. CrossPlatformBehaviorContractTests executes the shared shelf M scenarios.",
+        "windows": "The shipped renderer allows markup in the shelves shortcut context and opens the existing image editor for the focused still image. renderer-ui.test.cjs executes the shared shelf M scenarios plus marker pointer drawing, Escape/save, reopen and native editor guards. Native Windows acceptance remains a separate release gate."
       }
     ]
   },
@@ -1101,6 +1113,22 @@
             ],
             "searchEditing": false
           }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "image",
+            "focused": null,
+            "selected": [],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
         }
       ]
     },
@@ -1771,6 +1799,163 @@
             ],
             "visibleKinds": [
               "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "shelf-markup-opens-focused-photo",
+      "itemSet": "standard",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i1",
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "right",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i2",
+            "selected": [
+              "i2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i2",
+            "selected": [
+              "i2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": [
+              "markup"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "non-image-shelves-ignore-markup",
+      "itemSet": "standard",
+      "visibleKinds": [
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "down",
+          "expect": {
+            "activeKind": "link",
+            "focused": "l1",
+            "selected": [
+              "l1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "link",
+            "focused": "l1",
+            "selected": [
+              "l1"
+            ],
+            "visibleKinds": [
               "text",
               "link"
             ],

@@ -17,7 +17,7 @@ KINDS = ['image', 'text', 'link']
 FIELDS = {'activeKind', 'focused', 'selected', 'visibleKinds', 'searchEditing'}
 ACTIONS = {'open', 'close', 'up', 'down', 'left', 'right', 'toggle', 'openSearch', 'finishSearch', 'remap', 'key',
            'switchShelf', 'command'}
-COMMAND_CODES = {'Enter', 'KeyS', 'KeyP', 'Space', 'KeyC'}
+COMMAND_CODES = {'Enter', 'KeyS', 'KeyP', 'Space', 'KeyC', 'KeyM'}
 PLATFORMS = {'macos': ('darwin', 'model'), 'windows': ('win32', 'renderer')}
 
 

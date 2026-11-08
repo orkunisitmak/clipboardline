@@ -49,7 +49,7 @@ final class ImageHistory {
             if let library {
                 return ((try? library.shelfItems(.image)) ?? []).compactMap { item in
                     guard let path = item.path else { return nil }
-                    return Entry(path: path, capturedAt: item.createdAt, pinned: item.favorite, originalPath: item.originalPath, id: item.id, title: item.title.isEmpty ? nil : item.title)
+                    return Entry(path: path, capturedAt: item.createdAt, pinned: item.favorite, originalPath: item.originalPath, id: item.id, title: item.shelfName)
                 }
             }
             return legacyEntries
