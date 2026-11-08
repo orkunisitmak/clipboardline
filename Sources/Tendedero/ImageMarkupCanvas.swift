@@ -138,6 +138,11 @@ import QuartzCore
         draft = nil; dragStart = nil; dragDocument = nil; resizing = false; invalidateOverlay()
     }
     override var acceptsFirstResponder: Bool { true }
+    // The floating nonactivating preview can remain non-key while another app
+    // is active. NSImageView otherwise discards the click before mouseDown.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        isMarkupEditing || isCropping || super.acceptsFirstMouse(for: event)
+    }
     override var mouseDownCanMoveWindow: Bool { !isCropping && !isMarkupEditing && zoomScroll?.canPan != true }
 
     func load(_ value: ImageMarkupDocument) {
