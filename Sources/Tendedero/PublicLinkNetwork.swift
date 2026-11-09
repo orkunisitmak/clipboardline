@@ -367,7 +367,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     init(data: Data, url: URL, contentType: String = "") throws {
         guard data.count <= 512 * 1024 else { throw PublicLinkError.tooLarge }
         let source = Self.decode(data, contentType: contentType)
-        let html = Self.replacing(#"(?is)<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>"#, in: source, with: "")
+        let html = Self.withoutNonMetadata(source)
         let tags = try NSRegularExpression(pattern: #"(?is)<meta\b([^>]{0,8192})>"#)
         let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)
         var metadata: [String: String] = [:]
@@ -424,6 +424,44 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         let name = label.lowercased(), converted = CFStringConvertIANACharSetNameToEncoding((aliases[name] ?? name) as CFString)
         guard converted != 0xFFFF_FFFF else { return nil }
         return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(converted))
+    }
+    /// Comments, scripts and styles are not page metadata. A textarea holds text, so a meta or title inside it isn't either;
+    /// its start tag may hold a quoted ">" and an unclosed one hides the rest, as in a browser.
+    /// One left-to-right scan: each search starts where the last ended and a missing closer is looked up once, so cost stays linear.
+    private static func withoutNonMetadata(_ source: String) -> String {
+        guard let opener = try? NSRegularExpression(pattern: #"<!--|<script\b|<style\b|<textarea(?=[ \t\n\f\r/>])"#, options: [.caseInsensitive]) else { return source }
+        let text = source as NSString
+        var closers: [String: NSRegularExpression] = [:], missing = Set<String>()
+        var output = "", last = 0, position = 0
+        while position < text.length, let match = opener.firstMatch(in: source, range: NSRange(location: position, length: text.length - position)) {
+            let name = text.substring(with: match.range).dropFirst().lowercased()
+            let skip = match.range.location + match.range.length
+            var from = skip, end = -1
+            if name == "textarea" {
+                var quote: unichar = 0
+                while from < text.length {
+                    let c = text.character(at: from)
+                    if quote != 0 { if c == quote { quote = 0 } } else if c == 0x22 || c == 0x27 { quote = c } else if c == 0x3E { break }
+                    from += 1
+                }
+                if from >= text.length { end = text.length }
+            } else if name != "!--" {
+                let gt = text.range(of: ">", range: NSRange(location: from, length: text.length - from))
+                if gt.location == NSNotFound { break }
+                from = gt.location
+            }
+            if end < 0, !missing.contains(name) {
+                let closer = closers[name] ?? (try? NSRegularExpression(pattern: name == "!--" ? "-->" : "</\(name)[ \\t\\n\\f\\r]*>", options: [.caseInsensitive]))
+                closers[name] = closer
+                let start = min(name == "!--" ? from : from + 1, text.length)
+                if let found = closer?.firstMatch(in: source, range: NSRange(location: start, length: text.length - start)) { end = found.range.location + found.range.length } else { missing.insert(name) }
+            }
+            if end < 0, name == "textarea" { end = text.length }
+            if end < 0 { position = skip; continue }
+            output += text.substring(with: NSRange(location: last, length: match.range.location - last))
+            last = end; position = end
+        }
+        return output + text.substring(from: last)
     }
     private static func replacing(_ pattern: String, in value: String, with replacement: String) -> String {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return value }

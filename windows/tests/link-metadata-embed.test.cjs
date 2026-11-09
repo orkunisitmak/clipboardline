@@ -27,3 +27,32 @@ test('meta tags with unquoted attribute values are read like macOS',async()=>{
  const metadata=await linkMetadata('https://example.com/post',async()=>({bytes:Buffer.from(html),url:'https://example.com/post',type:'text/html; charset=utf-8'}));
  assert.equal(metadata.title,'Real-Article-Title');assert.equal(metadata.thumbnail,'https://cdn.example.com/a.png');
 });
+
+test('markup inside a textarea is not the preview title',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page('<textarea><meta property="og:title" content="injected"></textarea><title>real</title>')).title,'real');
+ assert.equal((await page('<title>real</title><textarea><meta property="og:title" content="injected">')).title,'real');
+});
+
+test('a textarea tag inside a script or an attribute is not read as a textarea',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page(`<script>const t = '<textarea>';</script><title>real</title>`)).title,'real');
+ assert.equal((await page(`<textarea data-x="> </textarea>"><meta property="og:title" content="injected"></textarea><title>real</title>`)).title,'real');
+});
+
+test('a custom element named like a textarea is not a textarea and a pile of broken tags stays fast',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page('<textarea-x></textarea-x><title>real</title>')).title,'real');
+ const started=Date.now();
+ await page('<textarea "'.repeat(40000)+'<title>real</title>');
+ assert.ok(Date.now()-started<2000);
+});
+
+test('textarea start tags are read whole whatever their length, and only ASCII spacing ends the name',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page('<textarea data='+'x'.repeat(3000)+'><meta property="og:title" content="injected"></textarea><title>real</title>')).title,'real');
+ assert.equal((await page('<textarea\u00a0x><meta property="og:title" content="real">')).title,'real');
+ const started=Date.now();
+ await page('<script>'.repeat(60000)+'<!--'.repeat(60000)+'<title>real</title>');
+ assert.ok(Date.now()-started<2000);
+});
