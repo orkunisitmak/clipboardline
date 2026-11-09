@@ -108,6 +108,12 @@
         "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
       },
       {
+        "id": "trash-no-pin-tag-drag",
+        "behavior": "An item in Library Trash cannot be pinned, tagged or dragged into a folder by key or drag, matching the disabled action rows; it has to be restored first.",
+        "macos": "LibraryModel.favorite(), perform(.tag) and dragItems(_:) return early when the selection is in Trash; LibraryInteractionTests.testTrashedItemIgnoresPinTagAndDragLikeTheDisabledActionBarRows covers it.",
+        "windows": "perform() ignores pin, tag and the other editing actions for trashed ids, the Pin button is not rendered on a trashed card and dragstart is cancelled; library-ui.test.cjs checks it."
+      },
+      {
         "id": "item-name-trimming",
         "behavior": "An item name is used without its surrounding whitespace, and a name that is only whitespace counts as no name, so the card, the title ordering and the search index fall back to the item's content instead of showing a blank title.",
         "macos": "LibraryRecord.displayTitle trims the stored title and ignores a blank one; LibraryStoreTests.testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows covers it.",
