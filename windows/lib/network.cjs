@@ -99,7 +99,7 @@ function decodeHTML(bytes, type = '') {
 // As on macOS, drop control characters except whitespace (U+0085 counts as whitespace).
 const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
 function meta(html, name) {
-  for (const match of html.matchAll(/<meta\b([^>]{0,4096})>/gi)) {
+  for (const match of html.matchAll(/<meta\b((?:"[^"]{0,4096}"|'[^']{0,4096}'|[^<>"']){0,4096})>/gi)) {
     const attributes = {};
     for (const attr of match[1].matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) attributes[attr[1].toLowerCase()] = attr[2] ?? attr[3] ?? attr[4];
     if ([attributes.property, attributes.name].some(key => String(key).toLowerCase() === name)) return entities(attributes.content || '');
@@ -118,9 +118,10 @@ async function linkMetadata(input, fetcher = metadataFetch) {
     return {title: String(data.title || '').trim().slice(0, 500)||url.hostname, author: String(data.author_name || '').trim().slice(0, 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
   }
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
-  const html = decodeHTML(response.bytes, response.type);
+  // Comments and script/style bodies never supply the title or image; an unclosed one hides the rest of the page.
+  const html = decodeHTML(response.bytes, response.type).replace(/(<meta\b(?:"[^"]{0,4096}"|'[^']{0,4096}'|[^<>"']){0,4000}>)|<!--[\s\S]*?(?:-->|$)|<script(?=[\s/>])(?:"[^"]{0,4096}"|'[^']{0,4096}'|[^<>"']){0,4096}>[\s\S]*?(?:<\/script\s*>|$)|<style(?=[\s/>])(?:"[^"]{0,4096}"|'[^']{0,4096}'|[^<>"']){0,4096}>[\s\S]*?(?:<\/style\s*>|$)/gi, (all, meta) => meta || '');
   // Collapse layout whitespace only in display text; og:image stays a URL.
-  const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
+  const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities((html.match(/<title(?=[\s/>])(?:"[^"]{0,4096}"|'[^']{0,4096}'|[^<>"']){0,4096}>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
   // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
   let thumbnail = '';
   for (const name of ['og:image:secure_url', 'og:image', 'twitter:image']) {
