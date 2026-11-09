@@ -98,55 +98,144 @@ function decodeHTML(bytes, type = '') {
 // Bidirectional marks, embeddings, overrides and isolates can reorder a title to spoof another one; joiners stay.
 // As on macOS, drop control characters except whitespace (U+0085 counts as whitespace).
 const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
-function meta(html, name) {
-  for (const match of html.matchAll(/<meta\b([^>]{0,4096})>/gi)) {
-    const attributes = {};
-    for (const attr of match[1].matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) attributes[attr[1].toLowerCase()] = attr[2] ?? attr[3] ?? attr[4];
-    if ([attributes.property, attributes.name].some(key => String(key).toLowerCase() === name)) return entities(attributes.content || '');
+const asciiLetter = code => code >= 65 && code <= 90 || code >= 97 && code <= 122;
+const isWhitespace = character => character === ' ' || character === '\t' || character === '\n' || character === '\r' || character === '\f';
+function tagStart(html, at) {
+  if (html[at] !== '<') return null;
+  let start = at + 1, closing = false;
+  if (html[start] === '/') { closing = true; start++; }
+  if (!asciiLetter(html.charCodeAt(start))) return null;
+  let end = start;
+  while (asciiLetter(html.charCodeAt(end))) {
+    end++;
+    if (end - start > 6) return null;
   }
-  return '';
+  if (!html[end] || !(isWhitespace(html[end]) || html[end] === '/' || html[end] === '>')) return null;
+  const name = html.slice(start, end).toLowerCase();
+  if (!['meta', 'title', 'script', 'style'].includes(name)) return null;
+  return {name, closing, afterName: end};
+}
+function tagEnd(html, at) {
+  let quote = '';
+  for (let cursor = at; cursor < html.length; cursor++) {
+    const character = html[cursor];
+    if (quote) { if (character === quote) quote = ''; }
+    else if (character === '"' || character === "'") quote = character;
+    else if (character === '>') return cursor;
+  }
+  return -1;
+}
+function findClosing(html, name, from) {
+  let cursor = from;
+  while (cursor < html.length) {
+    const opening = html.indexOf('<', cursor);
+    if (opening < 0) return null;
+    const tag = tagStart(html, opening);
+    if (tag?.closing && tag.name === name) {
+      const end = tagEnd(html, tag.afterName);
+      return end < 0 ? null : {start: opening, end};
+    }
+    cursor = opening + 1;
+  }
+  return null;
+}
+function sanitizeHTML(html) {
+  const output = [];
+  let kept = 0, cursor = 0;
+  while (cursor < html.length) {
+    if (html.startsWith('<!--', cursor)) {
+      const end = html.indexOf('-->', cursor + 4);
+      output.push(html.slice(kept, cursor));
+      if (end < 0) return output.join('');
+      cursor = end + 3; kept = cursor; continue;
+    }
+    if (html[cursor] === '<') {
+      const tag = tagStart(html, cursor);
+      if (tag && !tag.closing && (tag.name === 'script' || tag.name === 'style')) {
+        const openingEnd = tagEnd(html, tag.afterName);
+        const close = openingEnd < 0 ? null : findClosing(html, tag.name, openingEnd + 1);
+        output.push(html.slice(kept, cursor));
+        if (!close) return output.join('');
+        cursor = close.end + 1; kept = cursor; continue;
+      }
+    }
+    cursor++;
+  }
+  output.push(html.slice(kept));
+  return output.join('');
+}
+function attributes(html, start, end) {
+  const result = {};
+  let cursor = start;
+  while (cursor < end) {
+    while (cursor < end && (isWhitespace(html[cursor]) || html[cursor] === '/')) cursor++;
+    const nameStart = cursor;
+    while (cursor < end && !isWhitespace(html[cursor]) && !['=', '/', '>'].includes(html[cursor])) cursor++;
+    if (cursor === nameStart) { cursor++; continue; }
+    const name = html.slice(nameStart, cursor).toLowerCase();
+    while (cursor < end && isWhitespace(html[cursor])) cursor++;
+    if (html[cursor] !== '=') continue;
+    cursor++;
+    while (cursor < end && isWhitespace(html[cursor])) cursor++;
+    if (cursor >= end) break;
+    const quote = html[cursor] === '"' || html[cursor] === "'" ? html[cursor++] : '';
+    const valueStart = cursor;
+    if (quote) { while (cursor < end && html[cursor] !== quote) cursor++; }
+    else { while (cursor < end && !isWhitespace(html[cursor]) && html[cursor] !== '>') cursor++; }
+    if (['property', 'name', 'content'].includes(name) && cursor - valueStart <= 8192) result[name] = entities(html.slice(valueStart, cursor));
+    if (quote && cursor < end) cursor++;
+  }
+  return result;
+}
+function extractMetadata(html) {
+  const values = {};
+  let title = '', metas = 0, cursor = 0;
+  while (cursor < html.length) {
+    const opening = html.indexOf('<', cursor);
+    if (opening < 0) break;
+    const tag = tagStart(html, opening);
+    if (!tag || tag.closing) { cursor = opening + 1; continue; }
+    if (tag.name === 'meta') {
+      const end = tagEnd(html, tag.afterName);
+      if (end < 0) break;
+      if (metas++ < 256) {
+        const parsed = attributes(html, tag.afterName, end);
+        const key = String(parsed.property || parsed.name || '').toLowerCase();
+        if (key && parsed.content !== undefined && values[key] === undefined) {
+          values[key] = ['og:image:secure_url', 'og:image', 'twitter:image'].includes(key) ? parsed.content : parsed.content.slice(0, 2000);
+        }
+      }
+      cursor = end + 1; continue;
+    }
+    if (tag.name === 'title' && !title) {
+      const end = tagEnd(html, tag.afterName);
+      const close = end < 0 ? null : findClosing(html, 'title', end + 1);
+      if (!close) break;
+      title = html.slice(end + 1, close.start);
+      cursor = close.end + 1; continue;
+    }
+    cursor = opening + 1;
+  }
+  return {values, title};
 }
 function strippedTags(value, limit = 8192) {
-  let output = '', at = 0;
-  while (at < value.length && output.length < limit) {
-    const next = value.indexOf('<', at);
-    if (next < 0) { output += value.slice(at, at + limit - output.length); break; }
-    output += value.slice(at, Math.min(next, at + limit - output.length));
-    if (output.length >= limit) break;
-    const end = value.indexOf('>', next + 1);
-    if (end < 0) {
-      output += value.slice(next, next + 1 + limit - output.length);
-      break;
+  let output = '', cursor = 0;
+  while (cursor < value.length && output.length < limit) {
+    if (value[cursor] === '<') {
+      const next = value[cursor + 1];
+      const tagLike = asciiLetter(value.charCodeAt(cursor + 1)) || (next === '/' && asciiLetter(value.charCodeAt(cursor + 2))) || next === '!' || next === '?';
+      if (tagLike) {
+        const end = tagEnd(value, cursor + 1);
+        if (end >= 0) { cursor = end + 1; continue; }
+      }
+      output += '<'; cursor++; continue;
     }
-    at = end + 1;
+    const next = value.indexOf('<', cursor);
+    const end = next < 0 ? value.length : next;
+    output += value.slice(cursor, Math.min(end, cursor + limit - output.length));
+    cursor = end;
   }
   return output;
-}
-function asciiLower(value) {
-  return value.replace(/[A-Z]/g, character => character.toLowerCase());
-}
-function titleTag(html) {
-  const openingLimit = 4096, titleLimit = 8192;
-  const lower = asciiLower(html);
-  let at = 0;
-  while (at < html.length) {
-    const opening = lower.indexOf('<title', at);
-    if (opening < 0) return '';
-    const afterName = opening + '<title'.length;
-    const delimiter = html[afterName];
-    if (delimiter && !/[\s/>]/.test(delimiter)) { at = afterName + 1; continue; }
-    const openingEndLimit = Math.min(html.length, opening + openingLimit);
-    const openingHead = html.slice(afterName, openingEndLimit);
-    const endOffset = openingHead.indexOf('>');
-    if (endOffset < 0) return '';
-    const end = afterName + endOffset;
-    const closing = lower.indexOf('</title', end + 1);
-    if (closing < 0 || closing > end + titleLimit) return '';
-    const closeEnd = html.indexOf('>', closing + 1);
-    if (closeEnd < 0 || closeEnd > end + titleLimit) return '';
-    return strippedTags(html.slice(end + 1, closing), titleLimit);
-  }
-  return '';
 }
 async function linkMetadata(input, fetcher = metadataFetch) {
   metadataGuard(new URL(input));
@@ -162,11 +251,12 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
   const html = decodeHTML(response.bytes, response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
-  const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities(titleTag(html))) || url.hostname;
+  const parsed = extractMetadata(sanitizeHTML(html)), metadata = parsed.values;
+  const title = collapse(metadata['og:title'] || '') || collapse(metadata['twitter:title'] || '') || collapse(entities(strippedTags(parsed.title || ''))) || url.hostname;
   // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
   let thumbnail = '';
   for (const name of ['og:image:secure_url', 'og:image', 'twitter:image']) {
-    const value = meta(html, name); if (!value.trim()) continue;
+    const value = metadata[name] || ''; if (!value.trim()) continue;
     try { const image = new URL(value, response.url); metadataGuard(image); literalDestination(image); thumbnail = image.href; break; } catch {}
   }
   return {title: title.slice(0, 500), thumbnail};
