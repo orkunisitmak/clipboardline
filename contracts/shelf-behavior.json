@@ -108,6 +108,12 @@
         "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
       },
       {
+        "id": "pin-recent-selection",
+        "behavior": "Pinning the selected item in Recent copies saves it and removes it from the list; focus and selection move to a remaining item and the details panel keeps showing an item.",
+        "macos": "LibraryModel.favorite() queues the neighbouring item as the keyboard selection, like Move to Trash; LibraryInteractionTests.testPinningInRecentCopiesSelectsARemainingItemLikeWindows covers it.",
+        "windows": "reconcileLibraryFocus() in renderer.js focuses a remaining item after the pin."
+      },
+      {
         "id": "item-name-trimming",
         "behavior": "An item name is used without its surrounding whitespace, and a name that is only whitespace counts as no name, so the card, the title ordering and the search index fall back to the item's content instead of showing a blank title.",
         "macos": "LibraryRecord.displayTitle trims the stored title and ignores a blank one; LibraryStoreTests.testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows covers it.",
