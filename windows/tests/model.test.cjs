@@ -131,6 +131,9 @@ test('a temporary library copy that cannot be removed is reported',()=>fixture((
   try{assert.match(new Store(dir,{clock:()=>1000}).privacyWarning,/temporary copy of the library/);}finally{fs.unlinkSync=unlink;}
   assert.ok(fs.existsSync(file));
 }));
+test('copying text that is not a stored item, like text from an image, raises no error',()=>fixture(s=>{
+  assert.doesNotThrow(()=>s.markCopied([]));
+}));
 test('restoring one item of a Take down batch leaves Undo take down for the rest',()=>fixture(s=>{
   const first=s.insert('text','First'),second=s.insert('text','Second');s.modify('remove',{ids:[first.id,second.id]});
   s.modify('restore',{ids:[first.id]});assert.equal(s.publicState().canUndo,true);s.modify('undo');assert.equal(s.item(second.id).trashedAt,null);assert.equal(s.publicState().canUndo,false);
