@@ -237,6 +237,7 @@ enum ActionBarMenuAction: String, CaseIterable {
             return c.isPreview ? hint : sequence([context.map { bindings.title(.preview, in: $0) } ?? "", hint])
         }
         if action == .markup {
+            if context == .line { return bindings.title(action, in: .line) }
             if c.origin == .library { return bindings.title(action, in: .library) }
             let hint = bindings.title(.markup, in: c.isMarkupEditing ? .imageMarkup : .imagePreview)
             return c.isPreview ? hint : sequence([context.map { bindings.title(.preview, in: $0) } ?? "", hint])
@@ -244,7 +245,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         if tools.contains(action) {
             let tool = bindings.title(action, in: .imageMarkup)
             if c.isMarkupEditing { return tool }
-            let prefix = c.isPreview ? [] : [context.map { bindings.title(.preview, in: $0) } ?? ""]
+            let prefix = c.isPreview || context == .line ? [] : [context.map { bindings.title(.preview, in: $0) } ?? ""]
             return sequence(prefix + [bindings.title(.markup, in: .imagePreview), tool])
         }
         if action == .editText && !c.isPreview {
