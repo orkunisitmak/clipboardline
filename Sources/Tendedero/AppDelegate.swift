@@ -977,7 +977,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(actions)
         let capture = ClosureMenuItem(L("Capture area")) { [weak self] in self?.captureAreaAfterMenu() }
         capture.isEnabled = startupError == nil
-        if let shortcut = line.captureAreaShortcut, shortcut.keyLabel.count == 1 {
+        if let shortcut = line.captureAreaShortcut, shortcut.keyLabel.count == 1, captureHotKey?.isRegistered == true {
             capture.keyEquivalent = shortcut.keyLabel.lowercased()
             capture.keyEquivalentModifierMask = Self.menuModifiers(shortcut.modifiers)
         }
@@ -1791,7 +1791,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         value.allPinned = !records.isEmpty && records.allSatisfy(\.favorite)
         value.hasLatestImage = line.newestID != nil
         value.globalToggleHint = Shortcut.current?.display ?? ""; value.copyLatestHint = line.copyLatestShortcut?.title ?? ""
-        value.captureAreaHint = line.captureAreaShortcut?.title ?? ""
+        // A shortcut another app holds is not shown as if it worked; Settings explains it.
+        value.captureAreaHint = captureHotKey?.isRegistered == true ? (line.captureAreaShortcut?.title ?? "") : ""
         value.canUndoShelfRemoval = line.library?.canUndoShelfRemoval == true
         value.canUndoLibraryTrash = line.library?.canUndoTrash == true
         value.activeFavorites = snapshot.inLibrary ? libraryController?.model.showingPinnedOnly == true : line.activeFavoritesOnly
