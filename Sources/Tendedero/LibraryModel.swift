@@ -428,6 +428,13 @@ import Combine
         perform { try store.removeCollection(id); done = true }
         if done, case let .collection(current) = query.scope, removed.contains(current) { changeScope(.saved) }
     }
+    /// Delete a tag everywhere. Only the view of that tag falls back to My library, as removing a folder does.
+    func deleteTag(_ id: UUID) {
+        guard flushEdits() else { return }
+        var done = false
+        perform { try store.removeTag(id); done = true }
+        if done, case let .tag(current) = query.scope, current == id { changeScope(.saved) }
+    }
     func unassign(_ folder: UUID) { guard flushEdits(), let id = inspected?.id else { return }; perform { try store.unassign(id, from: folder) } }
     func removeTag(_ tag: UUID) { guard flushEdits(), let id = inspected?.id else { return }; perform { try store.removeTag(tag, from: id) } }
     func open() { guard let id = focusedID, let record = try? store.item(id), let url = record.linkURL ?? record.fileURL else { return }; NSWorkspace.shared.open(url) }

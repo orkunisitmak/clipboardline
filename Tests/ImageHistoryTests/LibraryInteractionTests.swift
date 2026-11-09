@@ -233,6 +233,22 @@ import XCTest
         let blank = try XCTUnwrap(store.captureText(" \t")); XCTAssertEqual(blank.displayTitle, L("Untitled note"))
         try store.update(link.id) { $0.originalURL = "http://[bad" }; XCTAssertEqual(try XCTUnwrap(store.item(link.id)).displayTitle, L("Link"))
     }
+    func testRemovingAnotherTagKeepsTheOpenViewLikeFolders() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let keep = try store.createCollection("Keep")
+        let first = try XCTUnwrap(store.captureText("first kept note")), second = try XCTUnwrap(store.captureText("second tagged note"))
+        try store.assign([first.id], to: keep); try store.addTag("draft", to: [second.id]); try store.addTag("open", to: [second.id])
+        let model = LibraryModel(store: store)
+        wait { model.tags.count == 2 && !model.loading }
+        let draft = try XCTUnwrap(model.tags.first { $0.name == "draft" }), open = try XCTUnwrap(model.tags.first { $0.name == "open" })
+        model.changeScope(.collection(keep)); wait { model.query.scope == .collection(keep) && model.ids == [first.id] && !model.loading }
+        model.select(first.id); wait { model.selectedIDs == [first.id] && model.focusedID == first.id }
+        model.deleteTag(draft.id); wait { model.tags.count == 1 && !model.loading }
+        XCTAssertEqual(model.query.scope, .collection(keep)); XCTAssertEqual(model.ids, [first.id])
+        XCTAssertEqual(model.selectedIDs, [first.id]); XCTAssertEqual(model.focusedID, first.id)
+        model.changeScope(.tag(open.id)); wait { model.query.scope == .tag(open.id) && !model.loading }
+        model.deleteTag(open.id); wait { model.tags.isEmpty && model.query.scope == .saved && !model.loading }
+    }
     func testRemovingAnotherFolderKeepsTheOpenViewLikeWindows() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let keep = try store.createCollection("Keep"), other = try store.createCollection("Other")
