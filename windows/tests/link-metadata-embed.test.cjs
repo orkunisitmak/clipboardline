@@ -27,3 +27,9 @@ test('meta tags with unquoted attribute values are read like macOS',async()=>{
  const metadata=await linkMetadata('https://example.com/post',async()=>({bytes:Buffer.from(html),url:'https://example.com/post',type:'text/html; charset=utf-8'}));
  assert.equal(metadata.title,'Real-Article-Title');assert.equal(metadata.thumbnail,'https://cdn.example.com/a.png');
 });
+
+test('a greater-than sign inside a quoted meta value keeps the title',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page(`<meta property="og:title" content="Tips > Tricks"><title>Page</title>`)).title,'Tips > Tricks');
+ assert.equal((await page(`<meta property='og:title' content='Tips > Tricks'><title>Page</title>`)).title,'Tips > Tricks');
+});
