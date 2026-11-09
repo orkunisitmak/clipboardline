@@ -73,6 +73,27 @@ test('metadata title parsing is bounded against unmatched and nested markup',asy
  assert.equal((await linkMetadata('https://example.com',page('<title>Price < $10</title>'))).title,'Price < $10');
  assert.equal((await linkMetadata('https://example.com',page('<!-- İ --><title>Haber</title>'))).title,'Haber');
 });
+test('metadata skips long script/style blocks and requires complete closing tag names',async()=>{
+ const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'});
+ const opening='<script '+(' '.repeat(600))+'data="x">';
+ const html=opening+('x'.repeat(270000))+'</scripture><meta property="og:title" content="fake"></script><title>Price < $10</titlecard> later</title><meta property="og:title" content="real">';
+ assert.equal((await linkMetadata('https://example.com',page(html))).title,'real');
+ assert.equal((await linkMetadata('https://example.com',page('<title>Price < $10</title>'))).title,'Price < $10');
+ assert.equal((await linkMetadata('https://example.com',page('<title>Part</titlecard> still</title>'))).title,'Part still');
+});
+test('unclosed title and meta sequences stay bounded at the HTML size limit',async()=>{
+ const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'});
+ const unclosed='<title>'.repeat(80000)+'unclosed';
+ const start=process.hrtime.bigint();
+ assert.equal((await linkMetadata('https://example.com',page(unclosed))).title,'example.com');
+ assert.ok(Number(process.hrtime.bigint()-start)/1e6<5000,'unclosed title scan exceeded five seconds');
+ const metas='<meta '.repeat(80000);
+ const metaStart=process.hrtime.bigint();
+ assert.equal((await linkMetadata('https://example.com',page(metas))).title,'example.com');
+ assert.ok(Number(process.hrtime.bigint()-metaStart)/1e6<5000,'unclosed meta scan exceeded five seconds');
+ const longAttribute='<meta '+('a'.repeat(8190))+' property="og:title" content="bounded">';
+ assert.equal((await linkMetadata('https://example.com',page(longAttribute))).title,'bounded');
+});
 
 test('YouTube Music links use oEmbed through the canonical host',async()=>{
  let requested='';
