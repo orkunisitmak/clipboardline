@@ -3,6 +3,9 @@ const dns = require('node:dns').promises;
 const net = require('node:net');
 const http = require('node:http');
 const https = require('node:https');
+const graphemes = new Intl.Segmenter('en', {granularity: 'grapheme'});
+// Cut on whole characters like Swift's String.prefix, never through a surrogate pair.
+function prefix(text, count) { let out = '', n = 0; for (const {segment} of graphemes.segment(text)) { if (n++ === count) break; out += segment; } return out; }
 function publicAddress(address) {
   if (address.startsWith('::ffff:')) return publicAddress(address.slice(7));
   if (net.isIP(address) === 4) {
@@ -139,7 +142,7 @@ async function linkMetadata(input, fetcher = metadataFetch) {
     const response = await fetcher('https://www.youtube.com/oembed?url=' + encodeURIComponent(video.href) + '&format=json', {maximum: 64 * 1024});
     const data = JSON.parse(response.bytes.toString('utf8'));
     if(!data||typeof data!=='object'||Array.isArray(data))return{title:url.hostname,author:'',thumbnail:''};
-    return {title: String(data.title || '').trim().slice(0, 500)||url.hostname, author: String(data.author_name || '').trim().slice(0, 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
+    return {title: prefix(String(data.title || '').trim(), 500)||url.hostname, author: prefix(String(data.author_name || '').trim(), 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
   }
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
   const html = decodeHTML(response.bytes, response.type);
@@ -151,6 +154,6 @@ async function linkMetadata(input, fetcher = metadataFetch) {
     const value = meta(html, name); if (!value.trim()) continue;
     try { const image = new URL(value, response.url); metadataGuard(image); literalDestination(image); thumbnail = image.href; break; } catch {}
   }
-  return {title: title.slice(0, 500), thumbnail};
+  return {title: prefix(title, 500), thumbnail};
 }
 module.exports = {publicAddress, publicURL, boundedFetch, metadataGuard,metadataFetch,thumbnailFetch,linkMetadata};

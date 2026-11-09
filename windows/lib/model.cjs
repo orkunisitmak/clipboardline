@@ -235,7 +235,7 @@ class Store {
     return {kind,ids:items.map(item=>item.id).sort(),captures:Object.fromEntries(items.map(item=>[item.id,{revision:item.captureRevision??null,createdAt:item.createdAt,updatedAt:item.updatedAt,lastCopiedAt:item.lastCopiedAt??null}]))};
   }
   invalidateTrashUndo(value){const affected=new Set(value);this.trashUndoStack=this.trashUndoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
-  markCopied(value){this.modify('markCopied',{ids:value});}
+  markCopied(value){if(value.length)this.modify('markCopied',{ids:value});}
   // Applies fetched preview metadata only while the link is still live, so a link removed during the fetch gets no stored thumbnail.
   setLinkMetadata(item,url,{title,author,thumbnail}){
     if(!this.data.items.includes(item)||item.trashedAt||item.url!==url)return false;
@@ -469,7 +469,7 @@ class Store {
       else if(action==='retain')item.retainedAt??=now;
       else if(action==='note')item.note=sizedText(payload.note,true);
       else if(action==='details') {
-        if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
+        if(payload.name!==undefined)item.name=sizedText(payload.name,true).trim();
         if(payload.note!==undefined)item.note=sizedText(payload.note,true);
         if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }
@@ -508,7 +508,7 @@ class Store {
     }
     if(action==='folder'&&payload.rememberRecent===true)this.data.settings.recentPinFolderIds=[payload.folderId,...this.data.settings.recentPinFolderIds.filter(id=>id!==payload.folderId)].slice(0,8);
     if (action === 'delete') { const removed = new Set(items); this.data.items = this.data.items.filter(i => !removed.has(i)); }
-    if (['delete', 'trash', 'restore'].includes(action)) this.undoStack = this.undoStack.filter(batch => !batch.some(old => items.some(i => i.id === old.id)));
+    if (['delete', 'trash', 'restore'].includes(action)) {const affected=new Set(items.map(i=>i.id));this.undoStack=this.undoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
     if(action==='delete')this.preparePermanentDeletion();
     this.persist();
     {const affected=new Set(items.map(item=>item.id));this.trashUndoStack=this.trashUndoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}

@@ -44,3 +44,9 @@ test('titles and meta tags after unclosed or oversized tags are still found',asy
  assert.equal((await read('<meta 1property=og:title content=Digits>')).title,'Digits');
  assert.equal((await read('<meta property content=Lost><title>Fallback</title>')).title,'Fallback');
 });
+
+test('long YouTube oEmbed title and author are cut on whole characters',async()=>{
+ const emoji='\u{1F600}',title='a'.repeat(499)+emoji+' tail',author='b'.repeat(199)+emoji+' tail';
+ const metadata=await linkMetadata('https://youtu.be/synthetic',async()=>({bytes:Buffer.from(JSON.stringify({title,author_name:author})),type:'application/json'}));
+ assert.equal(metadata.title,'a'.repeat(499)+emoji);assert.equal(metadata.author,'b'.repeat(199)+emoji);
+});
