@@ -455,3 +455,7 @@ test('Library domain filter ignores case, surrounding spaces and dots, www and a
  await f.input('domain-filter','other.org');assert.deepEqual(cards(f),[]);
  await f.input('domain-filter','  ');assert.deepEqual(cards(f),[f.image,f.link]);
 });
+test('Library cards do not offer the shelf-only Take down button',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ assert.match(f.main,/data-action="card-pin"/);assert.doesNotMatch(f.main,/data-action="card-remove"/);
+});
