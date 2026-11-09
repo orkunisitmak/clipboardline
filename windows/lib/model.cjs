@@ -85,7 +85,7 @@ function settings(patch, previous = DEFAULTS) {
 // Match macOS libraryFolded: sibling folder and tag names ignore case, width and diacritics.
 // Only the ideographic space, compatibility jamo and the Halfwidth and Fullwidth Forms
 // block get compatibility mapping, so ＡＢＣ matches ABC while m² stays distinct from m2.
-const foldedName=value=>value.replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
+const foldedName=value=>value.replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').normalize('NFC').toLowerCase();
 function trashUndoFingerprint(item){return crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex');}
 function trashUndoMatches(item,entry){return !!item&&item.trashedAt!=null&&item.trashedAt===entry.afterTrashedAt&&item.updatedAt===entry.afterUpdatedAt&&(item.captureRevision??null)===entry.captureRevision&&trashUndoFingerprint(item)===entry.fingerprint;}
 function availableTrashUndo(items,journal){if(!journal?.length)return false;const byID=new Map(items.map(item=>[item.id,item]));for(let index=journal.length-1;index>=0;index--)if(journal[index].some(entry=>trashUndoMatches(byID.get(entry.id),entry)))return true;return false;}
@@ -130,6 +130,8 @@ class Store {
     }
     this.mediaDirectory = path.join(this.directory, 'media'); fs.mkdirSync(this.mediaDirectory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
+    // Remove staging files a killed process left behind (putPNG '.png-' and putVideo '.video-'); exact names, regular files only.
+    for(const name of fs.readdirSync(this.mediaDirectory))if(/^\.(?:png|video)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(name))try{const file=path.join(this.mediaDirectory,name);if(fs.lstatSync(file).isFile())fs.unlinkSync(file);}catch{}
     this.file = path.join(this.directory, 'library.json');
     this.data = {schema: 1, items: [], folders: [], settings: clone(DEFAULTS)};
     if (fs.existsSync(this.file)) {
@@ -145,6 +147,8 @@ class Store {
     this.pruneRecentFolders();
     this.privacyWarning='';
     if(this.data.pendingBackupRefresh||this.data.pendingDeletionFiles?.length)try{this.finishPermanentDeletion();}catch(error){this.privacyWarning=error.message;}
+    // A killed process can leave a full copy of the library here, with text deleted since; exact names, regular files only.
+    for(const name of fs.readdirSync(this.directory))if(/^library\.json(?:\.backup)?\.tmp-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(name))try{const file=path.join(this.directory,name);if(fs.lstatSync(file).isFile())fs.unlinkSync(file);}catch(error){if(error.code!=='ENOENT')this.privacyWarning||='A temporary copy of the library could not be removed.';}
     this.expire();
   }
   pruneRecentFolders(){const known=new Set(this.data.folders.map(folder=>folder.id));this.data.settings.recentPinFolderIds=(this.data.settings.recentPinFolderIds||[]).filter(id=>known.has(id));}
@@ -244,7 +248,8 @@ class Store {
     if (!width || !height || width * height > 80_000_000) fail('Image is too large');
     const filename = crypto.createHash('sha256').update(buffer).digest('hex') + '.png';
     const destination = path.join(this.mediaDirectory, filename);
-    if (!fs.existsSync(destination)) fs.writeFileSync(destination, buffer, {flag: 'wx', mode: 0o600});
+    // Write beside the target and rename, so a failed or interrupted write never leaves a truncated file under the content hash.
+    if (!fs.existsSync(destination) || fs.statSync(destination).size !== buffer.length) {const temporary = path.join(this.mediaDirectory, '.png-' + crypto.randomUUID());try {fs.writeFileSync(temporary, buffer, {flag: 'wx', mode: 0o600});fs.renameSync(temporary, destination);} finally {fs.rmSync(temporary, {force: true});}}
     return filename;
   }
   mediaPath(id, original = false) {
@@ -464,7 +469,7 @@ class Store {
       else if(action==='retain')item.retainedAt??=now;
       else if(action==='note')item.note=sizedText(payload.note,true);
       else if(action==='details') {
-        if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
+        if(payload.name!==undefined)item.name=sizedText(payload.name,true).trim();
         if(payload.note!==undefined)item.note=sizedText(payload.note,true);
         if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }
@@ -481,7 +486,7 @@ class Store {
       } else if(action==='removeTag') {
         const tag=text(payload.tag,TAG_INPUT_LIMIT).trim();item.tags=item.tags.filter(value=>value!==tag);
       } else if (action === 'tag') {
-        if (!Array.isArray(payload.tags) || payload.tags.length > 50) fail('Invalid tags');
+        if (!Array.isArray(payload.tags)) fail('Invalid tags');
         const tags = [...new Set(payload.tags.map(tag => { tag = text(tag, TAG_INPUT_LIMIT).trim(); if (item.tags.includes(tag)) return tag; tag = tag.replace(/^#+|#+$/g, '').trim(); const key = foldedName(tag), known = item.tags.find(own => foldedName(own) === key) ?? knownTags.get(key) ?? tag; if (tag) knownTags.set(key, known); return tag && known; }).filter(Boolean))];
         // Existing longer tags stay editable; only newly added names must fit.
         if (tags.some(tag => !item.tags.includes(tag) && !validTagName(tag))) fail('Invalid tag name');
@@ -503,7 +508,7 @@ class Store {
     }
     if(action==='folder'&&payload.rememberRecent===true)this.data.settings.recentPinFolderIds=[payload.folderId,...this.data.settings.recentPinFolderIds.filter(id=>id!==payload.folderId)].slice(0,8);
     if (action === 'delete') { const removed = new Set(items); this.data.items = this.data.items.filter(i => !removed.has(i)); }
-    if (['delete', 'trash', 'restore'].includes(action)) this.undoStack = this.undoStack.filter(batch => !batch.some(old => items.some(i => i.id === old.id)));
+    if (['delete', 'trash', 'restore'].includes(action)) {const affected=new Set(items.map(i=>i.id));this.undoStack=this.undoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
     if(action==='delete')this.preparePermanentDeletion();
     this.persist();
     {const affected=new Set(items.map(item=>item.id));this.trashUndoStack=this.trashUndoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}

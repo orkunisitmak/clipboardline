@@ -449,6 +449,7 @@
 /* Searchable action bar. */
 "Actions" = "アクション";
 "Available on the shelves" = "シェルフで使用できます";
+"Available in Library" = "ライブラリで使用できます";
 "Available on the shelves or in Library" = "シェルフまたはライブラリで使用できます";
 "Edit item details" = "項目の詳細を編集";
 "Finish editing first" = "先に編集を完了してください";

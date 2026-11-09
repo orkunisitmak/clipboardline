@@ -65,10 +65,13 @@ async function boundedFetch(input, {maximum = 512 * 1024, redirects = 3, resolve
 }
 function metadataGuard(url){
   if(url.protocol!=='https:')throw new Error('Automatic link metadata requires HTTPS.');
+  // As on macOS, only named hosts are fetched: no IP literals and no trailing-dot hosts.
+  if(net.isIP(url.hostname.replace(/^\[|\]$/g,''))||url.hostname.endsWith('.'))throw new Error('Automatic link metadata needs a named host.');
   const sensitive=new Set(['token','accesstoken','refreshtoken','idtoken','apikey','auth','authorization','authentication','authtoken','code','signature','sig','session','sessionid','state','password','secret','clientsecret','credential','credentials','accesskeyid','key','keypairid','policy','verifier','jwt','bearer']);
   for(const key of url.searchParams.keys()){const normalized=key.toLowerCase().replace(/[^a-z0-9]/g,'');if(/^(xamz|xgoog|oauth)/.test(normalized)||sensitive.has(normalized))throw new Error('Sensitive link parameters are not fetched automatically.');}
 }
 function metadataFetch(input,options={}){return boundedFetch(input,{deadline:20000,...options,guard:metadataGuard});}
+function thumbnailFetch(input,options={}){return metadataFetch(input,{...options,maximum:5*1024*1024});}
 const NAMED_ENTITIES = {amp:'&',quot:'"',lt:'<',gt:'>',apos:'\'',nbsp:' ',ccedil:'ç',Ccedil:'Ç',ouml:'ö',Ouml:'Ö',uuml:'ü',Uuml:'Ü',gbreve:'ğ',Gbreve:'Ğ',scedil:'ş',Scedil:'Ş',inodot:'ı',Idot:'İ',acirc:'â',icirc:'î',ucirc:'û',auml:'ä',Auml:'Ä',szlig:'ß',eacute:'é',Eacute:'É',egrave:'è',agrave:'à',aacute:'á',iacute:'í',oacute:'ó',uacute:'ú',ntilde:'ñ',ndash:'–',mdash:'—',hellip:'…',lsquo:'‘',rsquo:'’',ldquo:'“',rdquo:'”',laquo:'«',raquo:'»',bull:'•',middot:'·',copy:'©',reg:'®',trade:'™',euro:'€',pound:'£'};
 const ENTITY = new RegExp(`&(?:#(\\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|(${Object.keys(NAMED_ENTITIES).join('|')}));`, 'g');
 // Titles such as "It&#8217;s" or "A&#x2F;B" must not show raw references.
@@ -92,8 +95,9 @@ function decodeHTML(bytes, type = '') {
   if (label) return new TextDecoder(label).decode(bytes);
   try { return new TextDecoder('utf-8', {fatal: true}).decode(bytes); } catch { return new TextDecoder('windows-1252').decode(bytes); }
 }
+// Bidirectional marks, embeddings, overrides and isolates can reorder a title to spoof another one; joiners stay.
 // As on macOS, drop control characters except whitespace (U+0085 counts as whitespace).
-const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
+const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
 function meta(html, name) {
   for (const match of html.matchAll(/<meta\b([^>]{0,4096})>/gi)) {
     const attributes = {};
@@ -153,7 +157,7 @@ async function linkMetadata(input, fetcher = metadataFetch) {
     const response = await fetcher('https://www.youtube.com/oembed?url=' + encodeURIComponent(video.href) + '&format=json', {maximum: 64 * 1024});
     const data = JSON.parse(response.bytes.toString('utf8'));
     if(!data||typeof data!=='object'||Array.isArray(data))return{title:url.hostname,author:'',thumbnail:''};
-    return {title: String(data.title || '').trim().slice(0, 500)||url.hostname, author: String(data.author_name || '').slice(0, 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
+    return {title: String(data.title || '').trim().slice(0, 500)||url.hostname, author: String(data.author_name || '').trim().slice(0, 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
   }
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
   const html = decodeHTML(response.bytes, response.type);
@@ -167,4 +171,4 @@ async function linkMetadata(input, fetcher = metadataFetch) {
   }
   return {title: title.slice(0, 500), thumbnail};
 }
-module.exports = {publicAddress, publicURL, boundedFetch, metadataGuard,metadataFetch,linkMetadata};
+module.exports = {publicAddress, publicURL, boundedFetch, metadataGuard,metadataFetch,thumbnailFetch,linkMetadata};

@@ -45,6 +45,8 @@ struct LibraryRecord: Codable, Equatable, Identifiable {
     var author: String?
     var metadataState = "pending"
     var metadataAttemptedAt: Date?
+    /// The name the user gave, or nil when it is blank, so shelf cards fall back to the content like the Library card.
+    var shelfName: String? { let name = title.trimmingCharacters(in: .whitespacesAndNewlines); return name.isEmpty ? nil : name }
     var displayTitle: String {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !name.isEmpty { return name }
@@ -260,7 +262,10 @@ extension String {
         try backfillTextIdentity()
         try db.execute("PRAGMA user_version=1")
         drainMarkupGarbage()
+        expire()
     }
+    /// Copies past their retention leave the shelves at launch and after every capture, as in the Windows store.
+    private func expire() { try? prune() }
     private func migrateLegacy() throws {
         guard try db.rows("SELECT value FROM metadata WHERE key='migration-v1'").isEmpty else { return }
         // Decode before writing any record or applying expiry. A damaged
@@ -451,6 +456,7 @@ extension String {
         try db.transaction { try put(record) }; changed(); return record
     }
     @discardableResult func captureImage(_ url: URL, capturedAt: Date? = nil) throws -> LibraryRecord {
+        defer { expire() }
         if let existing = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE path=? AND deleted IS NULL", [.text(url.standardizedFileURL.path)])).first { return existing }
         guard files.isRegularFile(url) else { throw HistoryFiles.Failure.unsafeFile }
         let date = capturedAt ?? now()
@@ -491,6 +497,7 @@ extension String {
         return nil
     }
     @discardableResult func captureText(_ text: String) throws -> LibraryRecord? {
+        defer { expire() }
         guard !text.isEmpty, text.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
         let date = now()
         var affected = [UUID]()
@@ -555,9 +562,12 @@ extension String {
         return captured
     }
     @discardableResult func captureLink(_ url: URL) throws -> LibraryRecord {
+        defer { expire() }
         guard let normalized = LinkIdentity.normalized(url) else { throw HistoryFiles.Failure.unsafeFile }
         if var item = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE normalized=? AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1", [.text(normalized)])).first {
             item.onShelf = true; item.updatedAt = now(); item.lastCopiedAt = now(); item.lastCapturedAt = now(); item.captureRevision = UUID()
+            // Copying a link again asks for its preview again, so a failed attempt does not hold the retry back for an hour.
+            if item.metadataState == "failed" { item.metadataAttemptedAt = nil }
             try db.transaction { try put(item) }; changed([item.id]); return item
         }
         let date = now(); var item = LibraryRecord(id: UUID(), kind: .link, createdAt: date, updatedAt: date)
@@ -728,7 +738,7 @@ extension String {
         if previous.deletedAt == nil, value.deletedAt != nil { value.trashRevision = UUID() }
         else if previous.deletedAt != nil, value.deletedAt == nil { value.trashRevision = nil }
         if value.retainedAt != nil { try ensureOwned(&value) }
-        guard (value.text?.utf8.count ?? 0) <= TextClipboardWatcher.maximumDataBytes, value.note.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
+        guard (value.text?.utf8.count ?? 0) <= TextClipboardWatcher.maximumDataBytes, value.note.utf8.count <= TextClipboardWatcher.maximumDataBytes, value.title.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
         let textFileRollback = value.kind == .text ? try rewriteMaterializedText(previous, to: value.text ?? "") : nil
         do { try db.transaction { try put(value) } }
         catch { if let rollback = textFileRollback { try? writePrivate(rollback.data, to: rollback.url) }; throw error }
