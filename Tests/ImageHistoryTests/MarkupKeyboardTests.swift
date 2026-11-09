@@ -17,7 +17,7 @@ import XCTest
         let bindings = KeyboardBindings(defaults: f.defaults)
         for context in KeyboardContext.allCases {
             XCTAssertEqual(bindings.action(for: key(46, "m"), in: context),
-                           [.imagePreview, .imageMarkup, .library].contains(context) ? .markup : nil)
+                           [.line, .imagePreview, .imageMarkup, .library].contains(context) ? .markup : nil)
         }
         let tools: [(UInt16, String, KeyboardAction)] = [(9,"v",.markupSelect), (11,"b",.markupPen),
             (4,"h",.markupMarker), (15,"r",.markupRectangle), (31,"o",.markupEllipse),
@@ -31,6 +31,47 @@ import XCTest
         }
         XCTAssertEqual(bindings.action(for: key(35,"p"), in: .imagePreview), .pin)
         XCTAssertNil(bindings.action(for: key(35,"p"), in: .imageMarkup))
+    }
+
+    func testShelfMarkupUsesFocusedImageAndRespectsSearchNativeEditorsAndRemapping() throws {
+        _ = NSApplication.shared
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+        let first = try store.captureImage(f.image()); f.date += 1
+        _ = try store.captureImage(f.image()); _ = try store.captureText("Synthetic note")
+        _ = try store.captureLink(URL(string: "https://example.com/marker")!)
+        let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false,
+                        copyImage: { _ in }, copyText: { _ in }, library: store)
+        line.setPresentation(.all, requestFocus: false); line.revealed = true
+        var requests = [UUID]()
+        line.onImageMarkupRequested = { requests.append($0) }
+        let keyboard = LineKeyboard(line: line, onCopy: { _ in }, onPreview: { _ in }, onClose: {})
+        line.select(first.id)
+        XCTAssertTrue(keyboard.handle(key(46, "m"))); XCTAssertEqual(requests, [first.id])
+        line.beginShelfSearch()
+        XCTAssertFalse(keyboard.handle(key(46, "m"))); XCTAssertEqual(requests.count, 1)
+        _ = line.closeShelfSearch()
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+        let panel = LinePanel(content: content); defer { panel.close() }
+        panel.keyboardFocusAllowed = true; panel.onKey = keyboard.handle
+        for label in ["Search", "Note", "Rename"] {
+            let editor = NSTextView(frame: content.bounds); editor.setAccessibilityLabel(label)
+            content.addSubview(editor); XCTAssertTrue(panel.makeFirstResponder(editor))
+            XCTAssertFalse(panel.routeKey(key(46, "m"), isFocused: true), label)
+            editor.insertText("m", replacementRange: NSRange(location: 0, length: 0))
+            XCTAssertEqual(editor.string, "m"); XCTAssertEqual(requests.count, 1)
+            panel.makeFirstResponder(nil); editor.removeFromSuperview()
+        }
+        for shelf in [Shelf.texts, .links] {
+            line.focusShelf(shelf, requestFocus: false)
+            XCTAssertTrue(keyboard.handle(key(46, "m"))); XCTAssertEqual(requests.count, 1)
+        }
+        line.focusShelf(.images, requestFocus: false); line.select(first.id)
+        try line.keyboardBindings.set([KeyShortcut(keyCode: 7, modifiers: 0, keyLabel: "X")], for: .markup)
+        XCTAssertFalse(keyboard.handle(key(46, "m")))
+        XCTAssertTrue(keyboard.handle(key(7, "x"))); XCTAssertEqual(requests, [first.id, first.id])
+        try line.keyboardBindings.set([], for: .markup)
+        XCTAssertFalse(keyboard.handle(key(7, "x")))
     }
 
     func testMarkupShortcutsPersistAndDisableWithoutChangingBrowsingKeys() throws {

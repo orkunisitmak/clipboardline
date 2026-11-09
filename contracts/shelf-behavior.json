@@ -43,9 +43,9 @@
       },
       {
         "id": "width-insensitive-search",
-        "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I.",
-        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift).",
-        "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac; shelf-render.test.cjs checks both through the shipped renderer."
+        "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I. A voiced kana or a Hangul syllable is one letter, so は does not find ばら and 하 does not find 한국.",
+        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift); ShelfSearchTests.testShelfSearchKeepsAVoicedKanaAndAHangulSyllableWholeLikeWindows covers the kana and Hangul cases.",
+        "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac, and recomposes the text so a bare は or 하 does not match inside ば or 한; shelf-render.test.cjs checks these through the shipped renderer."
       },
       {
         "id": "link-title-charset",
@@ -58,6 +58,12 @@
         "behavior": "A link preview whose Open Graph image is empty or only whitespace has no thumbnail; a valid relative image URL is resolved against the page address.",
         "macos": "PublicLinkHTMLMetadata drops a whitespace-only og:image before resolving it; PublicLinkNetworkTests.testWhitespaceOnlyOpenGraphImageGivesNoThumbnailAndValidOneIsKept covers it.",
         "windows": "linkMetadata in lib/network.cjs treats a whitespace-only og:image as missing; security.test.cjs covers it."
+      },
+      {
+        "id": "link-youtube-blank-author",
+        "behavior": "A YouTube link preview trims the oEmbed author name; a blank or whitespace-only author is dropped, so the preview shows the host instead of an empty line.",
+        "macos": "LinkMetadataService.youtubeMetadata trims the author and returns nil when it is blank; LibraryInteractionTests covers a blank and a padded author.",
+        "windows": "linkMetadata in lib/network.cjs trims author_name before it is stored, and the renderer falls back to the host for an empty author; link-metadata-embed.test.cjs covers a blank and a padded author."
       },
       {
         "id": "link-shelf-copied-order",
@@ -82,6 +88,12 @@
         "behavior": "The Library title of a subfolder is the names of all its ancestors and its own name, outermost first, joined with \" / \" (for example Parent / Child, or Parent / Middle / Child for imported deeper folders), so same-named subfolders of different parents can be told apart; a top-level folder shows only its name.",
         "macos": "LibraryModel.title builds the path by walking the whole LibraryCollection.parentID chain (cycle-safe) and shows it as the Library window title; LibraryInteractionTests.testSubfolderTitleIncludesItsParentLikeWindows covers it.",
         "windows": "libraryTitle() in renderer.js shows folderPath() for the folder scope; library-ui.test.cjs checks the toolbar title of a subfolder."
+      },
+      {
+        "id": "link-title-format-characters",
+        "behavior": "An HTML page title and its Open Graph text (not a YouTube oEmbed title) keep the zero-width joiner and non-joiner, so emoji sequences and Persian words are not split, and numeric references to them are decoded. Numeric references to control code points (C0, DEL, C1) stay literal. Bidirectional marks, embeddings, overrides and isolates (U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069) are removed, raw or as numeric references, so a title cannot be reordered to spoof another one.",
+        "macos": "PublicLinkHTMLMetadata.clean drops general category Cc and those bidirectional controls and marks, and entities only refuses Cc; PublicLinkNetworkTests.testHTMLTitleKeepsJoinersButDropsControlsAndBidirectionalOverrides covers it.",
+        "windows": "entities() in lib/network.cjs refuses the C0 and C1 controls and collapse() removes the bidirectional controls and marks; security.test.cjs covers joiners and bidirectional controls."
       },
       {
         "id": "trash-restore-selection",
@@ -114,6 +126,12 @@
         "windows": "title() in renderer.js applies the same rule (t('Untitled note') and t('Link') as fallbacks) to cards, title sorting and best-match ranking; library-ui.test.cjs runs the unnamed item titles scenario."
       },
       {
+        "id": "inspector-title-length",
+        "behavior": "A Library inspector title is not cut at 200 characters: a title of any length is saved until it passes the same 1 MiB of UTF-8 bytes as a text or a note. The Name and pin field keeps its own short limit.",
+        "macos": "LibraryModel.flushEdits saves the draft title through LibraryStore.update, which refuses a title over 1 MiB of UTF-8 bytes and applies no character cap below that; LibraryInteractionTests.testInspectorTitleOverTwoHundredCharactersSavesUntilOneMiBOfUTF8 covers it; the Name and pin field keeps its own limit.",
+        "windows": "The details command stores the title through sizedText() in model.cjs, so it counts UTF-8 bytes against 1 MiB like a note; model.test.cjs 'a Library inspector title over 200 characters is saved like on the Mac' covers a 249 character title and a title over 1 MiB of UTF-8 bytes."
+      },
+      {
         "id": "text-and-note-size-limit",
         "behavior": "A text or a note is saved only while it is at most 1 MiB of UTF-8 bytes, so 600,000 Turkish or CJK characters are refused on both platforms and the edit reports an error.",
         "macos": "LibraryStore.update checks text.utf8.count and note.utf8.count against TextClipboardWatcher.maximumDataBytes and LibraryModel.flushEdits shows Changes could not be saved.",
@@ -130,6 +148,24 @@
         "behavior": "Clear filters is available in the action list only while the Library has a filter to clear (favorites only, a search, a type, a date range, a domain, a tag or a search mode other than all); with no filter it is disabled with the reason \"No filters to clear\", and with the Library closed it keeps the Library reason.",
         "macos": "ActionBarMenuAction.clearFilters requires libraryAvailable and hasLibraryFilters and otherwise names \"No filters to clear\"; ActionBarCatalogTests covers it.",
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
+      },
+      {
+        "id": "unavailable-watched-folder",
+        "behavior": "A watched folder that is unavailable (for example on an unmounted volume) is skipped while watching but stays in the saved list, so adding or removing another watched folder does not forget it.",
+        "macos": "AppDelegate.extraFolders returns every saved folder and existingExtraFolders is the subset that is watched, re-evaluated when a volume mounts; SettingsTests.testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable covers it.",
+        "windows": "main.cjs skips a watchFolders entry that is not a directory without changing the list; model.test.cjs checks that adding and removing folders keeps an unavailable entry."
+        },
+        {
+        "id": "disabled-undo-names-the-surface",
+        "behavior": "A disabled undo row first says where it is available: Undo trash on the shelves reads \"Available in Library\" and Undo take down in the Library reads \"Available on the shelves\"; \"Nothing to undo\" is shown only on the surface where the undo exists.",
+        "macos": "ActionBarMenuAction.undoRemoveFromLine and .undoTrash pick the surface reason before \"Nothing to undo\"; ActionBarCatalogTests.testDisabledRowsNameTheSurfaceOrSelectionThatIsMissing covers it.",
+        "windows": "actionCommands() in renderer.js runs the surface check before the \"Nothing to undo.\" branch; library-ui.test.cjs checks both rows on the shelves and in the Library."
+      },
+      {
+        "id": "shelf-image-markup-shortcut",
+        "behavior": "M on the focused selected still photo in the active image shelf opens its editable markup preview directly. Hover alone does not retarget keyboard actions. H selects the translucent marker; pointer drags draw editable marks. Escape saves and finishes markup (a later Escape closes preview); crop Escape cancels the crop. Saved marks survive reopening. M in search, note, annotation text and rename editors stays native text input. Empty and non-image shelves do not open markup. Remapped or disabled markup keys remain respected.",
+        "macos": "LineKeyboard routes markup to Line.markup for the focused visible still image. MarkupKeyboardTests and ImageMarkupInteractionTests execute typing guards, remapping, real preview-panel sendEvent mouse delivery, hit testing, composited marker pixels, Escape/save and reopen. The nonactivating panel's canvas accepts the first mouse click while editing. CrossPlatformBehaviorContractTests executes the shared shelf M scenarios.",
+        "windows": "The shipped renderer allows markup in the shelves shortcut context and opens the existing image editor for the focused still image. renderer-ui.test.cjs executes the shared shelf M scenarios plus marker pointer drawing, Escape/save, reopen and native editor guards. Native Windows acceptance remains a separate release gate."
       }
     ]
   },
@@ -1077,6 +1113,22 @@
             ],
             "searchEditing": false
           }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "image",
+            "focused": null,
+            "selected": [],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
         }
       ]
     },
@@ -1747,6 +1799,163 @@
             ],
             "visibleKinds": [
               "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "shelf-markup-opens-focused-photo",
+      "itemSet": "standard",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i1",
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "right",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i2",
+            "selected": [
+              "i2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i2",
+            "selected": [
+              "i2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": [
+              "markup"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "non-image-shelves-ignore-markup",
+      "itemSet": "standard",
+      "visibleKinds": [
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "down",
+          "expect": {
+            "activeKind": "link",
+            "focused": "l1",
+            "selected": [
+              "l1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "link",
+            "focused": "l1",
+            "selected": [
+              "l1"
+            ],
+            "visibleKinds": [
               "text",
               "link"
             ],

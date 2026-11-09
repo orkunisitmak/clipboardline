@@ -286,6 +286,15 @@ import XCTest
         XCTAssertEqual(try store.collections(for: a.id).map(\.id), [folder]); XCTAssertEqual(try store.tags(for: a.id).map(\.id), [tag.id])
         XCTAssertEqual(try store.item(a.id)?.text, "edited 👋"); model.draftText = "fixed"; XCTAssertTrue(model.flushEdits()); XCTAssertTrue(model.select(b.id))
     }
+    func testInspectorTitleOverTwoHundredCharactersSavesUntilOneMiBOfUTF8() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let a = try XCTUnwrap(store.captureText("first")); try store.retain([a.id])
+        let model = LibraryModel(store: store); wait { model.ids.count == 1 }; _ = model.select(a.id)
+        let long = String(repeating: "t", count: 249)
+        model.draftTitle = long; XCTAssertTrue(model.flushEdits()); XCTAssertEqual(try store.item(a.id)?.title, long)
+        model.draftTitle = String(repeating: "x", count: TextClipboardWatcher.maximumDataBytes + 1)
+        XCTAssertFalse(model.flushEdits()); XCTAssertEqual(try store.item(a.id)?.title, long)
+    }
     func testMixedTransferExportAndDragPreserveRepresentationsOrderAndOriginals() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let imageURL = try f.image(owned: false), image = try store.captureImage(imageURL), text = try XCTUnwrap(store.captureText("synthetic note")), link = try store.captureLink(URL(string: "https://example.com/path?t=10")!)
@@ -310,6 +319,12 @@ import XCTest
         let parsed = try LinkMetadataService.youtubeMetadata(data); XCTAssertEqual(parsed.0.title, "Synthetic title"); XCTAssertEqual(parsed.0.author, "Synthetic channel"); XCTAssertEqual(parsed.1?.host, "i.ytimg.com")
         let untrusted = try LinkMetadataService.youtubeMetadata(Data(#"{"thumbnail_url":"http://127.0.0.1/private"}"#.utf8)); XCTAssertNil(untrusted.1)
         var failed = false; do { _ = try LinkMetadataService.youtubeMetadata(Data("not json".utf8)) } catch { failed = true }; XCTAssertTrue(failed)
+    }
+    func testYouTubeWhitespaceOnlyTitleAndAuthorAreDroppedLikeWindows() throws {
+        let blank = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"   ","author_name":" \n "}"#.utf8))
+        XCTAssertNil(blank.0.title); XCTAssertNil(blank.0.author)
+        let padded = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"  Synthetic title ","author_name":"  Synthetic channel "}"#.utf8))
+        XCTAssertEqual(padded.0.title, "Synthetic title"); XCTAssertEqual(padded.0.author, "Synthetic channel")
     }
     func testMetadataConcurrencyBackoffPrivateLinksAndUserTitle() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)

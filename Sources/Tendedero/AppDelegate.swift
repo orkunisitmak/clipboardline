@@ -282,6 +282,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Entering or leaving full screen switches Space. Check again once the
         // switch animation has settled.
         let workspace = NSWorkspace.shared.notificationCenter
+        // A watched folder on a volume mounted later is picked up without a restart.
+        workspace.addObserver(forName: NSWorkspace.didMountNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.watchesFiles, Set(Self.existingExtraFolders.map(\.path)) != Set(self.folderWatchers.map(\.folder.path)) else { return }
+                self.startWatcher()
+            }
+        }
         for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
             workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                 MainActor.assumeIsolated {
@@ -291,7 +298,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         self.directPaste.recordActivation(app.processIdentifier)
                     }
                     self?.refresh()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self?.refresh() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        self?.refresh()
+                        if self?.isRevealed == true { self?.keepPanelOnActiveSpace() }
+                    }
                 }
             }
         }
@@ -367,7 +377,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         folderWatchers = []
         // A folder may also be watched for screenshots, like the Desktop; an
         // image both report hangs once.
-        for folder in Self.extraFolders {
+        for folder in Self.existingExtraFolders {
             let extra = ScreenshotWatcher(
                 folder: folder, anyImage: true,
                 onNew: { [weak self] url in self?.hangCapture(url) },
@@ -381,18 +391,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// folder, few enough that screenshots still have room on the line.
     static let maxExtraFolders = 3
 
-    /// The folders from "Also watch folders" that still exist. New images in
-    /// them hang like screenshots; taking one down leaves the file there.
+    /// The folders from "Also watch folders". New images in them hang like
+    /// screenshots; taking one down leaves the file there. A folder on an
+    /// unmounted volume stays listed (and saved) until the user removes it.
     static var extraFolders: [URL] {
-        get {
-            let paths = UserDefaults.standard.stringArray(forKey: "extraFolders") ?? []
-            return paths.compactMap { path in
-                var isDir: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else { return nil }
-                return URL(fileURLWithPath: path, isDirectory: true)
-            }
-        }
+        get { (UserDefaults.standard.stringArray(forKey: "extraFolders") ?? []).map { URL(fileURLWithPath: $0, isDirectory: true) } }
         set { UserDefaults.standard.set(newValue.map(\.path), forKey: "extraFolders") }
+    }
+
+    /// The listed folders that exist right now, which are the ones to watch.
+    static var existingExtraFolders: [URL] {
+        extraFolders.filter { (folder: URL) -> Bool in
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDir) && isDir.boolValue
+        }
     }
 
     private func chooseExtraFolder() {
@@ -641,6 +653,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             previousApplication = nil
         }
+        if on { keepPanelOnActiveSpace() }
         panel.setShelfRevealed(on) { [weak self] in
             guard let self, on == self.isRevealed else { return }
             if on { self.updateMousePassThrough(NSEvent.mouseLocation) }
@@ -649,6 +662,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Install the hidden-to-open transform before exposing the window;
         // otherwise its first committed frame can flash fully open.
         if on, isPresent { panel.orderFrontRegardless() }
+    }
+
+    /// Checked as the shelf comes down and after a Space switch while it is
+    /// down. The window server answers for an ordered-out window too, so a
+    /// window left on another Space is replaced before its reveal starts.
+    private func keepPanelOnActiveSpace() {
+        guard let old = panel, !old.isOnActiveSpace else { return }
+        log.notice("The shelf window was not on the active Space; making it again")
+        let wasVisible = old.isVisible, wasKey = old.isKeyWindow
+        panel = old.makeReplacement()
+        if wasKey { panel.makeKeyAndOrderFront(nil) } else if wasVisible { panel.orderFrontRegardless() }
+    }
+
+    /// Where a child window gives focus back when it closes. The palette or a
+    /// picker opened over the shelf can outlive that shelf window, since
+    /// keepPanelOnActiveSpace makes a new one, so it asks for the shelf then.
+    static func focusReturn(to parent: NSWindow?, shelf: @escaping () -> NSWindow?) -> () -> NSWindow? {
+        guard let parent else { return { nil } }
+        if parent === shelf() { return shelf }
+        return { [weak parent] in parent }
+    }
+    private func focusReturn(to parent: NSWindow?) -> () -> NSWindow? {
+        Self.focusReturn(to: parent) { [weak self] in self?.panel }
     }
 
     @objc private func toggle() {
@@ -1285,10 +1321,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let parent = textPreview?.window ?? linkPreview?.window ?? preview?.window ?? panel
             let picker = try PinFolderPicker(store: store, ids: ids); pinFolderPicker = picker
             picker.window.onBeforeMouseKeyFocus = { [weak self] in self?.capturePasteTarget() }
-            picker.onClose = { [weak self, weak parent] in
+            let returnFocus = focusReturn(to: parent)
+            picker.onClose = { [weak self] in
                 guard let self else { return }; self.pinFolderPicker = nil
                 if let session = self.previewSession { self.updatePreview(session) }
-                if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) }
+                if let parent = returnFocus(), parent.isVisible { parent.makeKeyAndOrderFront(nil) }
             }
             picker.show(relativeTo: parent)
         } catch { line.notice = error.localizedDescription }
@@ -1466,7 +1503,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }, completion: { [weak self] result in
                 guard let self else { return }; self.isPasting = false
                 switch result {
-                case .pasted: self.reportActionStatus(L("Pasted"))
+                case .pasted:
+                    try? store.markCopied(ids)
+                    self.reportActionStatus(L("Pasted"))
                 case .permissionRequired:
                     self.reportActionStatus(L("Accessibility permission is needed to paste into another app."))
                     let alert = NSAlert()
@@ -1531,10 +1570,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let parent = previewWindow ?? panel
             let picker = try TagPicker(store: store, ids: ids); tagPicker = picker
             picker.window.onBeforeMouseKeyFocus = { [weak self] in self?.capturePasteTarget() }
-            picker.onClose = { [weak self, weak parent] in
+            let returnFocus = focusReturn(to: parent)
+            picker.onClose = { [weak self] in
                 self?.tagPicker = nil
                 if let self, let session = self.previewSession { self.updatePreview(session) }
-                if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) }
+                if let parent = returnFocus(), parent.isVisible { parent.makeKeyAndOrderFront(nil) }
             }
             picker.show(relativeTo: parent)
         } catch { line.notice = error.localizedDescription }
@@ -1553,10 +1593,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 picker.onAdvance = { [weak self] id in self?.line.focusNameAndPinTarget(id, on: shelf) }
                 line.focusNameAndPinTarget(picker.id, on: shelf)
             }
-            picker.onClose = { [weak self, weak parent] in
+            let returnFocus = focusReturn(to: parent)
+            picker.onClose = { [weak self] in
                 guard let self else { return }; self.nameAndPinPicker = nil
                 if let session = self.previewSession { self.updatePreview(session) }
-                if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) }
+                if let parent = returnFocus(), parent.isVisible { parent.makeKeyAndOrderFront(nil) }
             }
             picker.show(relativeTo: parent)
         } catch { line.notice = error.localizedDescription }
@@ -1617,9 +1658,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         palette.onSearchContents = { [weak self] in self?.searchContents(from: snapshot) }
         palette.window.onBeforeMouseKeyFocus = { [weak self] in self?.capturePasteTarget() }
         commandPalette = palette
-        palette.onClose = { [weak self, weak parent, weak palette] in
+        let returnFocus = focusReturn(to: parent)
+        palette.onClose = { [weak self, weak palette] in
             self?.commandPalette = nil
-            if palette?.shouldRestoreParentFocus == true, parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) }
+            if palette?.shouldRestoreParentFocus == true, let parent = returnFocus(), parent.isVisible { parent.makeKeyAndOrderFront(nil) }
         }
         palette.show(relativeTo: parent)
     }
@@ -1975,7 +2017,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if line.activeShelf == .links, let store = line.library { sources = try LibraryTransfer.exportSources(line.links.selectedEntries, store: store) }
             else if line.showingTexts { sources = try line.texts.exportSources(line.texts.selectedEntries) }
             else { sources = line.selectedItems.map {
-                (url: $0.url, name: HistoryFiles.exportName(for: $0.url, originalPath: $0.originalPath))
+                (url: $0.url, name: $0.exportName)
             } }
         } catch { line.notice = L("Could not export copies"); return }
         guard !sources.isEmpty else { return }

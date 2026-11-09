@@ -327,7 +327,16 @@ struct PublicLinkNetwork: Sendable {
          exchange: @escaping Exchange = { plan, limit in try await PublicLinkExchange(limit: limit).run(plan) }) {
         self.resolve = resolve; self.exchange = exchange
     }
-    func fetch(_ url: URL, limit: Int, allowed: @Sendable (URL) -> Bool = { _ in true }) async throws -> PublicLinkResponse {
+    /// `deadline` bounds the whole call, redirects and DNS included, like Windows' 20 s metadata fetch.
+    func fetch(_ url: URL, limit: Int, deadline: Duration = .seconds(20), allowed: @escaping @Sendable (URL) -> Bool = { _ in true }) async throws -> PublicLinkResponse {
+        return try await withThrowingTaskGroup(of: PublicLinkResponse.self) { group in
+            group.addTask { try await follow(url, limit: limit, allowed: allowed) }
+            group.addTask { try await Task.sleep(for: deadline); throw PublicLinkError.timeout }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
+    }
+    private func follow(_ url: URL, limit: Int, allowed: @Sendable (URL) -> Bool) async throws -> PublicLinkResponse {
         guard (1...5 * 1024 * 1024).contains(limit) else { throw PublicLinkError.tooLarge }
         var current = url
         for hop in 0...3 {
@@ -422,7 +431,12 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     }
     private static func clean(_ value: String?, limit: Int) -> String? {
         guard let value else { return nil }
-        let clean = value.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) || CharacterSet.whitespacesAndNewlines.contains($0) }
+        // Drop Cc and the bidirectional marks, overrides, embeddings and isolates that can reorder a title to spoof another one.
+        // CharacterSet.controlCharacters also holds Cf, which includes the joiners emoji and Persian text need.
+        let clean = value.unicodeScalars.filter {
+            let bidi = [0x061C, 0x200E, 0x200F].contains($0.value) || (0x202A...0x202E).contains($0.value) || (0x2066...0x2069).contains($0.value)
+            return ($0.properties.generalCategory != .control && !bidi) || CharacterSet.whitespacesAndNewlines.contains($0)
+        }
         let result = String(String.UnicodeScalarView(clean)).split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return result.isEmpty ? nil : String(result.prefix(limit))
     }
@@ -435,8 +449,8 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
             guard let whole = Range(match.range, in: result), let nameRange = Range(match.range(at: 1), in: value) else { continue }
             let name = String(value[nameRange]); var replacement = named[name]
-            if name.lowercased().hasPrefix("#x"), let number = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
-            else if name.hasPrefix("#"), let number = UInt32(name.dropFirst()), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
+            if name.lowercased().hasPrefix("#x"), let number = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(number), scalar.properties.generalCategory != .control { replacement = String(scalar) }
+            else if name.hasPrefix("#"), let number = UInt32(name.dropFirst()), let scalar = UnicodeScalar(number), scalar.properties.generalCategory != .control { replacement = String(scalar) }
             if let replacement { result.replaceSubrange(whole, with: replacement) }
         }
         return result

@@ -26,7 +26,7 @@ const {decodeTextFile}=require('./lib/text-file.cjs');
 const native = require('./lib/native.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
-const {metadataFetch,linkMetadata} = require('./lib/network.cjs');
+const {thumbnailFetch,linkMetadata} = require('./lib/network.cjs');
 const {Updates,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
 const {GlobalShortcuts}=require('./lib/global-shortcuts.cjs');
 const {ImageSearch,modelPaths}=require('./lib/image-search.cjs');
@@ -201,7 +201,7 @@ async function enrich(id,{refresh=false}={}) {
     const metadata=await linkMetadata(url);
     if(!current()||!store.data.items.includes(item)||item.trashedAt||item.url!==url)return;
     let thumbnail=null;
-    if(metadata.thumbnail){try{const response=await metadataFetch(metadata.thumbnail,{maximum:2*1024*1024});const image=nativeImage.createFromBuffer(response.bytes);if(!image.isEmpty()){const size=image.getSize();if(size.width*size.height<=16_000_000)thumbnail=image.resize({width:Math.min(size.width,640)}).toPNG();}}catch{}}
+    if(metadata.thumbnail){try{const response=await thumbnailFetch(metadata.thumbnail);const image=nativeImage.createFromBuffer(response.bytes);if(!image.isEmpty()){const size=image.getSize();if(size.width*size.height<=16_000_000)thumbnail=image.resize({width:Math.min(size.width,640)}).toPNG();}}catch{}}
     if(!current()||!store.data.items.includes(item)||item.trashedAt||item.url!==url)return;
     if(store.setLinkMetadata(item,url,{title:metadata.title,author:metadata.author,thumbnail}))broadcast();
   }catch(error){if(refresh&&current())throw new Error('Link preview could not be refreshed: '+error.message);}

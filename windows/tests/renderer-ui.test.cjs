@@ -356,7 +356,7 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
    else throw new Error('Unsupported shared contract action: '+step.action);
    await f.ready();
    const active=activeKind(f),focusedAlias=aliases.get(focusedCard(f)),actual={activeKind:active,focused:kinds.get(focusedAlias)===active?focusedAlias:null,selected:selectedCards(f).map(id=>aliases.get(id)||id).sort(),visibleKinds:[...f.main.matchAll(/<section class="shelf(?: active-shelf)?\s*" data-shelf="([^"]+)"/g)].map(match=>match[1]),searchEditing:/class="search-hud"/.test(f.main)};
-   if(step.action==='command')actual.effects=[...f.commands.slice(commandsBefore).map(value=>value.action),...(f.overlay?['preview']:[])];
+   if(step.action==='command')actual.effects=[...f.commands.slice(commandsBefore).map(value=>value.action),...(f.overlay?[/id="markup-canvas"/.test(f.overlay)?'markup':'preview']:[])];
    observations.push({scenarioId:scenario.id,step:index,actual});
    try{assert.deepEqual(actual,step.expect);}catch(error){errors.push(scenario.id+' step '+index+': '+error.message);}
   }
@@ -784,6 +784,32 @@ test('the Move to Trash confirmation uses the shared localized catalog entry',as
  f.api.emit({settings:{...f.state.settings,language:'en'}});await f.click('close-modal');await f.click('trash');
  assert.match(f.overlay,/Move 1 items to recoverable Trash\?/);
 });
+
+test('shelf M opens focused photo for marker drawing and Escape saves editable marks',async()=>{
+ const f=fixture();await f.ready();
+ const other={...structuredClone(f.state.items.find(value=>value.id===f.image)),id:'20000000-0000-4000-8000-000000000099',name:'Another photo',mediaUrl:'appmedia://media/20000000-0000-4000-8000-000000000099/image'};
+ f.api.emit({items:[other,...f.state.items]});await f.ready();await f.cardClick(f.image);assert.equal(focusedCard(f),f.image);
+ await f.key('KeyM');assert.match(f.overlay,/id="markup-canvas"/);assert.ok(f.imageLoads.at(-1).url.includes(f.image));
+ await f.key('KeyH');await f.pointer('pointerdown',60,40);await f.pointer('pointermove',250,100);await f.pointer('pointerup',250,100);
+ await f.key('Escape');const saved=f.state.items.find(value=>value.id===f.image);
+ assert.equal(saved.annotations.length,1);assert.equal(saved.annotations[0].type,'marker');assert.ok(saved.annotations[0].points.length>=2);
+ assert.doesNotMatch(f.overlay,/id="markup-canvas"/);await f.key('Escape');await f.key('KeyM');
+ await f.key('Escape');assert.equal(f.state.items.find(value=>value.id===f.image).annotations[0].type,'marker');
+ });
+
+test('shelf markup does not consume M in native editors or open text and link items',async()=>{
+ for(const name of ['search-input','detail-note','modal-value']){
+  const f=fixture();await f.ready();const editor=f.editor(name);const event=await f.key('KeyM',{target:editor});
+  assert.ok(!event.prevented,name);assert.equal(f.overlay,'');assert.equal(f.commands.length,0);
+ }
+ for(const kind of ['text','link']){
+  const f=fixture();await f.ready();await f.cardClick(kind==='text'?f.text1:f.link);await f.key('KeyM');assert.equal(f.overlay,'');
+ }
+ const f=fixture();await f.ready();f.api.emit({settings:{...f.state.settings,localShortcuts:{markup:'X'}}});await f.ready();
+ await f.key('KeyM');assert.equal(f.overlay,'');await f.key('KeyX');assert.match(f.overlay,/id="markup-canvas"/);
+ await f.key('Escape');await f.key('Escape');f.api.emit({settings:{...f.state.settings,localShortcuts:{markup:''}}});await f.ready();
+ await f.key('KeyM');await f.key('KeyX');assert.equal(f.overlay,'');
+ });
 test('rendered shelf and library card images carry no draggable=false and cards retain draggable=true with rope sag',async()=>{
  const f=fixture();await f.ready();
  const cards=[...f.main.matchAll(/<article class="card kind-([^"]+)"[^>]*style="([^"]*)"[^>]*draggable="([^"]+)"/g)];
