@@ -66,6 +66,8 @@ moved to the front with its pin, name, tags and folders.
 selection of pinned and unpinned items to pin all of them, and to unpin only
 when every selected item is already pinned; the Library keyboard contract executes
 this on both platforms with an image, a text and a link selected.
+`search-sort` requires starting a Library search on Newest first to switch the
+sort to Best match, and clearing it to switch back.
 `subfolder-title` requires the Library title of a subfolder to list every
 ancestor, outermost first (`Parent / Child`, `Parent / Middle / Child`), so
 same-named subfolders of different parents can be told apart.
