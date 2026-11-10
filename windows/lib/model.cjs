@@ -100,7 +100,6 @@ const validTagName=name=>!/[\p{Cc}\p{Cf}]/u.test(name)&&[...graphemes.segment(na
 // control, line or paragraph separator characters.
 // Swift's .whitespacesAndNewlines also trims U+0085, which String.trim() keeps.
 const trimName=value=>value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu,'');
-const blankName=value=>typeof value==='string'&&!trimName(value);
 function itemName(value){let name='';try{name=text(typeof value==='string'?trimName(value):value,TAG_INPUT_LIMIT,true);}catch{}if(!name||[...graphemes.segment(name)].length>160||Buffer.byteLength(name)>1024||/[\p{Cc}\p{Zl}\p{Zp}]/u.test(name))fail('Enter a name (1–160 characters)');return name;}
 function saved(item) { return item.retainedAt != null || item.pinned || item.folderIds.length > 0 || item.tags.length > 0; }
 // Match macOS LinkIdentity.standalone: a copied URL keeps its link identity
@@ -363,10 +362,8 @@ class Store {
   }
   /** A new, retained note record, like macOS createNote. It never reuses a matching capture. */
   createNote({text: value = '', title = ''} = {}) {
-    // Validate the title first, so a rejected one leaves no note behind.
-    const name = title && !blankName(title) ? itemName(title) : '';
     const item = this.insert('text', value || 'New note', {fresh: true, createdAsNote: true});
-    if (name) this.modify('details', {id: item.id, name});
+    if (title) this.modify('details', {id: item.id, name: title});
     this.modify('retain', {ids: [item.id]});
     return item;
   }
