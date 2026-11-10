@@ -458,3 +458,9 @@ test('Library domain filter ignores case, surrounding spaces and dots, www and a
  await f.input('domain-filter','other.org');assert.deepEqual(cards(f),[]);
  await f.input('domain-filter','  ');assert.deepEqual(cards(f),[f.image,f.link]);
 });
+test('the multi-selection inspector says Unpin when every selected item is pinned',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});Object.assign(f.state.items[1],{retainedAt:900,pinned:true});Object.assign(f.state.items[2],{retainedAt:800,pinned:false});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ const pinLabel=()=>f.main.match(/<aside class="inspector"[\s\S]*?<\/aside>/)[0].match(/<button[^>]*data-action="pin"[^>]*>([\s\S]*?)<\/button>/)[1].replace(/<[^>]*>/g,'').trim();
+ await f.key('KeyA',{ctrl:true});assert.equal(pinLabel(),'Pin');
+ f.state.items[2].pinned=true;f.api.emit({items:f.state.items});await f.ready();assert.equal(pinLabel(),'Unpin');
+});

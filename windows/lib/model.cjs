@@ -241,7 +241,7 @@ class Store {
     return {kind,ids:items.map(item=>item.id).sort(),captures:Object.fromEntries(items.map(item=>[item.id,{revision:item.captureRevision??null,createdAt:item.createdAt,updatedAt:item.updatedAt,lastCopiedAt:item.lastCopiedAt??null}]))};
   }
   invalidateTrashUndo(value){const affected=new Set(value);this.trashUndoStack=this.trashUndoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
-  markCopied(value){this.modify('markCopied',{ids:value});}
+  markCopied(value){if(value.length)this.modify('markCopied',{ids:value});}
   // Applies fetched preview metadata only while the link is still live, so a link removed during the fetch gets no stored thumbnail.
   setLinkMetadata(item,url,{title,author,thumbnail}){
     if(!this.data.items.includes(item)||item.trashedAt||item.url!==url)return false;
@@ -477,7 +477,7 @@ class Store {
       else if(action==='retain')item.retainedAt??=now;
       else if(action==='note')item.note=sizedText(payload.note,true);
       else if(action==='details') {
-        if(payload.name!==undefined)item.name=blankName(payload.name)?'':itemName(payload.name);
+        if(payload.name!==undefined)item.name=sizedText(payload.name,true).trim();
         if(payload.note!==undefined)item.note=sizedText(payload.note,true);
         if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }

@@ -131,6 +131,9 @@ test('a temporary library copy that cannot be removed is reported',()=>fixture((
   try{assert.match(new Store(dir,{clock:()=>1000}).privacyWarning,/temporary copy of the library/);}finally{fs.unlinkSync=unlink;}
   assert.ok(fs.existsSync(file));
 }));
+test('copying text that is not a stored item, like text from an image, raises no error',()=>fixture(s=>{
+  assert.doesNotThrow(()=>s.markCopied([]));
+}));
 test('restoring one item of a Take down batch leaves Undo take down for the rest',()=>fixture(s=>{
   const first=s.insert('text','First'),second=s.insert('text','Second');s.modify('remove',{ids:[first.id,second.id]});
   s.modify('restore',{ids:[first.id]});assert.equal(s.publicState().canUndo,true);s.modify('undo');assert.equal(s.item(second.id).trashedAt,null);assert.equal(s.publicState().canUndo,false);
@@ -289,3 +292,4 @@ test('pin on a mixed selection pins every item and only a fully pinned selection
 }));
 test('a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS',()=>fixture(s=>{const item=s.insert('text','x');const big='ş'.repeat(600000);assert.throws(()=>s.modify('note',{ids:[item.id],note:big}),/Invalid text/);assert.throws(()=>s.modify('editText',{ids:[item.id],text:big}),/Invalid text/);assert.throws(()=>s.insert('text',big),/Invalid text/);s.modify('note',{ids:[item.id],note:'ş'.repeat(500000)});assert.equal(s.data.items[0].note.length,500000);}));
 test('an item can get a 51st tag, like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello');for(let i=1;i<=51;i++)s.modify('tag',{ids:[item.id],tags:[...s.item(item.id).tags,'tag'+i]});assert.equal(s.item(item.id).tags.length,51);}));
+test('a Library inspector title over 200 characters is saved like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello'),title='Quarterly planning notes '.repeat(10).trim();assert.equal(title.length,249);s.modify('details',{ids:[item.id],id:item.id,name:title});assert.equal(s.item(item.id).name,title);assert.throws(()=>s.modify('details',{ids:[item.id],id:item.id,name:'ş'.repeat(600000)}),/Invalid text/);assert.equal(s.item(item.id).name,title);}));
