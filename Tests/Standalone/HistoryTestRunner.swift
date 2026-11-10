@@ -527,6 +527,7 @@ enum HistoryTestRunner {
             ("testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization", libraryStore.testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization),
             ("testCorruptSourceBlocksMigrationAndDoesNotOverwriteArchive", libraryStore.testCorruptSourceBlocksMigrationAndDoesNotOverwriteArchive),
             ("testFolderTagOrFavoriteRetainsAcrossUnassignUnpinAndExpiry", libraryStore.testFolderTagOrFavoriteRetainsAcrossUnassignUnpinAndExpiry),
+            ("testAllPinnedNeedsEveryIdPinnedAndExisting", libraryStore.testAllPinnedNeedsEveryIdPinnedAndExisting),
             ("testCollectionsAreManyToManyNestedAndRemovalDoesNotDeleteContent", libraryStore.testCollectionsAreManyToManyNestedAndRemovalDoesNotDeleteContent),
             ("testPinnedImageWhoseManagedCopyIsGoneCanStillLeaveTheShelfGoToTrashAndRestore", libraryStore.testPinnedImageWhoseManagedCopyIsGoneCanStillLeaveTheShelfGoToTrashAndRestore),
             ("testMovingFromParentRemovesChildMembershipButKeepsOtherFoldersAndOriginal", libraryStore.testMovingFromParentRemovesChildMembershipButKeepsOtherFoldersAndOriginal),
