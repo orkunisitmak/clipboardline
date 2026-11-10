@@ -94,6 +94,12 @@ test('unclosed title and meta sequences stay bounded at the HTML size limit',asy
  const longAttribute='<meta '+('a'.repeat(8190))+' property="og:title" content="bounded">';
  assert.equal((await linkMetadata('https://example.com',page(longAttribute))).title,'bounded');
 });
+test('malformed long titles are bounded before tag stripping',async()=>{
+ const title='<title>'+('<a'.repeat(250000))+'</title>';
+ const start=process.hrtime.bigint();
+ assert.equal((await linkMetadata('https://example.com',async()=>({bytes:Buffer.from(title),url:'https://example.com/',type:'text/html'}))).title,'<a'.repeat(250));
+ assert.ok(Number(process.hrtime.bigint()-start)/1e6<5000,'malformed long-title parsing exceeded five seconds');
+});
 
 test('YouTube Music links use oEmbed through the canonical host',async()=>{
  let requested='';

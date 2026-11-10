@@ -211,7 +211,7 @@ function extractMetadata(html) {
       const end = tagEnd(html, tag.afterName);
       const close = end < 0 ? null : findClosing(html, 'title', end + 1);
       if (!close) break;
-      title = html.slice(end + 1, close.start);
+      title = html.slice(end + 1, Math.min(close.start, end + 1 + 8192));
       cursor = close.end + 1; continue;
     }
     cursor = opening + 1;

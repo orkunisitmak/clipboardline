@@ -535,7 +535,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
             if tag.tag == .title, title == nil {
                 guard let end = tagEnd(bytes, from: tag.afterName),
                       let closing = closingTag(.title, in: bytes, from: end + 1) else { break }
-                title = String(decoding: bytes[(end + 1)..<closing.start], as: UTF8.self)
+                title = String(decoding: bytes[(end + 1)..<closing.start].prefix(8192), as: UTF8.self)
                 cursor = closing.end + 1; continue
             }
             cursor += 1
