@@ -207,6 +207,15 @@ import XCTest
         XCTAssertNil(try PublicLinkHTMLMetadata(data: Data(oversizedImage.utf8), url: url).thumbnailURL)
     }
 
+    func testLongMalformedTitleWorkIsBoundedBeforeTagStripping() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let html = "<title>" + String(repeating: "<a", count: 250_000) + "</title>"
+        let started = ProcessInfo.processInfo.systemUptime
+        let parsed = try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url)
+        XCTAssertEqual(parsed.title, String(repeating: "<a", count: 250))
+        XCTAssertLessThan(ProcessInfo.processInfo.systemUptime - started, 5)
+    }
+
     func testBlankSecureImageFallsBackToOpenGraphImage() throws {
         let url = URL(string: "https://public.example.org/page")!
         for blank in ["", "   "] {
