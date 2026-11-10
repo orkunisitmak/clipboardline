@@ -108,6 +108,12 @@
         "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
       },
       {
+        "id": "undo-take-down-no-duplicate",
+        "behavior": "Undo take down does not bring back a text or link when the same content is on the shelf again because it was copied after the take down, so that Undo never hangs the same text or link twice. Images and a copy that is off the shelf do not block it, and restoring from Trash by hand is not limited.",
+        "macos": "LibraryStore.undoShelfRemoval skips a text or link record that has a live twin on the shelf (hasLiveTwin, which repairs the text index first and never matches images); LibraryStoreTests.testUndoTakeDownDoesNotHangATextOrLinkTwiceAfterItWasCopiedAgain and testUndoTakeDownSeesATextEditedByAnOlderAppWhileOpen cover it.",
+        "windows": "Store.modify('undo') leaves a trashed text or link in Trash when a live item of the same kind and content is on the shelf, and ignores images and copies hidden from the shelf; model.test.cjs covers it."
+      },
+      {
         "id": "item-name-trimming",
         "behavior": "An item name is used without its surrounding whitespace, and a name that is only whitespace counts as no name, so the card, the title ordering and the search index fall back to the item's content instead of showing a blank title.",
         "macos": "LibraryRecord.displayTitle trims the stored title and ignores a blank one; LibraryStoreTests.testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows covers it.",
