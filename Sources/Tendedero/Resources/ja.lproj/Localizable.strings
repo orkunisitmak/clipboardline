@@ -537,3 +537,15 @@
 "This image could not be opened for markup." = "この画像をマークアップ用に開けませんでした。";
 "Markup supports images up to 80 megapixels." = "マークアップは最大8,000万画素の画像に対応しています。";
 "The marked image could not be rendered." = "マークアップした画像をレンダリングできませんでした。";
+
+
+/* Permanent deletion from Trash. */
+"Delete %d items permanently?" = "%d 項目を完全に削除しますか？";
+"Delete permanently" = "完全に削除";
+"Delete permanently…" = "完全に削除…";
+"Deleted %d items permanently" = "%d 項目を完全に削除しました";
+"Empty Trash" = "ゴミ箱を空にする";
+"Empty Trash and delete %d items permanently?" = "ゴミ箱を空にして %d 項目を完全に削除しますか？";
+"Empty Trash…" = "ゴミ箱を空にする…";
+"They cannot be restored. Copies the app made go to the Mac’s Trash; original files elsewhere stay where they are." = "元に戻すことはできません。アプリが作成したコピーはMacのゴミ箱に移動し、ほかの場所にある元のファイルはそのまま残ります。";
+"Trash is empty" = "ゴミ箱は空です";

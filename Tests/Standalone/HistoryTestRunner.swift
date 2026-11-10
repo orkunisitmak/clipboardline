@@ -158,6 +158,7 @@ enum HistoryTestRunner {
         let shelfPresentation = ShelfPresentationTests()
         let textIdentityParity = TextIdentityParityTests()
         let keyboardSpeedTests = KeyboardSpeedTests()
+        let permanentDelete = LibraryPermanentDeleteTests()
         let shelfPaging = ShelfPagingTests()
         let markupPersistence = ImageMarkupPersistenceTests()
         let markupRenderer = ImageMarkupTests()
@@ -451,6 +452,10 @@ enum HistoryTestRunner {
             ("testQuickNumbersDoNotCompressImageColumnsWhileAnItemIsFalling", keyboardSpeedTests.testQuickNumbersDoNotCompressImageColumnsWhileAnItemIsFalling),
             ("testSpeedActionsAndQuickSelectionRemapAndUseOnlyTheActiveRow", keyboardSpeedTests.testSpeedActionsAndQuickSelectionRemapAndUseOnlyTheActiveRow),
             ("testGlobalSearchShortcutDefaultDisableAndCustomPersistenceRejectInvalidValues", keyboardSpeedTests.testGlobalSearchShortcutDefaultDisableAndCustomPersistenceRejectInvalidValues),
+            ("testDeletePermanentlyErasesTrashedRecordsAndOnlyTheAppsOwnCopies", permanentDelete.testDeletePermanentlyErasesTrashedRecordsAndOnlyTheAppsOwnCopies),
+            ("testTextDragFileLeavesWithTheRecord", permanentDelete.testTextDragFileLeavesWithTheRecord),
+            ("testItemsOutsideTrashAndFilesStillInUseAreKept", permanentDelete.testItemsOutsideTrashAndFilesStillInUseAreKept),
+            ("testConfirmedSnapshotSparesAnItemTrashedAgainAfterConfirmation", permanentDelete.testConfirmedSnapshotSparesAnItemTrashedAgainAfterConfirmation),
             ("testUnreadableImageAfterRemovalOrUndoKeepsUndoablePanelWithoutStaleActions", previewRemoval.testUnreadableImageAfterRemovalOrUndoKeepsUndoablePanelWithoutStaleActions),
             ("testSessionRemovalActsOnCurrentItemOnlyAndSelectsNextThenPrevious", previewRemoval.testSessionRemovalActsOnCurrentItemOnlyAndSelectsNextThenPrevious),
             ("testPreviewRemoveAndUndoReuseVisiblePanelForEveryKind", previewRemoval.testPreviewRemoveAndUndoReuseVisiblePanelForEveryKind),
