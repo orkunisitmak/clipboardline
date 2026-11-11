@@ -541,6 +541,7 @@ enum HistoryTestRunner {
             ("testLinkIdentityPreservesMeaningfulParametersAndDeduplicatesVideoForms", libraryStore.testLinkIdentityPreservesMeaningfulParametersAndDeduplicatesVideoForms),
             ("testPagingAndBackgroundQueriesRespectScopeAndResultOrder", libraryStore.testPagingAndBackgroundQueriesRespectScopeAndResultOrder),
             ("testRecapturedLinkMovesLeftAndRenewsTemporaryCaptureWithoutResettingOriginalDate", libraryStore.testRecapturedLinkMovesLeftAndRenewsTemporaryCaptureWithoutResettingOriginalDate),
+            ("testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain", libraryStore.testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain),
             ("testRestoringOldCopyAfterRecapturePreservesBothRecordsAndPinsExactImageID", libraryStore.testRestoringOldCopyAfterRecapturePreservesBothRecordsAndPinsExactImageID),
             ("testRouterMakesOneDecisionAndPreservesParagraphsAndIndependentSources", libraryInteraction.testRouterMakesOneDecisionAndPreservesParagraphsAndIndependentSources),
             ("testRouterSkipsPrivateMarkersFilesImagesOwnCopyAndRacesBeforeRecording", libraryInteraction.testRouterSkipsPrivateMarkersFilesImagesOwnCopyAndRacesBeforeRecording),

@@ -119,6 +119,20 @@ test('permanent deletion keeps rasters referenced by live items or recoverable T
   s.modify('trash',{ids:[second.id]});const third=s.insert('image',png);s.modify('trash',{ids:[third.id]});
   s.modify('delete',{ids:[second.id]});assert.ok(fs.existsSync(file));s.modify('restore',{ids:[third.id]});assert.deepEqual(fs.readFileSync(s.mediaPath(third.id)),png);
 }));
+test('a restored item gets a full retention period before it expires again',()=>fixture((s,time)=>{
+  const item=s.insert('text','old text');time(32*86400000);s.expire();assert.ok(item.trashedAt);
+  s.modify('restore',{ids:[item.id]});s.expire();assert.equal(item.trashedAt,null);
+  time(64*86400000);s.expire();assert.ok(item.trashedAt);
+}));
+test('copying a restored item again renews its retention like macOS',()=>fixture((s,time)=>{
+  const day=86400000;
+  for(const [kind,value] of [['text','old text'],['image',png],['link','https://example.com/old']]){
+    time(1000);const item=s.insert(kind,value);time(32*day);s.expire();assert.ok(item.trashedAt,kind);
+    s.modify('restore',{ids:[item.id]});time(61*day);assert.equal(s.insert(kind,value).id,item.id,kind);
+    time(63*day);s.expire();assert.equal(item.trashedAt,null,kind);
+    time(92*day);s.expire();assert.ok(item.trashedAt,kind);s.modify('delete',{ids:[item.id]});
+  }
+}));
 test('opening the library removes temporary copies a killed process left behind',()=>fixture((_s,_time,dir)=>{
   const id='12345678-1234-4234-8234-123456789abc',left=['library.json.tmp-'+id,'library.json.backup.tmp-'+id],other='library.json.tmp-notes';
   for(const name of [...left,other])fs.writeFileSync(path.join(dir,name),'deleted text');
