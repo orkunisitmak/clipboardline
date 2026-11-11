@@ -18,6 +18,12 @@ test('recording recapture preserves names, pins, folders, tags and original medi
  const repeated=await store.insertRecording(imported(source));assert.equal(first.id,repeated.id);assert.equal(store.data.items.length,1);assert.equal(repeated.name,'Reference clip');assert.equal(repeated.pinned,true);assert.deepEqual(repeated.folderIds,[folder.id]);assert.deepEqual(repeated.tags,['reference']);
  const mov=await store.insertRecording(imported(path.join(fixtures,'synthetic-rgb-tone.mov')));assert.match(store.mediaPath(mov.id,true),/\.mov$/);
 }));
+test('recapturing a restored recording renews its retention like macOS',()=>fixture(async(_store,directory)=>{
+ let now=1000;const day=86400000,store=new Store(directory,{clock:()=>now}),item=await store.insertRecording(imported(source));
+ now=32*day;store.expire();assert.ok(item.trashedAt);store.modify('restore',{ids:[item.id]});
+ now=61*day;assert.equal((await store.insertRecording(imported(source))).id,item.id);
+ now=63*day;store.expire();assert.equal(item.trashedAt,null);now=92*day;store.expire();assert.ok(item.trashedAt);
+}));
 test('trim transaction preserves original video and organization and rejects stale or trashed targets',()=>fixture(async(store,directory)=>{
  const item=await store.insertRecording(imported(source)),original=store.mediaPath(item.id,true),hash=fingerprint(store,item.id),originalURL=store.publicState().items[0].videoUrl;store.modify('name',{id:item.id,name:'Kept name'});assert.equal(store.publicState().items[0].videoUrl,originalURL);
  // This test exercises storage transaction semantics; the separate native
