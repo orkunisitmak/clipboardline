@@ -132,4 +132,153 @@ import XCTest
         XCTAssertTrue(panel.keyboardFocusAllowed, "The AppDelegate still owns focus release and return")
         XCTAssertEqual(panel.shelfModelOffset, -(panel.contentHeight + 12))
     }
+
+    func testReplacementPanelTakesOverContentCallbacksAndShownState() throws {
+        _ = NSApplication.shared
+        for revealed in [false, true] {
+            let content = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 2 * Layout.panelHeight))
+            let child = NSView(frame: NSRect(x: 30, y: 50, width: 100, height: 80))
+            content.addSubview(child)
+            let old = LinePanel(content: content, reduceMotion: { true })
+            var scrolls = 0, scrollLocations = 0, keys = 0, commandKeys = 0, mouseCaptures = 0
+            old.onScroll = { _, _, _ in scrolls += 1 }
+            old.onScrollLocation = { _ in scrollLocations += 1 }
+            old.onKey = { _ in keys += 1; return true }
+            old.onCommandKey = { _ in commandKeys += 1; return true }
+            old.onBeforeMouseKeyFocus = { mouseCaptures += 1 }
+            old.searchEditorTarget = { nil }
+            old.keyboardFocusAllowed = true
+            old.contentHeight = 2 * Layout.panelHeight
+            old.setFrame(NSRect(x: -900, y: 250, width: 900, height: 2 * Layout.panelHeight), display: false)
+            old.setShelfRevealed(revealed, animated: false)
+            old.ignoresMouseEvents = !revealed
+            let frame = old.frame, contentFrame = content.frame
+
+            let fresh = old.makeReplacement()
+            defer { fresh.contentView = nil; old.contentView = nil }
+            XCTAssertFalse(fresh === old)
+            XCTAssertFalse(old.isVisible, "The window macOS left behind is ordered out")
+            XCTAssertTrue(old.contentView?.subviews.isEmpty == true, "The content moves rather than being shown twice")
+            XCTAssertTrue(content.superview === fresh.contentView)
+            XCTAssertTrue(child.superview === content)
+            XCTAssertEqual(content.frame, contentFrame)
+            XCTAssertEqual(fresh.frame, frame)
+            XCTAssertEqual(fresh.contentHeight, 2 * Layout.panelHeight)
+            XCTAssertEqual(fresh.shelfModelOffset, revealed ? 0 : -(2 * Layout.panelHeight + 12),
+                           "A shelf that was down stays down; a tucked one stays above the display")
+            XCTAssertEqual(fresh.ignoresMouseEvents, !revealed)
+            XCTAssertTrue(fresh.keyboardFocusAllowed)
+            XCTAssertNotNil(fresh.searchEditorTarget)
+            XCTAssertTrue(fresh.collectionBehavior.contains(.canJoinAllSpaces))
+            XCTAssertEqual(fresh.level, .floating)
+
+            let cgWheel = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .line,
+                wheelCount: 1, wheel1: 3, wheel2: 0, wheel3: 0))
+            fresh.sendEvent(try XCTUnwrap(NSEvent(cgEvent: cgWheel)))
+            XCTAssertEqual(scrolls, 1); XCTAssertEqual(scrollLocations, 1)
+            let key = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero,
+                modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                characters: "p", charactersIgnoringModifiers: "p", isARepeat: false, keyCode: 35))
+            XCTAssertTrue(fresh.routeKey(key, isFocused: true)); XCTAssertEqual(keys, 1)
+            let commandKey = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero,
+                modifierFlags: [.command], timestamp: 0, windowNumber: 0, context: nil,
+                characters: "k", charactersIgnoringModifiers: "k", isARepeat: false, keyCode: 40))
+            XCTAssertTrue(fresh.routeKey(commandKey, isFocused: true)); XCTAssertEqual(commandKeys, 1)
+            let click = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: .zero,
+                modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                eventNumber: 1, clickCount: 1, pressure: 1))
+            fresh.prepareForMouseKeyFocus(click, isFocused: false); XCTAssertEqual(mouseCaptures, 1)
+            fresh.setShelfRevealed(!revealed, animated: false)
+            XCTAssertEqual(fresh.shelfModelOffset, revealed ? -(2 * Layout.panelHeight + 12) : 0)
+        }
+    }
+
+    /// The command palette and the pickers are child windows of the shelf.
+    /// Ordering the old shelf out would take them with it, and closing one
+    /// would give focus back to a window that is gone.
+    func testReplacementCarriesChildWindowsAndTheirFocusReturn() throws {
+        _ = NSApplication.shared
+        let old = LinePanel(content: NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 40)), reduceMotion: { true })
+        old.setFrame(NSRect(x: -10000, y: -10000, width: 200, height: 40), display: false)
+        old.orderFrontRegardless()
+        let palette = NSPanel(contentRect: NSRect(x: -10000, y: -10000, width: 40, height: 40),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        let preview = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 40, height: 40),
+                               styleMask: [.borderless], backing: .buffered, defer: false)
+        old.addChildWindow(palette, ordered: .above); palette.orderFrontRegardless()
+        var shelf: NSWindow? = old
+        let toShelf = AppDelegate.focusReturn(to: old) { shelf }
+        let toPreview = AppDelegate.focusReturn(to: preview) { shelf }
+
+        let fresh = old.makeReplacement(); shelf = fresh
+        defer {
+            fresh.removeChildWindow(palette); palette.orderOut(nil); fresh.orderOut(nil)
+            fresh.contentView = nil; old.contentView = nil
+        }
+        XCTAssertFalse(old.isVisible)
+        XCTAssertTrue(old.childWindows?.isEmpty ?? true)
+        XCTAssertTrue(palette.parent === fresh, "The palette moves to the new shelf")
+        XCTAssertTrue(palette.isVisible, "and is not ordered out with the old one")
+        fresh.orderFrontRegardless()
+        XCTAssertTrue(palette.isVisible)
+        XCTAssertTrue(toShelf() === fresh, "Closing it gives focus to the shelf as it is now")
+        XCTAssertTrue(toPreview() === preview, "Any other parent is kept")
+        XCTAssertNil(AppDelegate.focusReturn(to: nil) { shelf }())
+    }
+
+    /// Reproduces the window server fault behind "the shelf only comes down
+    /// on one desktop": the shelf window is still visible to AppKit, but it
+    /// belongs to one Space only, so ordering it in on another does nothing.
+    /// Needs a session with at least two Spaces; otherwise there is nothing
+    /// to be left on.
+    func testShelfLeftOnAnotherSpaceIsReplacedByOneOnTheActiveSpace() throws {
+        _ = NSApplication.shared
+        let connection = spaceTestConnection()
+        let active = spaceTestActiveSpace(connection)
+        func spaces(_ window: NSWindow) -> [UInt64] {
+            spaceTestSpaces(connection, 7, [window.windowNumber] as CFArray) as? [UInt64] ?? []
+        }
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 2, height: 2))
+        let old = LinePanel(content: content, reduceMotion: { true })
+        defer { old.orderOut(nil); old.contentView = nil }
+        old.setFrame(NSRect(x: 0, y: 0, width: 2, height: 2), display: false)
+        old.orderFrontRegardless()
+        wait { !spaces(old).isEmpty }
+        let joined = spaces(old)
+        guard let other = joined.first(where: { $0 != active }) else {
+            #if !STANDALONE_TESTS
+            throw XCTSkip("This session has a single Space")
+            #else
+            print("SKIP testShelfLeftOnAnotherSpaceIsReplacedByOneOnTheActiveSpace: single Space")
+            return
+            #endif
+        }
+        XCTAssertTrue(joined.contains(active), "A new shelf joins every Space")
+        old.orderOut(nil)
+        spaceTestRemove(connection, [old.windowNumber] as CFArray, joined.filter { $0 != other } as CFArray)
+        wait { spaces(old) == [other] }
+        XCTAssertFalse(old.isOnActiveSpace, "The fault is detectable while the shelf is ordered out")
+        old.orderFrontRegardless()
+        XCTAssertTrue(old.isVisible)
+        XCTAssertFalse(old.isOnActiveSpace, "Ordering the stuck window in does not bring it to this Space")
+        old.setShelfRevealed(true, animated: false)
+
+        let fresh = old.makeReplacement()
+        defer { fresh.orderOut(nil); fresh.contentView = nil }
+        XCTAssertTrue(fresh.isOnActiveSpace, "The replacement is checked before its reveal and passes")
+        fresh.orderFrontRegardless()
+        XCTAssertTrue(fresh.isOnActiveSpace)
+        XCTAssertTrue(content.superview === fresh.contentView)
+        XCTAssertEqual(fresh.shelfModelOffset, 0)
+        wait { Set(spaces(fresh)).isSuperset(of: joined) }
+    }
 }
+
+@_silgen_name("CGSMainConnectionID")
+private func spaceTestConnection() -> Int32
+@_silgen_name("CGSGetActiveSpace")
+private func spaceTestActiveSpace(_ connection: Int32) -> UInt64
+@_silgen_name("CGSCopySpacesForWindows")
+private func spaceTestSpaces(_ connection: Int32, _ mask: Int32, _ windows: CFArray) -> CFArray
+@_silgen_name("CGSRemoveWindowsFromSpaces")
+private func spaceTestRemove(_ connection: Int32, _ windows: CFArray, _ spaces: CFArray)

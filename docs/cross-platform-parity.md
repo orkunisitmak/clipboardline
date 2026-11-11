@@ -92,6 +92,8 @@ Restore.
 whitespace and a whitespace-only name to count as no name.
 `folder-removal-view` requires removing a folder to return the Library to My
 library only when the open view is that folder or one of its subfolders.
+`inspector-title-length` requires a Library inspector title longer than 200 characters to be saved on both
+platforms, up to 1 MiB of UTF-8 bytes.
 `text-and-note-size-limit` requires a text or a note over 1 MiB of UTF-8 bytes to be refused on both
 platforms, not 1 MiB of UTF-16 units on Windows.
 `name-fold-keeps-script-marks` requires tag and folder names that differ only by a kana voiced mark or a
@@ -102,6 +104,11 @@ not find ばら or 한국 on either platform.
 line, trimmed and capped at 120 grapheme clusters (Untitled note when every line is
 blank), and a link without a fetched title by its host name (Link when the stored URL
 does not parse).
+`item-name-validation` requires Name and pin to accept a trimmed name of 1-160
+characters and at most 1024 UTF-8 bytes without control or line/paragraph
+separators, and to reject anything else with `Enter a name (1–160 characters)`.
+Its evidence is `LibraryStore.nameAndPin` on macOS and the Windows `model.test.cjs`
+Name and pin case.
 `unavailable-watched-folder` requires a watched folder that is unavailable, such as one on an
 unmounted volume, to stay in the saved list while it is skipped, so adding or removing another
 watched folder does not forget it.

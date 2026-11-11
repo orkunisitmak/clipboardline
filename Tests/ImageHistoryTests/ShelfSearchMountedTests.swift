@@ -242,4 +242,54 @@ import XCTest
             }
         }
     }
+
+    /// The shelf window can be made again while search is being typed into
+    /// (AppDelegate.keepPanelOnActiveSpace). Keys the old window accepted, and
+    /// keys typed before the new window has an editor, reach the field in
+    /// order, and the caret stays where it was.
+    func testReplacedShelfWindowKeepsSearchEditorQueuedKeysAndCaret() throws {
+        _ = NSApplication.shared
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+        let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, library: store)
+        line.setPresentation(.all, requestFocus: false); line.revealed = true
+        let host = NSHostingView(rootView: LineView(line: line)); host.sizingOptions = []
+        var panel = LinePanel(content: host), panels = [panel]
+        panel.keyboardFocusAllowed = true; panel.contentHeight = line.panelHeight
+        panel.setFrame(NSRect(x: -10000, y: -10000, width: 1920, height: line.panelHeight), display: false)
+        panel.searchEditorTarget = { [weak line] in
+            guard let line, let shelf = line.searchEditingShelf else { return nil }
+            return ShelfSearchFocus(shelf: shelf, request: line.searchFocusRequests[shelf, default: 0])
+        }
+        defer {
+            line.revealed = false
+            for window in panels { window.makeFirstResponder(nil); window.contentView = nil }
+        }
+        let layout = { host.layoutSubtreeIfNeeded() }
+        func editor() -> NSTextView? {
+            guard let field = fields(in: host).first, field.window === panel,
+                  let editor = field.currentEditor() as? NSTextView, panel.firstResponder === editor else { return nil }
+            return editor
+        }
+
+        layout(); line.beginShelfSearch(.images)
+        XCTAssertTrue(panel.routeKey(key(28, "8"), isFocused: true), "Accepted before SwiftUI mounts the field")
+        panel = panel.makeReplacement(); panels.append(panel)
+        wait({ editor() != nil }, layout: layout)
+        XCTAssertEqual(editor()?.string, "8", "A key the old window accepted reaches the field in the new one")
+
+        editor()?.insertText("427", replacementRange: NSRange(location: NSNotFound, length: 0))
+        editor()?.setSelectedRange(NSRange(location: 1, length: 0))
+        panel = panel.makeReplacement(); panels.append(panel)
+        XCTAssertNil(editor(), "The field editor stays with the old window")
+        XCTAssertEqual(line.searchEditingShelf, .images, "Search is still being edited")
+        XCTAssertTrue(panel.routeKey(key(29, "0"), isFocused: true), "Typing before the editor returns waits for it")
+        wait({ editor() != nil }, layout: layout)
+        let restored = try XCTUnwrap(editor())
+        XCTAssertEqual(restored.string, "80427", "The waiting key lands at the caret, not over a selected query")
+        XCTAssertEqual(restored.selectedRange(), NSRange(location: 2, length: 0))
+        XCTAssertFalse(panel.routeKey(key(7, "x"), isFocused: true), "The native editor owns typing again")
+        wait({ line.shelfSearchQuery == "80427" }, layout: layout)
+        XCTAssertEqual(line.searchEditingShelf, .images)
+    }
 }

@@ -119,6 +119,20 @@ test('permanent deletion keeps rasters referenced by live items or recoverable T
   s.modify('trash',{ids:[second.id]});const third=s.insert('image',png);s.modify('trash',{ids:[third.id]});
   s.modify('delete',{ids:[second.id]});assert.ok(fs.existsSync(file));s.modify('restore',{ids:[third.id]});assert.deepEqual(fs.readFileSync(s.mediaPath(third.id)),png);
 }));
+test('a restored item gets a full retention period before it expires again',()=>fixture((s,time)=>{
+  const item=s.insert('text','old text');time(32*86400000);s.expire();assert.ok(item.trashedAt);
+  s.modify('restore',{ids:[item.id]});s.expire();assert.equal(item.trashedAt,null);
+  time(64*86400000);s.expire();assert.ok(item.trashedAt);
+}));
+test('copying a restored item again renews its retention like macOS',()=>fixture((s,time)=>{
+  const day=86400000;
+  for(const [kind,value] of [['text','old text'],['image',png],['link','https://example.com/old']]){
+    time(1000);const item=s.insert(kind,value);time(32*day);s.expire();assert.ok(item.trashedAt,kind);
+    s.modify('restore',{ids:[item.id]});time(61*day);assert.equal(s.insert(kind,value).id,item.id,kind);
+    time(63*day);s.expire();assert.equal(item.trashedAt,null,kind);
+    time(92*day);s.expire();assert.ok(item.trashedAt,kind);s.modify('delete',{ids:[item.id]});
+  }
+}));
 test('opening the library removes temporary copies a killed process left behind',()=>fixture((_s,_time,dir)=>{
   const id='12345678-1234-4234-8234-123456789abc',left=['library.json.tmp-'+id,'library.json.backup.tmp-'+id],other='library.json.tmp-notes';
   for(const name of [...left,other])fs.writeFileSync(path.join(dir,name),'deleted text');
@@ -130,6 +144,9 @@ test('a temporary library copy that cannot be removed is reported',()=>fixture((
   fs.unlinkSync=target=>{if(target===file)throw Object.assign(new Error('Synthetic lock'),{code:'EPERM'});return unlink(target);};
   try{assert.match(new Store(dir,{clock:()=>1000}).privacyWarning,/temporary copy of the library/);}finally{fs.unlinkSync=unlink;}
   assert.ok(fs.existsSync(file));
+}));
+test('copying text that is not a stored item, like text from an image, raises no error',()=>fixture(s=>{
+  assert.doesNotThrow(()=>s.markCopied([]));
 }));
 test('restoring one item of a Take down batch leaves Undo take down for the rest',()=>fixture(s=>{
   const first=s.insert('text','First'),second=s.insert('text','Second');s.modify('remove',{ids:[first.id,second.id]});
@@ -275,6 +292,15 @@ test('old duplicate links whose names or notes differ are not merged, so none of
   assert.deepEqual(s.data.items.filter(i=>i.kind==='link').map(i=>i.id).sort(),[newest.id,home.id].sort());
   assert.deepEqual([home.name,home.note,home.url],['Home','other note','https://example.com/a?id=7']);}
 }));
+test('Name and pin follows macOS nameAndPin: 1-160 characters, 1024 bytes, no control or line separators',()=>fixture(s=>{
+ const id=s.insert('text','Synthetic text').id,family='\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}';
+ for(const name of ['',' \n ','x'.repeat(161),'a\nb','a\u0007b','a b','a b','\u{1F600}'.repeat(161),family.repeat(41),'x'.repeat(4097),'a\0b',undefined,42])assert.throws(()=>s.modify('name',{id,name}),{message:'Enter a name (1–160 characters)'});
+ assert.equal(s.item(id).pinned,false);assert.equal(s.item(id).name,'');
+ s.modify('name',{id,name:'  '+'é'.repeat(80)+'  '});assert.equal(s.item(id).name,'é'.repeat(80));assert.equal(s.item(id).pinned,true);
+ s.modify('name',{id,name:'x'.repeat(160)});s.modify('name',{id,name:'\u{1F600}'.repeat(160)});assert.equal(s.item(id).name.length,320);
+ s.modify('name',{id,name:' '.repeat(4096)+'Padded'+' '.repeat(8)});assert.equal(s.item(id).name,'Padded');
+ s.modify('name',{id,name:'\u0085Ada\u0085'});assert.equal(s.item(id).name,'Ada');
+}));
 test('opening the Store removes stale .png-/.video- temporaries from a killed process and leaves everything else',()=>fixture((s,_time,dir)=>{
  const id='0f8fad5b-d9cb-469f-a165-70867728950e',media=s.mediaDirectory,stale=['.png-'+id,'.video-'+id],keep=['.png-'+id+'.x','.png-nope','x.png-'+id,'.video-'+id.slice(1)];
  for(const name of [...stale,...keep])fs.writeFileSync(path.join(media,name),'x');
@@ -299,3 +325,4 @@ test('pin on a mixed selection pins every item and only a fully pinned selection
 }));
 test('a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS',()=>fixture(s=>{const item=s.insert('text','x');const big='ş'.repeat(600000);assert.throws(()=>s.modify('note',{ids:[item.id],note:big}),/Invalid text/);assert.throws(()=>s.modify('editText',{ids:[item.id],text:big}),/Invalid text/);assert.throws(()=>s.insert('text',big),/Invalid text/);s.modify('note',{ids:[item.id],note:'ş'.repeat(500000)});assert.equal(s.data.items[0].note.length,500000);}));
 test('an item can get a 51st tag, like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello');for(let i=1;i<=51;i++)s.modify('tag',{ids:[item.id],tags:[...s.item(item.id).tags,'tag'+i]});assert.equal(s.item(item.id).tags.length,51);}));
+test('a Library inspector title over 200 characters is saved like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello'),title='Quarterly planning notes '.repeat(10).trim();assert.equal(title.length,249);s.modify('details',{ids:[item.id],id:item.id,name:title});assert.equal(s.item(item.id).name,title);assert.throws(()=>s.modify('details',{ids:[item.id],id:item.id,name:'ş'.repeat(600000)}),/Invalid text/);assert.equal(s.item(item.id).name,title);}));
