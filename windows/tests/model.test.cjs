@@ -37,6 +37,11 @@ test('folder names share the macOS 64-grapheme and control-character rule',()=>f
  for(const name of ['f'.repeat(65),'bad\u0007name','zero\u200Bwidth'])assert.throws(()=>s.modify('renameFolder',{id:other.id,name}),/Invalid folder name/);
  assert.equal(s.data.folders.find(entry=>entry.id===other.id).name,'Other');assert.equal(s.data.folders.length,3);
 }));
+test('folder and tag names trim U+0085 like macOS cleanedName',()=>fixture(s=>{
+ const folder=s.modify('createFolder',{name:'\u0085Work\u0085'});assert.equal(folder.name,'Work');
+ s.modify('renameFolder',{id:folder.id,name:'Home\u0085'});assert.equal(s.data.folders.find(entry=>entry.id===folder.id).name,'Home');
+ const item=s.insert('text','Synthetic text');s.modify('tag',{ids:[item.id],tags:['\u0085urgent','#later\u0085']});assert.deepEqual(s.item(item.id).tags,['urgent','later']);
+}));
 test('retention is per-kind; pinned/folder/tag records remain permanent',()=>fixture((s,time)=>{const text=s.insert('text','expiring text'),link=s.insert('link','https://example.com'),saved=s.insert('text','tagged');s.modify('tag',{ids:[saved.id],tags:['keep']});s.modify('setSettings',{patch:{retentionDays:{text:1,link:3,image:0}}});time(2*86400000);s.expire();assert.ok(text.trashedAt);assert.equal(link.trashedAt,null);assert.equal(saved.trashedAt,null);}));
 test('remove hides saved items, trashes temporary ones; undo preserves later edits',()=>fixture(s=>{const saved=s.insert('text','saved'),temp=s.insert('text','temporary');s.modify('pin',{ids:[saved.id]});s.modify('remove',{ids:[saved.id,temp.id]});assert.equal(saved.hiddenFromShelf,true);assert.ok(temp.trashedAt);s.modify('name',{id:saved.id,name:'Later name'});s.modify('undo');assert.equal(saved.hiddenFromShelf,false);assert.equal(temp.trashedAt,null);assert.equal(saved.name,'Later name');}));
 test('New note always creates a new retained record, even with the default or an existing text',()=>fixture(s=>{
