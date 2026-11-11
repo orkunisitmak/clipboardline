@@ -93,6 +93,13 @@ enum ActionBarMenuAction: String, CaseIterable {
     }
 
     static func entries(context c: Context, bindings: KeyboardBindings) -> [Entry] {
+        // Each folder's path is built once per call and shared by its Open, Add, Move and Remove rows.
+        let foldersByID = Dictionary(c.collections.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var paths = [UUID: String]()
+        func path(_ folder: LibraryCollection) -> String {
+            if let known = paths[folder.id] { return known }
+            let built = folderPath(folder, foldersByID); paths[folder.id] = built; return built
+        }
         var result = [Entry]()
         // Frequently used operations lead the unfiltered list. Every other
         // browsing shortcut remains discoverable, including navigation.
@@ -124,13 +131,13 @@ enum ActionBarMenuAction: String, CaseIterable {
         }
         for folder in c.collections {
             let action = ActionBarAction.openFolder(folder.id)
-            result.append(Entry(action: action, command: .init(id: action.id, title: L("Open folder") + ": " + folder.name,
+            result.append(Entry(action: action, command: .init(id: action.id, title: L("Open folder") + ": " + path(folder),
                 subtitle: L("Library"), systemImage: "folder", isEnabled: c.libraryAvailable,
                 group: L("Folders"), keywords: ["folder", "klasör", "open", "aç"],
                 disabledReason: c.libraryAvailable ? "" : L("Library unavailable"), isActive: c.libraryScope == .collection(folder.id))))
             let assign = ActionBarAction.assignFolder(folder.id)
             let canAssign = c.hasSelection && !c.isDeleted
-            result.append(Entry(action: assign, command: .init(id: assign.id, title: L("Add to folder") + ": " + folder.name,
+            result.append(Entry(action: assign, command: .init(id: assign.id, title: L("Add to folder") + ": " + path(folder),
                 subtitle: L("Selected item"), systemImage: "folder.badge.plus", isEnabled: canAssign,
                 group: L("Organization"), keywords: ["add", "folder", "organize", "ekle", "klasör", "düzenle"],
                 disabledReason: canAssign ? "" : L("Select an item first"))))
@@ -138,7 +145,7 @@ enum ActionBarMenuAction: String, CaseIterable {
             let canMove: Bool
             if case let .collection(source) = c.libraryScope { canMove = c.isLibrary && canAssign && source != folder.id }
             else { canMove = false }
-            result.append(Entry(action: move, command: .init(id: move.id, title: L("Move to folder") + ": " + folder.name,
+            result.append(Entry(action: move, command: .init(id: move.id, title: L("Move to folder") + ": " + path(folder),
                 subtitle: L("Selected item"), systemImage: "folder", isEnabled: canMove,
                 group: L("Organization"), keywords: ["move", "folder", "taşı", "klasör"],
                 disabledReason: canMove ? "" : L("Select items in a different folder first"))))
@@ -153,7 +160,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         for folder in c.itemFolders {
             let action = ActionBarAction.unassignFolder(folder.id)
             let enabled = c.singleSelection && !c.isDeleted
-            result.append(Entry(action: action, command: .init(id: action.id, title: L("Remove from folder") + ": " + folder.name,
+            result.append(Entry(action: action, command: .init(id: action.id, title: L("Remove from folder") + ": " + path(folder),
                 subtitle: L("Selected item"), systemImage: "folder.badge.minus", isEnabled: enabled,
                 group: L("Organization"), keywords: ["remove", "folder", "klasörden", "çıkar"],
                 disabledReason: enabled ? "" : L("Select one item first"))))
@@ -367,6 +374,12 @@ enum ActionBarMenuAction: String, CaseIterable {
         }
     }
 
+    /// A subfolder reads "Parent / Child" (the whole parent chain, cycle-safe), as in the Library window and on Windows.
+    private static func folderPath(_ folder: LibraryCollection, _ byID: [UUID: LibraryCollection]) -> String {
+        var names = [folder.name], visited: Set<UUID> = [folder.id], next = folder.parentID
+        while let id = next, visited.insert(id).inserted, let parent = byID[id] { names.insert(parent.name, at: 0); next = parent.parentID }
+        return names.joined(separator: " / ")
+    }
     private static func menuAvailability(_ action: ActionBarMenuAction, _ c: Context) -> (Bool, String) {
         func require(_ enabled: Bool, _ reason: String) -> (Bool, String) { (enabled, enabled ? "" : reason) }
         switch action {
