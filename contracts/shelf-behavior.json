@@ -150,6 +150,12 @@
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
       },
       {
+        "id": "item-name-validation",
+        "behavior": "Name and pin trims the name and accepts 1 to 160 characters (grapheme clusters), at most 1024 UTF-8 bytes, with no control, line-separator or paragraph-separator characters. Any other name, including an empty one, is rejected with the shared \"Enter a name (1–160 characters)\" message and the item is left unchanged.",
+        "macos": "LibraryStore.nameAndPin validates the trimmed name with these limits and throws the localized \"Enter a name (1–160 characters)\" error.",
+        "windows": "The Store 'name' action validates through itemName with the same limits and error; model.test.cjs checks accepted names at the limits and rejects empty, oversized, multi-line, control-character, NUL and non-string names with the exact message."
+      },
+      {
         "id": "unavailable-watched-folder",
         "behavior": "A watched folder that is unavailable (for example on an unmounted volume) is skipped while watching but stays in the saved list, so adding or removing another watched folder does not forget it.",
         "macos": "AppDelegate.extraFolders returns every saved folder and existingExtraFolders is the subset that is watched, re-evaluated when a volume mounts; SettingsTests.testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable covers it.",
