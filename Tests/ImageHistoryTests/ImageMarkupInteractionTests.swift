@@ -1,8 +1,18 @@
 import AppKit
+import QuartzCore
 #if !STANDALONE_TESTS
 import XCTest
 @testable import Tendedero
 #endif
+
+@MainActor private final class PreviewMouseDeliveryControl: NSView {
+    var received = [NSEvent.EventType]()
+    override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { received.append(event.type) }
+    override func mouseDragged(with event: NSEvent) { received.append(event.type) }
+    override func mouseUp(with event: NSEvent) { received.append(event.type) }
+}
 
 @MainActor final class ImageMarkupInteractionTests: HistoryTestCase {
     private func key(_ code: UInt16, flags: NSEvent.ModifierFlags = [], text: String = "", type: NSEvent.EventType = .keyDown) -> NSEvent {
@@ -63,6 +73,112 @@ import XCTest
         drag(canvas, from: NSPoint(x: bounds.width * 0.2, y: bounds.height * 0.2),
              to: NSPoint(x: bounds.width * 0.8, y: bounds.height * 0.8))
         return canvas
+    }
+
+    func testPreviewWindowMouseDeliveryControl() throws {
+        _ = NSApplication.shared
+        let panel = makePreviewPanel(size: NSSize(width: 400, height: 240), reusing: nil)
+        panel.isReleasedWhenClosed = false
+        let control = PreviewMouseDeliveryControl(frame: NSRect(x: 0, y: 0, width: 400, height: 240))
+        panel.contentView = control
+        defer { panel.close() }
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(control)
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseDragged, .leftMouseUp] {
+            panel.sendEvent(try XCTUnwrap(NSEvent.mouseEvent(with: type, location: NSPoint(x: 100, y: 100),
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: panel.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)))
+        }
+        print("Preview mouse control: key=\(panel.isKeyWindow), received types=\(control.received.map(\.rawValue))")
+        XCTAssertEqual(control.received, [.leftMouseDown, .leftMouseDragged, .leftMouseUp])
+    }
+
+    func testPreviewWindowMarkerDragRecordsAndRenders() throws {
+        _ = NSApplication.shared
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let preview = try XCTUnwrap(ImagePreview(url: image(f), keyboardBindings: KeyboardBindings(defaults: f.defaults)))
+        preview.onSaveMarkup = { _ in true }; defer { preview.requestClose() }
+        preview.controls.update(position: "1/157", pinned: false)
+        preview.show()
+        preview.window.sendEvent(key(46, text: "m"))
+        preview.window.sendEvent(key(4, text: "h"))
+        let canvas = preview.canvas, window = preview.window
+        window.contentView?.layoutSubtreeIfNeeded()
+        let bounds = canvas.bounds
+        let start = NSPoint(x: bounds.width * 0.2, y: bounds.height * 0.4)
+        let end = NSPoint(x: bounds.width * 0.8, y: bounds.height * 0.6)
+        let root = try XCTUnwrap(window.contentView)
+        let hit = root.hitTest(root.convert(start, from: canvas))
+        print("Preview mouse delivery: key=\(window.isKeyWindow), canvas hit=\(hit === canvas), accepts first mouse=\(canvas.acceptsFirstMouse(for: nil)), canvas=\(canvas.frame), viewport=\(preview.scroll.frame)")
+        XCTAssertTrue(window.canBecomeKey); XCTAssertFalse(window.ignoresMouseEvents)
+        XCTAssertTrue(preview.isMarkupEditing); XCTAssertTrue(canvas.isMarkupEditing)
+        XCTAssertEqual(canvas.tool, .marker); XCTAssertEqual(preview.toolbar.toolButtons[.marker]?.state, .on)
+        XCTAssertFalse(window.isMovableByWindowBackground); XCTAssertFalse(canvas.mouseDownCanMoveWindow)
+        XCTAssertTrue(hit === canvas)
+        for (type, point) in [(NSEvent.EventType.leftMouseDown, start), (.leftMouseDragged, end), (.leftMouseUp, end)] {
+            window.sendEvent(mouse(type, in: canvas, at: point))
+        }
+        let mark = try XCTUnwrap(preview.document.elements.first)
+        XCTAssertEqual(mark.tool, .marker)
+        XCTAssertEqual(mark.points.first?.x ?? -1, 0.2, accuracy: 0.001)
+        XCTAssertEqual(mark.points.last?.y ?? -1, 0.6, accuracy: 0.001)
+        let context = try XCTUnwrap(CGContext(data: nil, width: Int(bounds.width), height: Int(bounds.height),
+            bitsPerComponent: 8, bytesPerRow: 0, space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        func display(_ layer: CALayer) {
+            layer.displayIfNeeded(); layer.sublayers?.forEach(display)
+        }
+        canvas.layoutSubtreeIfNeeded(); canvas.displayIfNeeded()
+        let layer = try XCTUnwrap(canvas.layer)
+        display(layer); CATransaction.flush(); layer.render(in: context)
+        let bytes = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+        let at = Int(bounds.height * 0.5) * context.bytesPerRow + Int(bounds.width * 0.5) * 4
+        XCTAssertGreaterThan(bytes[at], 220)
+        XCTAssertGreaterThan(bytes[at + 1], 220)
+        XCTAssertLessThan(bytes[at + 2], 230, "The yellow marker must appear above the white image")
+        // The click policy is confined to editing; leaving markup restores the
+        // existing browsing/window-drag path instead of changing all previews.
+        window.sendEvent(key(53))
+        XCTAssertFalse(preview.isMarkupEditing)
+        XCTAssertTrue(window.isMovableByWindowBackground)
+        XCTAssertTrue(canvas.mouseDownCanMoveWindow)
+    }
+
+    func testShelfMOpensFocusedPhotoAndMarkerDragPersistsAfterEscape() throws {
+        _ = NSApplication.shared
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+        let record = try store.captureImage(image(f))
+        let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false,
+                        copyImage: { _ in }, copyText: { _ in }, library: store)
+        line.setPresentation(.images, requestFocus: false); line.revealed = true
+        let app = AppDelegate(line: line, watchesFiles: false)
+        // The same preview entry point used by the shelf's long-press action.
+        line.onImageMarkupRequested = { id in app.showPreview(id); app.preview?.beginMarkup() }
+        defer { app.preview?.requestClose() }
+        let keyboard = LineKeyboard(line: line, onCopy: { _ in }, onPreview: { app.showPreview($0) }, onClose: {})
+        XCTAssertEqual(line.focusedID, record.id)
+        XCTAssertTrue(keyboard.handle(key(46, text: "m")))
+        let preview = try XCTUnwrap(app.preview, "M must open markup directly from the shelf")
+        XCTAssertTrue(preview.isMarkupEditing)
+        XCTAssertTrue(preview.routeKey(key(4, text: "h")))
+        let canvas = preview.canvas, bounds = preview.canvas.bounds
+        let start = NSPoint(x: bounds.width * 0.2, y: bounds.height * 0.4)
+        let end = NSPoint(x: bounds.width * 0.8, y: bounds.height * 0.6)
+        let root = try XCTUnwrap(preview.window.contentView)
+        XCTAssertTrue(root.hitTest(root.convert(start, from: canvas)) === canvas,
+                      "The image canvas must receive drags through its overlay")
+        preview.window.sendEvent(mouse(.leftMouseDown, in: canvas, at: start))
+        preview.window.sendEvent(mouse(.leftMouseDragged, in: canvas, at: end))
+        preview.window.sendEvent(mouse(.leftMouseUp, in: canvas, at: end))
+        let mark = try XCTUnwrap(preview.document.elements.first)
+        XCTAssertEqual(mark.tool, .marker); XCTAssertTrue(mark.points.count >= 2)
+        let document = preview.document
+        XCTAssertTrue(preview.routeKey(key(53)))
+        XCTAssertFalse(preview.isMarkupEditing)
+        XCTAssertEqual(try store.item(record.id)?.imageMarkup, document)
+        preview.requestClose(); app.showPreview(record.id)
+        XCTAssertEqual(app.preview?.document, document)
     }
 
     func testMouseDrawingToolsStoreNormalizedGeometryAndConstrainedShapes() throws {
@@ -144,7 +260,7 @@ import XCTest
         preview.beginMarkup(); preview.canvas.setTool(.text)
         click(preview.canvas, at: NSPoint(x: 40, y: 40))
         let editor = try XCTUnwrap(preview.canvas.textEditor)
-        for (code, value) in [(UInt16(1), "s"), (35, "p"), (49, " "), (51, ""), (123, ""), (124, ""), (125, ""), (126, "")] {
+        for (code, value) in [(UInt16(1), "s"), (35, "p"), (46, "m"), (49, " "), (51, ""), (123, ""), (124, ""), (125, ""), (126, "")] {
             XCTAssertFalse(preview.routeKey(key(code, text: value)), "The native text editor owns \(code)")
         }
         XCTAssertFalse(preview.routeKey(key(6, flags: .command, text: "z")))

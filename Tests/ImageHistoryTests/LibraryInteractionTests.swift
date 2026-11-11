@@ -286,6 +286,15 @@ import XCTest
         XCTAssertEqual(try store.collections(for: a.id).map(\.id), [folder]); XCTAssertEqual(try store.tags(for: a.id).map(\.id), [tag.id])
         XCTAssertEqual(try store.item(a.id)?.text, "edited 👋"); model.draftText = "fixed"; XCTAssertTrue(model.flushEdits()); XCTAssertTrue(model.select(b.id))
     }
+    func testInspectorTitleOverTwoHundredCharactersSavesUntilOneMiBOfUTF8() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let a = try XCTUnwrap(store.captureText("first")); try store.retain([a.id])
+        let model = LibraryModel(store: store); wait { model.ids.count == 1 }; _ = model.select(a.id)
+        let long = String(repeating: "t", count: 249)
+        model.draftTitle = long; XCTAssertTrue(model.flushEdits()); XCTAssertEqual(try store.item(a.id)?.title, long)
+        model.draftTitle = String(repeating: "x", count: TextClipboardWatcher.maximumDataBytes + 1)
+        XCTAssertFalse(model.flushEdits()); XCTAssertEqual(try store.item(a.id)?.title, long)
+    }
     func testMixedTransferExportAndDragPreserveRepresentationsOrderAndOriginals() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let imageURL = try f.image(owned: false), image = try store.captureImage(imageURL), text = try XCTUnwrap(store.captureText("synthetic note")), link = try store.captureLink(URL(string: "https://example.com/path?t=10")!)

@@ -76,6 +76,7 @@ import XCTest
             for kind in try required(scenario["pinnedOnlyKinds"], [String].self) {
                 switch try shelf(kind) { case .images: line.setFavoritesOnly(true); case .texts: line.texts.setFavoritesOnly(true); case .links: line.links.setFavoritesOnly(true) }
             }
+            line.onImageMarkupRequested = { _ in effects.append("markup") }
             let keyboard = LineKeyboard(line: line, onCopy: { _ in effects.append("copy") }, onPreview: { _ in effects.append("preview") },
                 onClose: {}, onTextCopy: { _ in effects.append("copy") }, onTextPreview: { _ in effects.append("preview") },
                 onLinkPreview: { _ in effects.append("preview") })
@@ -109,6 +110,7 @@ import XCTest
                     case "KeyS": event = try key(1, characters: "s")
                     case "KeyP": event = try key(35, characters: "p")
                     case "Space": event = try key(49)
+                    case "KeyM": event = try key(46, characters: "m")
                     case "KeyC": event = try key(8, characters: "c", flags: .command)
                     default: throw CocoaError(.coderReadCorrupt)
                     }

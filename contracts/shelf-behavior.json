@@ -29,9 +29,9 @@
       },
       {
         "id": "card-context-menu-form",
-        "macos": "Right-clicking a shelf card opens a native NSMenu built for that card (GrabArea/TextShelfView/LinkShelfView menuProvider).",
-        "windows": "Right-clicking a shelf card opens the shared Actions palette for the selection instead of a native menu.",
-        "reason": "Electron has no per-card native menu matching AppKit's; the Actions palette already lists the shelf's actions with their shortcuts and keeps keyboard focus inside the app. The card that is acted on follows the shared card-right-click behavior."
+        "macos": "Right-clicking a shelf card opens a native NSMenu at the pointer, built by that card's menuProvider (GrabArea, TextShelfView, LinkShelfView).",
+        "windows": "Right-clicking a shelf card opens the shared Actions palette for the card, with the palette's own commands, availability rules, shortcuts and translations.",
+        "reason": "Electron can pop up a native menu (Menu.popup, as the tray menu in main.cjs is built); the Windows renderer reuses the Actions palette instead of building a second menu with its own commands and rules. User impact on Windows: an Actions palette with a search field instead of a menu at the pointer. Whether the palette or a native menu is the long-term form is the maintainer's decision."
       }
     ],
     "sharedBehaviors": [
@@ -49,9 +49,9 @@
       },
       {
         "id": "width-insensitive-search",
-        "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I.",
-        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift).",
-        "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac; shelf-render.test.cjs checks both through the shipped renderer."
+        "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I. A voiced kana or a Hangul syllable is one letter, so は does not find ばら and 하 does not find 한국.",
+        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift); ShelfSearchTests.testShelfSearchKeepsAVoicedKanaAndAHangulSyllableWholeLikeWindows covers the kana and Hangul cases.",
+        "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac, and recomposes the text so a bare は or 하 does not match inside ば or 한; shelf-render.test.cjs checks these through the shipped renderer."
       },
       {
         "id": "link-title-charset",
@@ -132,6 +132,12 @@
         "windows": "title() in renderer.js applies the same rule (t('Untitled note') and t('Link') as fallbacks) to cards, title sorting and best-match ranking; library-ui.test.cjs runs the unnamed item titles scenario."
       },
       {
+        "id": "inspector-title-length",
+        "behavior": "A Library inspector title is not cut at 200 characters: a title of any length is saved until it passes the same 1 MiB of UTF-8 bytes as a text or a note. The Name and pin field keeps its own short limit.",
+        "macos": "LibraryModel.flushEdits saves the draft title through LibraryStore.update, which refuses a title over 1 MiB of UTF-8 bytes and applies no character cap below that; LibraryInteractionTests.testInspectorTitleOverTwoHundredCharactersSavesUntilOneMiBOfUTF8 covers it; the Name and pin field keeps its own limit.",
+        "windows": "The details command stores the title through sizedText() in model.cjs, so it counts UTF-8 bytes against 1 MiB like a note; model.test.cjs 'a Library inspector title over 200 characters is saved like on the Mac' covers a 249 character title and a title over 1 MiB of UTF-8 bytes."
+      },
+      {
         "id": "text-and-note-size-limit",
         "behavior": "A text or a note is saved only while it is at most 1 MiB of UTF-8 bytes, so 600,000 Turkish or CJK characters are refused on both platforms and the edit reports an error.",
         "macos": "LibraryStore.update checks text.utf8.count and note.utf8.count against TextClipboardWatcher.maximumDataBytes and LibraryModel.flushEdits shows Changes could not be saved.",
@@ -150,10 +156,28 @@
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
       },
       {
+        "id": "unavailable-watched-folder",
+        "behavior": "A watched folder that is unavailable (for example on an unmounted volume) is skipped while watching but stays in the saved list, so adding or removing another watched folder does not forget it.",
+        "macos": "AppDelegate.extraFolders returns every saved folder and existingExtraFolders is the subset that is watched, re-evaluated when a volume mounts; SettingsTests.testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable covers it.",
+        "windows": "main.cjs skips a watchFolders entry that is not a directory without changing the list; model.test.cjs checks that adding and removing folders keeps an unavailable entry."
+        },
+        {
+        "id": "disabled-undo-names-the-surface",
+        "behavior": "A disabled undo row first says where it is available: Undo trash on the shelves reads \"Available in Library\" and Undo take down in the Library reads \"Available on the shelves\"; \"Nothing to undo\" is shown only on the surface where the undo exists.",
+        "macos": "ActionBarMenuAction.undoRemoveFromLine and .undoTrash pick the surface reason before \"Nothing to undo\"; ActionBarCatalogTests.testDisabledRowsNameTheSurfaceOrSelectionThatIsMissing covers it.",
+        "windows": "actionCommands() in renderer.js runs the surface check before the \"Nothing to undo.\" branch; library-ui.test.cjs checks both rows on the shelves and in the Library."
+      },
+      {
+        "id": "shelf-image-markup-shortcut",
+        "behavior": "M on the focused selected still photo in the active image shelf opens its editable markup preview directly. Hover alone does not retarget keyboard actions. H selects the translucent marker; pointer drags draw editable marks. Escape saves and finishes markup (a later Escape closes preview); crop Escape cancels the crop. Saved marks survive reopening. M in search, note, annotation text and rename editors stays native text input. Empty and non-image shelves do not open markup. Remapped or disabled markup keys remain respected.",
+        "macos": "LineKeyboard routes markup to Line.markup for the focused visible still image. MarkupKeyboardTests and ImageMarkupInteractionTests execute typing guards, remapping, real preview-panel sendEvent mouse delivery, hit testing, composited marker pixels, Escape/save and reopen. The nonactivating panel's canvas accepts the first mouse click while editing. CrossPlatformBehaviorContractTests executes the shared shelf M scenarios.",
+        "windows": "The shipped renderer allows markup in the shelves shortcut context and opens the existing image editor for the focused still image. renderer-ui.test.cjs executes the shared shelf M scenarios plus marker pointer drawing, Escape/save, reopen and native editor guards. Native Windows acceptance remains a separate release gate."
+      },
+      {
         "id": "card-right-click",
-        "behavior": "Right-clicking a shelf card offers that card's actions without a prior left-click. A card outside the selection becomes the only target; Move to Trash on a card already in the selection acts on the selection.",
-        "macos": "Each shelf card view's menuProvider builds the menu for its own item; Move to Trash selects the card first when it is not already selected (TextShelfView).",
-        "windows": "The renderer's contextmenu handler selects a card outside the selection alone, keeps a selection that contains the card (limited to that card's shelf, with the range anchor moved to the card) and opens the Actions palette; renderer-ui.test.cjs covers a single card, a selection, a mixed-shelf selection with a later Shift-click, and an open preview."
+        "behavior": "Right-clicking a shelf card offers that card's actions without a prior left-click. Which items an action then affects differs by platform today and is stated for each below.",
+        "macos": "Each shelf card view's menuProvider builds a menu for its own item at the pointer, and Pin, Copy, Open and the other items act on the clicked item. Move to Trash selects the card first only on the text shelf when it is not already selected; on the link shelf it always selects the clicked link first; the image menu has no Move to Trash.",
+        "windows": "The renderer's contextmenu handler opens the Actions palette for the card. A card outside the selection becomes the only target; a card inside it keeps the selected cards on its shelf (the range anchor moves to the card if it left the selection), and every palette action, Pin included, acts on them. renderer-ui.test.cjs covers a single card, a selection, a mixed-shelf selection with a later Shift-click, and an open preview."
       }
     ]
   },
@@ -1101,6 +1125,22 @@
             ],
             "searchEditing": false
           }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "image",
+            "focused": null,
+            "selected": [],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
         }
       ]
     },
@@ -1771,6 +1811,163 @@
             ],
             "visibleKinds": [
               "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "shelf-markup-opens-focused-photo",
+      "itemSet": "standard",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i1",
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "right",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i2",
+            "selected": [
+              "i2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i2",
+            "selected": [
+              "i2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": [
+              "markup"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "non-image-shelves-ignore-markup",
+      "itemSet": "standard",
+      "visibleKinds": [
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "down",
+          "expect": {
+            "activeKind": "link",
+            "focused": "l1",
+            "selected": [
+              "l1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "link",
+            "focused": "l1",
+            "selected": [
+              "l1"
+            ],
+            "visibleKinds": [
               "text",
               "link"
             ],

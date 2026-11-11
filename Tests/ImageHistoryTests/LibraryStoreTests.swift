@@ -43,6 +43,21 @@ import XCTest
         XCTAssertTrue(try library.item(temporary.id)?.deletedAt != nil)
         XCTAssertEqual(try library.query(LibraryQuery(scope: .unorganized)).count, 3)
     }
+    func testAllPinnedNeedsEveryIdPinnedAndExisting() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try XCTUnwrap(library.captureText("first")), second = try XCTUnwrap(library.captureText("second"))
+        XCTAssertFalse(try library.allPinned([]))
+        XCTAssertFalse(try library.allPinned([first.id, second.id]))
+        try library.toggleFavorite([first.id])
+        XCTAssertFalse(try library.allPinned([first.id, second.id]))
+        try library.toggleFavorite([second.id])
+        XCTAssertTrue(try library.allPinned([first.id, second.id, first.id]))
+        XCTAssertFalse(try library.allPinned([first.id, UUID()]))
+        let many = try (0..<501).map { try XCTUnwrap(library.captureText("note \($0)")).id }
+        try library.toggleFavorite(many)
+        XCTAssertTrue(try library.allPinned(many + [many[0]]))
+        XCTAssertFalse(try library.allPinned(many + [UUID()] + [many[0]]))
+    }
     func testCollectionsAreManyToManyNestedAndRemovalDoesNotDeleteContent() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let record = try library.captureImage(try f.image(owned: false)), parent = try library.createCollection("YouTube"), child = try library.createCollection("Thumbnail", parent: parent), other = try library.createCollection("Referanslar")
