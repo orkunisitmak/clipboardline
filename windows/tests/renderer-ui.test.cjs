@@ -178,7 +178,9 @@ test('image undo history survives being moved to Trash and restored, but is prun
  f.api.emit({items:f.state.items.filter(item=>item.id!==f.image)});await f.ready();
  // Re-inserting the item with crop cannot be undone because history was pruned
  f.api.emit({items:[...f.state.items,{...f.state.items[0],id:f.image,kind:'image',crop,annotations:[],mediaUrl:'appmedia://media/'+f.image,originalMediaUrl:'appmedia://media/'+f.image+'/original'}]});await f.ready();
- await f.key('Space');await f.key('KeyZ',{ctrl:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,3);
+ await f.cardClick(f.image);assert.equal(focusedCard(f),f.image);
+ await f.key('Space');assert.match(f.overlay,/id="preview-dialog"/);assert.match(f.overlay,/id="preview-media"/);
+ await f.key('KeyZ',{ctrl:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,3);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,crop);
 });
 
 test('canvas export failure blocks native Settings until explicit Save succeeds',async()=>{const f=fixture();await f.ready();await f.key('Space');await f.key('KeyC');await f.pointer('pointerdown',60,30);await f.pointer('pointermove',500,150);await f.pointer('pointerup',500,150);f.failExportOnce();await f.api.command('settings');await f.ready();assert.match(f.overlay,/id="markup-canvas"/);assert.doesNotMatch(f.main,/class="settings-main"/);await f.click('save-image');assert.equal(f.overlay,'');assert.match(f.main,/class="settings-main"/);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,{x:60,y:30,width:440,height:120});});

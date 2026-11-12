@@ -155,7 +155,12 @@ test('idle worker hibernates after ONNX inference to reclaim memory and respawns
 });
 
 test('requests arriving while a hibernated worker respawns wait for its ready event before posting or starting a timeout',async()=>{
- const workers=[];
+ const workers=[],timeouts=[];
+ const originalSetTimeout=global.setTimeout;
+ global.setTimeout=(...args)=>{
+  if(args[1]===120000)timeouts.push(args);
+  return originalSetTimeout(...args);
+ };
  const search=new ImageSearch({
   modelDirectory:'unused',
   cacheDirectory:'unused',
@@ -164,19 +169,33 @@ test('requests arriving while a hibernated worker respawns wait for its ready ev
   readImage:()=>null,
   workerFactory:()=>{const w=new FakeWorker(workers.length===0);workers.push(w);return w;}
  });
- await search.ready;
- await search.search('warm',[]);
- await new Promise(resolve=>setTimeout(resolve,45));
- assert.equal(workers[0].terminated,true);
- assert.equal(search.worker,null);
- const first=search.search('red square',[]),second=search.search('blue circle',[]);
- for(let i=0;i<10;i++)await tick();
- assert.equal(workers.length,2,'concurrent requests must share one respawned worker');
- assert.deepEqual(workers[1].messages,[],'no request may be posted (or start its timeout) before the respawned worker is ready');
- workers[1].emit('message',{event:'ready',available:true});
- assert.deepEqual(await Promise.all([first,second]),[{ids:[],scores:[],available:true,indexing:false},{ids:[],scores:[],available:true,indexing:false}]);
- assert.deepEqual(workers[1].messages.filter(value=>value.action==='search').map(value=>value.payload.query),['red square','blue circle']);
- await search.stop();
+ try{
+  await search.ready;
+  await search.search('warm',[]);
+  await new Promise(resolve=>setTimeout(resolve,45));
+  assert.equal(workers[0].terminated,true);
+  assert.equal(search.worker,null);
+  timeouts.length=0;
+  const first=search.search('red square',[]),second=search.search('blue circle',[]);
+  for(let i=0;i<10;i++)await tick();
+  assert.equal(workers.length,2,'concurrent requests must share one respawned worker');
+  assert.deepEqual(workers[1].messages,[],'no request may be posted before the respawned worker is ready');
+  assert.equal(timeouts.length,0,'no 120-second request timer may start before the worker is ready');
+  assert.equal(search.requests.size,0);
+  workers[1].response=()=>'__hold__';
+  workers[1].emit('message',{event:'ready',available:true});
+  for(let i=0;i<10;i++)await tick();
+  assert.equal(timeouts.length,2,'both request timers start only after the worker emits its ready event');
+  assert.equal(search.requests.size,2);
+  for(const pending of search.requests.values())assert.ok(pending.timer);
+  for(const message of workers[1].messages)workers[1].emit('message',{id:message.id,result:{ids:[],scores:[]}});
+  assert.deepEqual(await Promise.all([first,second]),[{ids:[],scores:[],available:true,indexing:false},{ids:[],scores:[],available:true,indexing:false}]);
+  assert.equal(search.requests.size,0);
+  assert.deepEqual(workers[1].messages.filter(value=>value.action==='search').map(value=>value.payload.query),['red square','blue circle']);
+ }finally{
+  global.setTimeout=originalSetTimeout;
+  await search.stop();
+ }
 });
 
 test('real worker writes cached embedding before hibernation and respawned worker scores from disk cache',async()=>{
