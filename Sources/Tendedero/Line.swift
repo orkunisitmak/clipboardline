@@ -371,7 +371,11 @@ final class Line: ObservableObject {
             do { try library.removeFromShelf(ids) } catch { notice = error.localizedDescription; return }
         } else {
             switch shelf {
-            case .images: for id in ids { discard(id) }
+            case .images:
+                guard onFlushPreview() else { return }
+                for id in ids {
+                    if items.first(where: { $0.id == id })?.pinned == true { drop(id) } else { discard(id) }
+                }
             case .texts: for id in ids { texts.removeFromShelf(id) }
             case .links: for id in ids { links.removeFromShelf(id) }
             }
@@ -656,7 +660,12 @@ final class Line: ObservableObject {
         }
     }
     func discardAction(_ id: UUID) {
-        if actionItems(for: id).count > 1 { focusShelf(.images); onTrashRequested?() }
+        let items = actionItems(for: id)
+        if items.count > 1 {
+            guard onFlushPreview() else { return }
+            focusShelf(.images)
+            removeFromShelf(items.map(\.id), on: .images, focusedID: id)
+        }
         else { discard(id) }
     }
 
@@ -958,9 +967,7 @@ final class Line: ObservableObject {
         guard onFlushPreview() else { return }
         let images = neighbours(of: id, toTheLeft: toTheLeft)
         guard !images.isEmpty else { return }
-        // The same snapshot/confirmation policy as other local batch actions.
-        onImageTrashRequested?(TrashSelection(images: images,
-            appCopies: images.filter { history.files.isAppCopy($0.url) }.count))
+        removeFromShelf(images.map(\.id), on: .images, focusedID: id)
     }
 
     /// Photos whose file was deleted or moved away fall off by themselves.
