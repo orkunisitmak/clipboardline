@@ -866,3 +866,17 @@ test('shelf markup does not consume M in native editors or open text and link it
  await f.key('Escape');await f.key('Escape');f.api.emit({settings:{...f.state.settings,localShortcuts:{markup:''}}});await f.ready();
  await f.key('KeyM');await f.key('KeyX');assert.equal(f.overlay,'');
  });
+
+test('Action Palette finds both English and Turkish Settings History commands in Turkish locale', async()=>{
+ const f=fixture();await f.ready();
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.key('KeyK',{ctrl:true});
+ await f.input('modal-query','Ayarlar · Geçmiş');
+ assert.match(f.overlay,/data-command="settings-history"/);
+ await f.input('modal-query','Settings · History');
+ assert.match(f.overlay,/data-command="settings-history"/);
+ await f.key('Enter');
+ assert.equal(f.state.view,'settings');
+ assert.match(f.main,/data-retention="text"/);
+ assert.match(f.main,/data-retention="link"/);
+});
