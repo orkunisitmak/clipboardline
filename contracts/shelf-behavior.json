@@ -126,6 +126,12 @@
         "windows": "title() in renderer.js applies the same rule (t('Untitled note') and t('Link') as fallbacks) to cards, title sorting and best-match ranking; library-ui.test.cjs runs the unnamed item titles scenario."
       },
       {
+        "id": "inspector-title-length",
+        "behavior": "A Library inspector title is not cut at 200 characters: a title of any length is saved until it passes the same 1 MiB of UTF-8 bytes as a text or a note. The Name and pin field keeps its own short limit.",
+        "macos": "LibraryModel.flushEdits saves the draft title through LibraryStore.update, which refuses a title over 1 MiB of UTF-8 bytes and applies no character cap below that; LibraryInteractionTests.testInspectorTitleOverTwoHundredCharactersSavesUntilOneMiBOfUTF8 covers it; the Name and pin field keeps its own limit.",
+        "windows": "The details command stores the title through sizedText() in model.cjs, so it counts UTF-8 bytes against 1 MiB like a note; model.test.cjs 'a Library inspector title over 200 characters is saved like on the Mac' covers a 249 character title and a title over 1 MiB of UTF-8 bytes."
+      },
+      {
         "id": "text-and-note-size-limit",
         "behavior": "A text or a note is saved only while it is at most 1 MiB of UTF-8 bytes, so 600,000 Turkish or CJK characters are refused on both platforms and the edit reports an error.",
         "macos": "LibraryStore.update checks text.utf8.count and note.utf8.count against TextClipboardWatcher.maximumDataBytes and LibraryModel.flushEdits shows Changes could not be saved.",
@@ -144,6 +150,12 @@
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
       },
       {
+        "id": "item-name-validation",
+        "behavior": "Name and pin trims the name and accepts 1 to 160 characters (grapheme clusters), at most 1024 UTF-8 bytes, with no control, line-separator or paragraph-separator characters. Any other name, including an empty one, is rejected with the shared \"Enter a name (1–160 characters)\" message and the item is left unchanged.",
+        "macos": "LibraryStore.nameAndPin validates the trimmed name with these limits and throws the localized \"Enter a name (1–160 characters)\" error.",
+        "windows": "The Store 'name' action validates through itemName with the same limits and error; model.test.cjs checks accepted names at the limits and rejects empty, oversized, multi-line, control-character, NUL and non-string names with the exact message."
+      },
+      {
         "id": "unavailable-watched-folder",
         "behavior": "A watched folder that is unavailable (for example on an unmounted volume) is skipped while watching but stays in the saved list, so adding or removing another watched folder does not forget it.",
         "macos": "AppDelegate.extraFolders returns every saved folder and existingExtraFolders is the subset that is watched, re-evaluated when a volume mounts; SettingsTests.testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable covers it.",
@@ -154,6 +166,12 @@
         "behavior": "A disabled undo row first says where it is available: Undo trash on the shelves reads \"Available in Library\" and Undo take down in the Library reads \"Available on the shelves\"; \"Nothing to undo\" is shown only on the surface where the undo exists.",
         "macos": "ActionBarMenuAction.undoRemoveFromLine and .undoTrash pick the surface reason before \"Nothing to undo\"; ActionBarCatalogTests.testDisabledRowsNameTheSurfaceOrSelectionThatIsMissing covers it.",
         "windows": "actionCommands() in renderer.js runs the surface check before the \"Nothing to undo.\" branch; library-ui.test.cjs checks both rows on the shelves and in the Library."
+      },
+      {
+        "id": "restored-item-retention",
+        "behavior": "Restoring an item from Trash gives it a full retention period from the restore, and capturing it again from the clipboard later renews that period for text, images, links and recordings. Copying an item from inside the app records the copy but does not change retention.",
+        "macos": "LibraryStore.restore sets lastCapturedAt, every capture path renews it, markCopied leaves it alone and prune reads it first; LibraryStoreTests.testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain covers the restore.",
+        "windows": "Store 'restore', Store.insert and Store.insertRecording set lastCapturedAt on an existing item, markCopied leaves it alone and expire reads it first; model.test.cjs and recording-model.test.cjs cover restore, copy again and expiry for every kind."
       },
       {
         "id": "shelf-image-markup-shortcut",

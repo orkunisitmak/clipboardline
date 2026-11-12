@@ -192,6 +192,9 @@ test('the action list keeps Copy enabled for Trash items while editing actions a
  const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image]);
  await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="copy" >/);assert.match(f.overlay,/data-command="pin" disabled>/);assert.match(f.overlay,/data-command="paste" disabled>/);assert.match(f.overlay,/data-command="preview" disabled>/);
 });
+test('Name and pin leaves the length of a name to the shared validation',async()=>{
+ const f=fixture();await f.ready();await f.key('KeyP',{alt:true});assert.match(f.overlay,/id="name-input"/);assert.doesNotMatch(f.overlay,/id="name-input"[^>]*maxlength/);
+});
 test('the action list disables item details and Remove from folder for an item in Trash',async()=>{
  const f=fixture();await f.ready();const a='20000000-0000-4000-8000-000000000001';f.state.folders=[{id:a,name:'Work'}];Object.assign(f.state.items[0],{trashedAt:1000,folderIds:[a]});f.api.emit({folders:f.state.folders,items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
  await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="edit-details" disabled>/);assert.match(f.overlay,new RegExp('data-command="folder.remove.'+a+'" disabled>'));assert.match(f.overlay,/Restore this item first/);
@@ -461,4 +464,10 @@ test('Library domain filter ignores case, surrounding spaces and dots, www and a
  for(const value of ['example.com',' Example.COM ','WWW.example.com','.example.com.'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[f.link],JSON.stringify(value));
  await f.input('domain-filter','other.org');assert.deepEqual(cards(f),[]);
  await f.input('domain-filter','  ');assert.deepEqual(cards(f),[f.image,f.link]);
+});
+test('the multi-selection inspector says Unpin when every selected item is pinned',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});Object.assign(f.state.items[1],{retainedAt:900,pinned:true});Object.assign(f.state.items[2],{retainedAt:800,pinned:false});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ const pinLabel=()=>f.main.match(/<aside class="inspector"[\s\S]*?<\/aside>/)[0].match(/<button[^>]*data-action="pin"[^>]*>([\s\S]*?)<\/button>/)[1].replace(/<[^>]*>/g,'').trim();
+ await f.key('KeyA',{ctrl:true});assert.equal(pinLabel(),'Pin');
+ f.state.items[2].pinned=true;f.api.emit({items:f.state.items});await f.ready();assert.equal(pinLabel(),'Unpin');
 });
