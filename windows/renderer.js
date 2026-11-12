@@ -240,7 +240,7 @@ async function saveForNativeTransition(){nativeTransitionSaving=true;let saved=f
  else{nativeTransitionBlocked=true;render();toast('Changes could not be saved. Keep this draft open; use Done or Save to retry.');if(pendingNativeState?.windowVisible===false){pendingNativeState=null;nativeTransitionBlocked=false;void api.command(ui.view==='library'?'library':ui.view==='settings'?'settings':'show').then(applyState).catch(error=>toast(error.message));}}}
 /**
  * Applies a main-process state snapshot (full or surface-only) and re-renders.
- * Image undo histories of deleted or trashed items are dropped.
+ * Image undo histories of deleted items are dropped.
  * @param {object} next State snapshot from the main process.
  * @param {{initial?: boolean}} [options] `initial` marks the first snapshot request.
  */
@@ -285,7 +285,7 @@ function applyState(next,{initial=false}={}) {
  // otherwise the fresh-reveal reset would erase an already-consumed event.
  if(lastVisibility!==false&&signature&&signature!==ui.lastEvent){ui.lastEvent=signature;const event=next.viewEvent;if(event.settingsTab)ui.settingsTab=event.settingsTab;if(event.selectId){ui.active=event.kind||item(event.selectId)?.kind||ui.active;ui.focus=event.selectId;ui.selected=new Set([event.selectId]);ui.preview=event.preview?event.selectId:null;ui.editingText=false;ui.editor=null;ui.zoom=1;ui.pan={x:0,y:0};if(event.crop)void beginImageEdit('crop');}if(event.search){ui.searchOpen=true;ui.searchEditing=true;setTimeout(()=>document.getElementById('search-input')?.focus(),0);}}
  if(ui.focus&&!item(ui.focus))ui.focus=null;
- if(imageHistories.size){for(const id of [...imageHistories.keys()]){const current=item(id);if(!current||current.trashedAt)imageHistories.delete(id);}}
+ if(imageHistories.size){for(const id of [...imageHistories.keys()]){if(!item(id))imageHistories.delete(id);}}
  if(!ui.focus&&!ui.preview&&lastVisibility!==false)focusFirst();
  render();if(fresh&&ui.view==='library'&&lastVisibility!==false)focusLibraryResults();
 }

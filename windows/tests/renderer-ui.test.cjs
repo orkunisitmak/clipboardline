@@ -160,6 +160,27 @@ test('an external same-ID image edit invalidates acknowledged preview undo histo
  await f.key('KeyZ',{ctrl:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,1);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,external);
 });
 
+test('image undo history survives being moved to Trash and restored, but is pruned when permanently deleted',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyC');await f.pointer('pointerdown',60,30);await f.pointer('pointermove',500,150);await f.pointer('pointerup',500,150);await f.key('Enter');
+ const crop={x:60,y:30,width:440,height:120};assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,crop);
+ await f.key('Escape');assert.equal(f.overlay,'');
+ // Move to Trash on shelves (item stays in state.items with trashedAt set)
+ await f.key('KeyS');assert.ok(f.state.items.find(item=>item.id===f.image).trashedAt);
+ // Restore from Trash on shelves
+ await f.key('Backspace');assert.equal(f.state.items.find(item=>item.id===f.image).trashedAt,null);
+ // Reopen preview and undo the crop
+ await f.key('Space');assert.match(f.overlay,/id="preview-dialog"/);
+ await f.key('KeyZ',{ctrl:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,2);assert.equal(f.state.items.find(item=>item.id===f.image).crop,null);
+ // Redo the crop
+ await f.key('KeyZ',{ctrl:true,shift:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,3);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,crop);
+ await f.key('Escape');
+ // Permanently deleting the item purges its undo history
+ f.api.emit({items:f.state.items.filter(item=>item.id!==f.image)});await f.ready();
+ // Re-inserting the item with crop cannot be undone because history was pruned
+ f.api.emit({items:[...f.state.items,{...f.state.items[0],id:f.image,kind:'image',crop,annotations:[],mediaUrl:'appmedia://media/'+f.image,originalMediaUrl:'appmedia://media/'+f.image+'/original'}]});await f.ready();
+ await f.key('Space');await f.key('KeyZ',{ctrl:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,3);
+});
+
 test('canvas export failure blocks native Settings until explicit Save succeeds',async()=>{const f=fixture();await f.ready();await f.key('Space');await f.key('KeyC');await f.pointer('pointerdown',60,30);await f.pointer('pointermove',500,150);await f.pointer('pointerup',500,150);f.failExportOnce();await f.api.command('settings');await f.ready();assert.match(f.overlay,/id="markup-canvas"/);assert.doesNotMatch(f.main,/class="settings-main"/);await f.click('save-image');assert.equal(f.overlay,'');assert.match(f.main,/class="settings-main"/);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,{x:60,y:30,width:440,height:120});});
 
 test('Tab saves dirty image crop before switching the open preview; Enter copies the visible text',async()=>{
