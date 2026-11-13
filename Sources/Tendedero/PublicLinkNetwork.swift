@@ -367,23 +367,10 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     init(data: Data, url: URL, contentType: String = "") throws {
         guard data.count <= 512 * 1024 else { throw PublicLinkError.tooLarge }
         let source = Self.decode(data, contentType: contentType)
-        let html = Self.replacing(#"(?is)<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>"#, in: source, with: "")
-        let tags = try NSRegularExpression(pattern: #"(?is)<meta\b([^>]{0,8192})>"#)
-        let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)
-        var metadata: [String: String] = [:]
-        for tag in tags.matches(in: html, range: NSRange(html.startIndex..., in: html)).prefix(256) {
-            guard let range = Range(tag.range(at: 1), in: html) else { continue }
-            let raw = String(html[range]); var values: [String: String] = [:]
-            for attribute in attributes.matches(in: raw, range: NSRange(raw.startIndex..., in: raw)) {
-                guard let key = Range(attribute.range(at: 1), in: raw),
-                      let value = (2...4).compactMap({ Range(attribute.range(at: $0), in: raw) }).first else { continue }
-                values[String(raw[key]).lowercased()] = Self.entities(String(raw[value]))
-            }
-            if let key = values["property"] ?? values["name"], let value = values["content"], metadata[key.lowercased()] == nil { metadata[key.lowercased()] = String(value.prefix(2000)) }
-        }
-        let titleTag = try NSRegularExpression(pattern: #"(?is)<title\b[^>]*>(.{0,8192}?)</title\s*>"#)
-        let titleMatch = titleTag.firstMatch(in: html, range: NSRange(html.startIndex..., in: html))
-            .flatMap { Range($0.range(at: 1), in: html) }.map { Self.entities(Self.replacing(#"<[^>]*>"#, in: String(html[$0]), with: "")) }
+        let html = Self.sanitizeHTML(source)
+        let extracted = Self.metadata(in: html)
+        let metadata = extracted.values
+        let titleMatch = extracted.title.map { Self.entities(Self.stripTags($0)) }
         title = Self.clean(metadata["og:title"], limit: 500)
             ?? Self.clean(metadata["twitter:title"], limit: 500)
             ?? Self.clean(titleMatch, limit: 500)
@@ -428,6 +415,153 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     private static func replacing(_ pattern: String, in value: String, with replacement: String) -> String {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return value }
         return regex.stringByReplacingMatches(in: value, range: NSRange(value.startIndex..., in: value), withTemplate: replacement)
+    }
+    private enum HTMLTag: Equatable { case meta, title, script, style }
+    private struct TagStart { let tag: HTMLTag; let closing: Bool; let afterName: Int }
+    private static func asciiLower(_ byte: UInt8) -> UInt8 { (65...90).contains(byte) ? byte + 32 : byte }
+    private static func whitespace(_ byte: UInt8) -> Bool { byte == 9 || byte == 10 || byte == 12 || byte == 13 || byte == 32 }
+    private static func tagStart(_ bytes: [UInt8], at index: Int) -> TagStart? {
+        guard index < bytes.count, bytes[index] == 60 else { return nil }
+        var start = index + 1, closing = false
+        if start < bytes.count, bytes[start] == 47 { closing = true; start += 1 }
+        guard start < bytes.count, (65...90).contains(bytes[start]) || (97...122).contains(bytes[start]) else { return nil }
+        var end = start
+        while end < bytes.count, (65...90).contains(bytes[end]) || (97...122).contains(bytes[end]) {
+            end += 1
+            if end - start > 6 { return nil }
+        }
+        guard end < bytes.count, whitespace(bytes[end]) || bytes[end] == 47 || bytes[end] == 62 else { return nil }
+        let name = String(decoding: bytes[start..<end].map(asciiLower), as: UTF8.self)
+        let tag: HTMLTag
+        switch name {
+        case "meta": tag = .meta
+        case "title": tag = .title
+        case "script": tag = .script
+        case "style": tag = .style
+        default: return nil
+        }
+        return TagStart(tag: tag, closing: closing, afterName: end)
+    }
+    private static func tagEnd(_ bytes: [UInt8], from index: Int) -> Int? {
+        var quote: UInt8?
+        for cursor in index..<bytes.count {
+            let byte = bytes[cursor]
+            if let active = quote {
+                if byte == active { quote = nil }
+            } else if byte == 34 || byte == 39 { quote = byte }
+            else if byte == 62 { return cursor }
+        }
+        return nil
+    }
+    private static func closingTag(_ tag: HTMLTag, in bytes: [UInt8], from index: Int) -> (start: Int, end: Int)? {
+        var cursor = index
+        while cursor < bytes.count {
+            guard bytes[cursor] == 60, let candidate = tagStart(bytes, at: cursor), candidate.closing, candidate.tag == tag else {
+                cursor += 1; continue
+            }
+            if let end = tagEnd(bytes, from: candidate.afterName) { return (cursor, end) }
+            return nil
+        }
+        return nil
+    }
+    private static func sanitizeHTML(_ source: String) -> String {
+        let bytes = Array(source.utf8)
+        var output: [UInt8] = []; output.reserveCapacity(bytes.count)
+        var cursor = 0
+        while cursor < bytes.count {
+            guard bytes[cursor] == 60 else { output.append(bytes[cursor]); cursor += 1; continue }
+            if cursor + 3 < bytes.count, bytes[cursor...cursor+3].elementsEqual([60, 33, 45, 45]) {
+                var end = cursor + 4
+                while end + 2 < bytes.count && !bytes[end...end+2].elementsEqual([45, 45, 62]) { end += 1 }
+                guard end + 2 < bytes.count else { break }
+                cursor = end + 3; continue
+            }
+            guard let tag = tagStart(bytes, at: cursor), !tag.closing, tag.tag == .script || tag.tag == .style else {
+                output.append(bytes[cursor]); cursor += 1; continue
+            }
+            guard let openingEnd = tagEnd(bytes, from: tag.afterName),
+                  let closing = closingTag(tag.tag, in: bytes, from: openingEnd + 1) else { break }
+            cursor = closing.end + 1
+        }
+        return String(decoding: output, as: UTF8.self)
+    }
+    private static func attributes(_ bytes: [UInt8], from start: Int, through end: Int) -> [String: String] {
+        var result: [String: String] = [:], cursor = start
+        while cursor < end {
+            while cursor < end && (whitespace(bytes[cursor]) || bytes[cursor] == 47) { cursor += 1 }
+            let nameStart = cursor
+            while cursor < end && !whitespace(bytes[cursor]) && bytes[cursor] != 61 && bytes[cursor] != 47 { cursor += 1 }
+            if cursor == nameStart { cursor += 1; continue }
+            let name = String(decoding: bytes[nameStart..<cursor].map(asciiLower), as: UTF8.self)
+            while cursor < end && whitespace(bytes[cursor]) { cursor += 1 }
+            guard cursor < end, bytes[cursor] == 61 else { continue }
+            cursor += 1
+            while cursor < end && whitespace(bytes[cursor]) { cursor += 1 }
+            guard cursor < end else { break }
+            let quote = bytes[cursor] == 34 || bytes[cursor] == 39 ? bytes[cursor] : nil
+            if quote != nil { cursor += 1 }
+            let valueStart = cursor
+            if let quote {
+                while cursor < end && bytes[cursor] != quote { cursor += 1 }
+            } else {
+                while cursor < end && !whitespace(bytes[cursor]) && bytes[cursor] != 62 { cursor += 1 }
+            }
+            if ["property", "name", "content"].contains(name), cursor - valueStart <= 8192 {
+                result[name] = entities(String(decoding: bytes[valueStart..<cursor], as: UTF8.self))
+            }
+            if quote != nil && cursor < end { cursor += 1 }
+        }
+        return result
+    }
+    private static func metadata(in html: String) -> (values: [String: String], title: String?) {
+        let bytes = Array(html.utf8)
+        var values: [String: String] = [:], title: String?, metaCount = 0, cursor = 0
+        while cursor < bytes.count {
+            guard bytes[cursor] == 60, let tag = tagStart(bytes, at: cursor), !tag.closing else { cursor += 1; continue }
+            if tag.tag == .meta {
+                guard let end = tagEnd(bytes, from: tag.afterName) else { break }
+                if metaCount < 256 {
+                    let parsed = Self.attributes(bytes, from: tag.afterName, through: end)
+                    if let key = parsed["property"] ?? parsed["name"], let value = parsed["content"] {
+                        let normalized = key.lowercased()
+                        if values[normalized] == nil {
+                            let isImage = ["og:image:secure_url", "og:image", "twitter:image"].contains(normalized)
+                            values[normalized] = isImage ? value : String(value.prefix(2000))
+                        }
+                    }
+                }
+                metaCount += 1; cursor = end + 1; continue
+            }
+            if tag.tag == .title, title == nil {
+                guard let end = tagEnd(bytes, from: tag.afterName),
+                      let closing = closingTag(.title, in: bytes, from: end + 1) else { break }
+                title = String(decoding: bytes[(end + 1)..<closing.start].prefix(8192), as: UTF8.self)
+                cursor = closing.end + 1; continue
+            }
+            cursor += 1
+        }
+        return (values, title)
+    }
+    private static func stripTags(_ value: String) -> String {
+        let bytes = Array(value.utf8)
+        var output: [UInt8] = []; output.reserveCapacity(min(bytes.count, 32768))
+        var cursor = 0
+        while cursor < bytes.count && output.count < 32768 {
+            if bytes[cursor] == 60 {
+                let next = cursor + 1
+                let tagLike = next < bytes.count && ((65...90).contains(bytes[next]) || (97...122).contains(bytes[next]) ||
+                    (bytes[next] == 47 && next + 1 < bytes.count && ((65...90).contains(bytes[next + 1]) || (97...122).contains(bytes[next + 1]))) ||
+                    bytes[next] == 33 || bytes[next] == 63)
+                if tagLike, let end = tagEnd(bytes, from: next) { cursor = end + 1; continue }
+                output.append(bytes[cursor]); cursor += 1; continue
+            }
+            let byte = bytes[cursor]
+            let width = byte < 128 ? 1 : byte < 224 ? 2 : byte < 240 ? 3 : 4
+            guard output.count + width <= 32768 else { break }
+            output.append(contentsOf: bytes[cursor..<min(cursor + width, bytes.count)])
+            cursor += width
+        }
+        return String(decoding: output, as: UTF8.self)
     }
     private static func clean(_ value: String?, limit: Int) -> String? {
         guard let value else { return nil }
