@@ -537,3 +537,23 @@
 "This image could not be opened for markup." = "This image could not be opened for markup.";
 "Markup supports images up to 80 megapixels." = "Markup supports images up to 80 megapixels.";
 "The marked image could not be rendered." = "The marked image could not be rendered.";
+
+/* Area capture. */
+"Adjust area" = "Adjust area";
+"Color" = "Color";
+"Allow screen recording to capture an area" = "Allow screen recording to capture an area";
+"Another app is using this shortcut. Quit it or record a different one." = "Another app is using this shortcut. Quit it or record a different one.";
+"Another app may be using it, for example another screenshot tool." = "Another app may be using it, for example another screenshot tool.";
+"Capture an area" = "Capture an area";
+"Capture area" = "Capture area";
+"Dims the screen so you can drag out an area. Return or ⌘C copies it, ⌘S saves it as a PNG file, Esc cancels. Every capture also hangs on the line." = "Dims the screen so you can drag out an area. Return or ⌘C copies it, ⌘S saves it as a PNG file, Esc cancels. Every capture also hangs on the line.";
+"Drag to capture an area. Esc cancels." = "Drag to capture an area. Esc cancels.";
+"Open Screen Recording Settings" = "Open Screen Recording Settings";
+"Open System Settings" = "Open System Settings";
+"Save capture" = "Save capture";
+"Save…" = "Save…";
+"Screenshot" = "Screenshot";
+"The capture could not be saved" = "The capture could not be saved";
+"Turn on %@ in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen it." = "Turn on %@ in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen it.";
+"Use ⌘9" = "Use ⌘9";
+

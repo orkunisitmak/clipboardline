@@ -23,6 +23,7 @@ Images, text and links, close at hand. Keep recent copies on three shelves, save
 | Feature | What it does |
 | --- | --- |
 | **Three independent shelves** | Browse Images, Texts and Links as separate horizontal rows. Toggle each row, switch the active shelf, filter pinned items and scroll through older copies. Opening selects only the first available image; if Images is hidden or empty, the first available item in the next visible shelf is selected. |
+| **Area capture** | Press the capture shortcut (Settings offers ⌘9) to freeze and dim every display, drag out an area, then move or resize it. Draw arrows, rectangles, ellipses, lines, pen or marker strokes and text on it in eight colors (A, R, O, D, B, H, T; Shift for squares, circles and 45° lines; ⌘Z undoes). Return, ⌘C or a double click copies it to the clipboard as a PNG image; ⌘S saves it as a PNG file wherever you choose; Esc or a right click cancels. Every capture also hangs on the line. ⌘A takes the whole display; the arrow keys nudge the area. |
 | **Screenshot and clipboard capture** | Handle screenshots instantly, watch up to three additional image folders, and optionally collect copied images or text. Clipboard image and text collection are independent opt-ins. Text and link copies arrive silently without opening the shelves. |
 | **A local Library** | A normal resizable window with grid and column-based list views, a folder/tag sidebar and an auto-saving editable inspector. Create notes, edit titles and content, and organize images, text and links together. Full screen is optional. |
 | **Pin, name, file and tag** | Pin and favorite are one action. Pins, folder membership or tags retain an item beyond ordinary history expiry. Use nested virtual folders and multiple tags; name-and-pin supports a sequential batch workflow. |
@@ -49,6 +50,7 @@ This table lists macOS defaults. The complete [Windows keymap](#windows-default-
 | --- | --- | --- |
 | `⌃⌥T` | Show or hide shelves | Global; configurable in Settings. |
 | `⌃⌥S` | Open shelves with search focused | Global; configurable or off. |
+| `Off by default` | Capture an area globally | Settings offers ⌘9 or record your own. Dims every display so you can drag out an area; ↩/⌘C copies it, ⌘S saves a PNG, Esc cancels. Needs Screen Recording permission. |
 | `Off by default` | Open Library globally | Set your own shortcut; Settings offers ⌃⌥L. |
 | `Off by default` | Copy latest image globally | Set your own shortcut; presets include ⌃⌥C and ⌃⇧C. |
 
@@ -311,7 +313,7 @@ The historical 1.7.2 release was checked in actual Windows source, packaged and 
 | Capability | macOS | Windows |
 | --- | --- | --- |
 | Content shelves and Library | Native AppKit/SwiftUI; image/text/link shelves, grid/list, folders, tags and pins. | Transparent curved hanging shelves; a normal resizable Library window with unified toolbar, grid/list, folders, tags, pins, notes and toggled sidebar/inspector. |
-| Default global shortcuts | ⌃⌥T shelves; ⌃⌥S search. | Ctrl+Alt+T shelves; Ctrl+Alt+S search; Ctrl+Alt+A screen capture. Global Library and copy-latest-image shortcuts are configurable and off by default. |
+| Default global shortcuts | ⌃⌥T shelves; ⌃⌥S search. Area capture is configurable and off by default. | Ctrl+Alt+T shelves; Ctrl+Alt+S search; Ctrl+Alt+A screen capture. Global Library and copy-latest-image shortcuts are configurable and off by default. |
 | Local shortcut modifiers | Command (⌘) for app commands; Option (⌥) for naming/pages. | Control replaces Command; Alt replaces Option. Local and global bindings are configurable. |
 | Clipboard collection | Image/text opt-in; standalone-link capture defaults on and is configurable. | Image/text collection defaults off; standalone-link capture defaults on. Each can be changed in Sources; existing choices are preserved. Text and link capture stays silent. |
 | Search and OCR | Apple Vision OCR; optional original MobileCLIP-S2 semantic image search. | Local Tesseract English/Turkish OCR and original MobileCLIP-S2 semantic image search through ONNX/WASM. Library text/visual/combined modes and scoped filters work offline. |

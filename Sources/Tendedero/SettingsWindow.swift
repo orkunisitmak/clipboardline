@@ -34,6 +34,10 @@ final class SettingsModel: ObservableObject {
     var recordLibraryShortcut: () -> Void = {}
     var setSearchShortcut: (KeyShortcut?) -> Void = { _ in }
     var recordSearchShortcut: () -> Void = {}
+    var setCaptureShortcut: (KeyShortcut?) -> Void = { _ in }
+    var recordCaptureShortcut: () -> Void = {}
+    var captureShortcutRegistered: () -> Bool = { true }
+    var openScreenRecordingSettings: () -> Void = {}
     var requestPastePermission: () -> Void = {}
     var recordContextShortcut: (KeyboardAction) -> Void = { _ in }
     var openLibrary: () -> Void = {}
@@ -321,6 +325,19 @@ private struct SettingsView: View {
                     Label { Text(warning) } icon: { Image(systemName: "exclamationmark.triangle") }
                         .foregroundStyle(.orange).accessibilityIdentifier("shortcut-recording-warning")
                 }
+            }
+            Section(L("Capture an area")) {
+                LabeledContent(L("Shortcut")) { Text(line.captureAreaShortcut?.title ?? L("Off")).monospaced() }
+                HStack {
+                    Button(L("Use ⌘9")) { model.setCaptureShortcut(Line.standardCaptureAreaShortcut); model.refresh() }
+                    Button(L("Record shortcut…"), action: model.recordCaptureShortcut)
+                    Button(L("Off")) { model.setCaptureShortcut(nil); model.refresh() }
+                }
+                if line.captureAreaShortcut != nil && !model.captureShortcutRegistered() {
+                    Text(L("Another app is using this shortcut. Quit it or record a different one.")).font(.caption).foregroundStyle(.orange)
+                }
+                Text(L("Dims the screen so you can drag out an area. Return or ⌘C copies it, ⌘S saves it as a PNG file, Esc cancels. Every capture also hangs on the line.")).font(.caption).foregroundStyle(.secondary)
+                Button(L("Open Screen Recording Settings"), action: model.openScreenRecordingSettings)
             }
             Section(L("Search shelves from other apps")) {
                 LabeledContent(L("Shortcut")) { Text(line.globalSearchShortcut?.title ?? L("Off")).monospaced() }
