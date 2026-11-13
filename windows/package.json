@@ -86,6 +86,15 @@
         ]
       }
     ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": true,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": true
+    },
     "win": {
       "icon": "assets/clipboardline.ico",
       "target": [
