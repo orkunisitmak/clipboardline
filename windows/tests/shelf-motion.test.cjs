@@ -45,7 +45,28 @@ test('an unexpectedly canceled Web Animation settles the latest open layer inste
 test('changing reduced-motion preference settles the latest active transition immediately',async()=>{
  const f=fixture(),opening=f.controller.run({phase:'open'});f.motion.matches=true;f.motion.change();assert.deepEqual(await opening,{completed:true});assert.equal(f.animations[0].canceled,true);assert.equal(f.body.dataset.shelfMotion,undefined);
 });
-
+test('a warmed reveal rasters invisibly at its endpoint and slides only after the desktop fade',async()=>{
+ const animations=[],frames=[],waits=[],body={style:{},dataset:{},animate(keyframes,options){let resolve;const animation={keyframes,options,finished:new Promise(yes=>{resolve=yes;}),finish:()=>resolve(),cancel(){}};animations.push(animation);return animation;}};
+ const controller=new ShelfMotion({body,height:()=>800,computed:()=>({transform:'none'}),motion:{matches:false},frame:callback=>frames.push(callback),wait:(callback,ms)=>waits.push({callback,ms})});
+ await controller.run({phase:'prepare',hidden:true,warm:true});
+ assert.deepEqual([body.style.transform,body.style.opacity,body.style.willChange,body.dataset.shelfMotion],['translate3d(0,0,0)','0.002','transform, opacity','prepared'],'tiles raster at the final position while nothing is visible');
+ const opening=controller.run({phase:'open',after:200});
+ assert.equal(body.style.opacity,'0.002','the line stays warm until the window is presented');assert.equal(animations.length,0);assert.equal(body.dataset.shelfMotion,'prepared','only the moving line is opening');
+ frames.shift()();frames.shift()();assert.deepEqual(waits.map(value=>value.ms),[200]);assert.equal(animations.length,0);
+ waits[0].callback();assert.equal(body.dataset.shelfMotion,'opening');
+ assert.deepEqual(animations[0].keyframes,[{transform:'translate3d(0,-812px,0)',opacity:1},{transform:'translate3d(0,0,0)',opacity:1}]);
+ assert.deepEqual([body.style.transform,body.style.opacity,body.style.willChange],['translate3d(0,0,0)','0.002','transform, opacity'],'starting the reveal changes no inline style, so nothing repaints');
+ animations[0].finish();assert.deepEqual(await opening,{completed:true});assert.deepEqual([body.style.opacity,body.style.willChange,body.dataset.shelfMotion],['','',undefined]);
+ // A hide during the wait never shows the invisible endpoint.
+ await controller.run({phase:'prepare',hidden:true,warm:true});const canceled=controller.run({phase:'open',after:200});
+ const closing=controller.run({phase:'close'});assert.deepEqual(await canceled,{completed:false});
+ assert.deepEqual(animations.at(-1).keyframes,[{transform:'translate3d(0,-812px,0)'},{transform:'translate3d(0,-812px,0)'}]);assert.equal(body.style.opacity,'1');animations.at(-1).finish();await closing;
+ frames.splice(0).forEach(callback=>callback());frames.splice(0).forEach(callback=>callback());waits.splice(0).forEach(value=>value.callback());assert.equal(animations.length,2,'a stale delayed start does nothing');
+ // A hide during the reveal continues from the moving position, fully opaque.
+ await controller.run({phase:'prepare',hidden:true,warm:true});const interrupted=controller.run({phase:'open',after:200});frames.shift()();frames.shift()();waits.shift().callback();
+ const reversed=controller.run({phase:'close'});assert.deepEqual(await interrupted,{completed:false});assert.equal(body.style.opacity,'1','an interrupted reveal never falls back to the invisible endpoint');animations.at(-1).finish();await reversed;
+ let timeout;new MotionBridge(()=>{},{schedule:(callback,ms)=>{timeout=ms;return 1;},cancel:()=>{}}).request('open',{after:200});assert.equal(timeout,1620);
+});
 
 test('a renderer IPC send failure settles the motion without stranding a pending close',async()=>{
  const canceled=[],scheduled=[],bridge=new MotionBridge(()=>{throw new Error('Renderer was destroyed');},{schedule:(fn,ms)=>{scheduled.push({fn,ms});return 1;},cancel:id=>canceled.push(id)});

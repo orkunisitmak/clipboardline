@@ -133,6 +133,8 @@ class Store {
       try{protectDirectory(this.directory,{powershell,script});}
       catch(error){fail('The private application data permissions could not be secured. Existing files were preserved. '+protectionFailureDetail(error,this.directory));}
     }
+    // mkdirSync's mode applies only on creation; tighten an existing folder too.
+    else fs.chmodSync(this.directory,0o700);
     this.mediaDirectory = path.join(this.directory, 'media'); fs.mkdirSync(this.mediaDirectory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
     // Remove staging files a killed process left behind (putPNG '.png-' and putVideo '.video-'); exact names, regular files only.

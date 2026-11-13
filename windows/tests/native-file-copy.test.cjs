@@ -18,7 +18,7 @@ async function restoringClipboard(directory, run) {
   }
 }
 
-test('a source removed before native copy returns a rejected Promise, not a synchronous exception', async () => {
+test('a source removed before native copy returns a rejected Promise, not a synchronous exception', {skip:process.platform!=='win32'}, async () => {
   const missing = path.join(os.tmpdir(), 'clipboardline-removed-copy-source-00000000.png');
   let promise;
   assert.doesNotThrow(() => {

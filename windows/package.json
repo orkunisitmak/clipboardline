@@ -1,16 +1,21 @@
 {
   "name": "clipboardline-desktop",
   "version": "1.7.9",
-  "description": "Keyboard-first local clipboard shelves and saved library for Windows",
+  "description": "Keyboard-first local clipboard shelves and saved library for Windows and Linux",
   "author": "ClipBoardLine contributors",
+  "homepage": "https://github.com/orkunisitmak/clipboardline",
   "license": "MIT",
   "private": true,
   "main": "main.cjs",
+  "desktopName": "clipboardline.desktop",
   "scripts": {
     "start": "electron .",
     "test": "node --test --test-concurrency=1 tests/*.test.cjs",
     "test:electron": "node tests/electron-smoke.cjs",
-    "dist": "electron-builder --win nsis --x64 --publish never"
+    "test:linux": "node tests/linux-electron-smoke.cjs",
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "dist:linux": "electron-builder --linux AppImage deb rpm pacman --x64 --publish never",
+    "dist:linux-dir": "electron-builder --linux dir --x64 --publish never"
   },
   "dependencies": {
     "@tesseract.js-data/eng": "1.0.0",
@@ -45,7 +50,8 @@
       "assets/**/*",
       "search-model-config.json",
       "package.json",
-      "!assets/CLIP/**"
+      "!assets/CLIP/**",
+      "!assets/linux-icons/**"
     ],
     "extraResources": [
       {
@@ -107,11 +113,130 @@
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": false
     },
+    "linux": {
+      "icon": "assets/linux-icons",
+      "executableName": "clipboardline",
+      "category": "Utility",
+      "synopsis": "Keyboard-first clipboard shelves",
+      "maintainer": "ClipBoardLine contributors",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "pacman",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "ClipBoardLine-${version}-linux-${arch}.${ext}",
+      "desktop": {
+        "entry": {
+          "Name": "ClipBoardLine",
+          "StartupWMClass": "clipboardline",
+          "Keywords": "clipboard;history;paste;shelf;",
+          "StartupNotify": "false",
+          "Actions": "Toggle;Search;Library;"
+        },
+        "desktopActions": {
+          "Toggle": {
+            "Name": "Show or Hide Shelves",
+            "Exec": "clipboardline --toggle"
+          },
+          "Search": {
+            "Name": "Search Shelves",
+            "Exec": "clipboardline --search"
+          },
+          "Library": {
+            "Name": "Open Library",
+            "Exec": "clipboardline --library"
+          }
+        }
+      },
+      "syncDesktopName": true
+    },
+    "deb": {
+      "afterRemove": "scripts/linux-after-remove.sh",
+      "depends": [
+        "libgtk-3-0",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "wl-clipboard | xclip"
+      ],
+      "recommends": [
+        "libappindicator3-1",
+        "wl-clipboard",
+        "xclip",
+        "xdotool",
+        "ydotool",
+        "ffmpeg"
+      ]
+    },
+    "rpm": {
+      "afterRemove": "scripts/linux-after-remove.sh",
+      "fpm": [
+        "--rpm-tag",
+        "Recommends: wl-clipboard",
+        "--rpm-tag",
+        "Recommends: xclip",
+        "--rpm-tag",
+        "Suggests: xdotool",
+        "--rpm-tag",
+        "Suggests: ydotool",
+        "--rpm-tag",
+        "Suggests: ffmpeg-free"
+      ],
+      "depends": [
+        "gtk3",
+        "nss",
+        "libXScrnSaver",
+        "libXtst",
+        "xdg-utils",
+        "at-spi2-core",
+        "libuuid",
+        "(wl-clipboard or xclip)"
+      ]
+    },
+    "pacman": {
+      "depends": [
+        "gtk3",
+        "nss",
+        "libxss",
+        "libxtst",
+        "xdg-utils",
+        "at-spi2-core",
+        "util-linux-libs",
+        "libsecret",
+        "wl-clipboard"
+      ]
+    },
     "asarUnpack": [
       "lib/*.cjs",
       "node_modules/onnxruntime-web/**",
       "node_modules/onnxruntime-common/**"
     ]
   },
-  "clipboardLineBuild": 72
+  "clipboardLineBuild": 72,
+  "clipboardLineLinuxBuild": 1
 }

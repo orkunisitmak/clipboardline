@@ -1,0 +1,25 @@
+[Desktop Entry]
+Type=Application
+Name=ClipBoardLine
+GenericName=Clipboard Manager
+Comment=Keyboard-first local clipboard shelves and saved library
+Exec=clipboardline
+Icon=clipboardline
+Terminal=false
+Categories=Utility;
+Keywords=clipboard;history;paste;shelf;
+StartupWMClass=clipboardline
+StartupNotify=false
+Actions=Toggle;Search;Library;
+
+[Desktop Action Toggle]
+Name=Show or Hide Shelves
+Exec=clipboardline --toggle
+
+[Desktop Action Search]
+Name=Search Shelves
+Exec=clipboardline --search
+
+[Desktop Action Library]
+Name=Open Library
+Exec=clipboardline --library
