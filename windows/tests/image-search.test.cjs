@@ -39,7 +39,7 @@ test('image preprocessing uses the same sliver limits, neutral letterbox and up 
 });
 
 class FakeWorker extends EventEmitter{
- constructor(){super();this.messages=[];this.response=null;queueMicrotask(()=>this.emit('message',{event:'ready',available:true}));}
+ constructor(autoReady=true){super();this.messages=[];this.response=null;if(autoReady)queueMicrotask(()=>this.emit('message',{event:'ready',available:true}));}
  postMessage(message){this.messages.push(message);const reply=this.response?.(message);if(reply==='__hold__')return;queueMicrotask(()=>this.emit('message',{id:message.id,result:reply??(message.action==='search'?{ids:[],scores:[]}:true)}));}
  unref(){}async terminate(){this.terminated=true;}
 }
@@ -126,4 +126,128 @@ test('shared image cache miss reassigns indexing to the surviving duplicate reco
  assert.equal(f.search.known.has(key),true);
  assert.equal(f.search.state.indexing,false);
  await f.search.stop();
+});
+
+test('idle worker hibernates after ONNX inference to reclaim memory and respawns on demand',async()=>{
+ const workers=[];
+ const records=[{id,kind:'image',imageFile:key+'.png'}];
+ const search=new ImageSearch({
+  modelDirectory:'unused',
+  cacheDirectory:'unused',
+  idleTimeoutMs:20,
+  items:()=>records,
+  readImage:()=>({bitmap:new Uint8Array(128*128*4),width:128,height:128}),
+  workerFactory:()=>{const w=new FakeWorker();w.response=m=>m.action==='has'?false:m.action==='search'?{ids:[id],scores:[{id,score:.91}]}:true;workers.push(w);return w;}
+ });
+ await search.ready;
+ assert.equal(workers.length,1);
+ search.refresh();
+ for(let i=0;i<10;i++)await tick();
+ assert.equal(search.known.has(key),true);
+ await new Promise(resolve=>setTimeout(resolve,45));
+ assert.equal(workers[0].terminated,true,'idle worker must terminate to release WASM memory');
+ assert.equal(search.worker,null);
+ assert.equal(search.state.available,true);
+ const result=await search.search('red square',[id]);
+ assert.equal(workers.length,2,'search must transparently respawn worker');
+ assert.deepEqual(result.ids,[id]);
+ await search.stop();
+});
+
+test('requests arriving while a hibernated worker respawns wait for its ready event before posting or starting a timeout',async()=>{
+ const workers=[],timeouts=[];
+ const originalSetTimeout=global.setTimeout;
+ global.setTimeout=(...args)=>{
+  if(args[1]===120000)timeouts.push(args);
+  return originalSetTimeout(...args);
+ };
+ const search=new ImageSearch({
+  modelDirectory:'unused',
+  cacheDirectory:'unused',
+  idleTimeoutMs:20,
+  items:()=>[],
+  readImage:()=>null,
+  workerFactory:()=>{const w=new FakeWorker(workers.length===0);workers.push(w);return w;}
+ });
+ try{
+  await search.ready;
+  await search.search('warm',[]);
+  await new Promise(resolve=>setTimeout(resolve,45));
+  assert.equal(workers[0].terminated,true);
+  assert.equal(search.worker,null);
+  timeouts.length=0;
+  const first=search.search('red square',[]),second=search.search('blue circle',[]);
+  for(let i=0;i<10;i++)await tick();
+  assert.equal(workers.length,2,'concurrent requests must share one respawned worker');
+  assert.deepEqual(workers[1].messages,[],'no request may be posted before the respawned worker is ready');
+  assert.equal(timeouts.length,0,'no 120-second request timer may start before the worker is ready');
+  assert.equal(search.requests.size,0);
+  workers[1].response=()=>'__hold__';
+  workers[1].emit('message',{event:'ready',available:true});
+  for(let i=0;i<10;i++)await tick();
+  assert.equal(timeouts.length,2,'both request timers start only after the worker emits its ready event');
+  assert.equal(search.requests.size,2);
+  for(const pending of search.requests.values())assert.ok(pending.timer);
+  for(const message of workers[1].messages)workers[1].emit('message',{id:message.id,result:{ids:[],scores:[]}});
+  assert.deepEqual(await Promise.all([first,second]),[{ids:[],scores:[],available:true,indexing:false},{ids:[],scores:[],available:true,indexing:false}]);
+  assert.equal(search.requests.size,0);
+  assert.deepEqual(workers[1].messages.filter(value=>value.action==='search').map(value=>value.payload.query),['red square','blue circle']);
+ }finally{
+  global.setTimeout=originalSetTimeout;
+  await search.stop();
+ }
+});
+
+test('real worker writes cached embedding before hibernation and respawned worker scores from disk cache',async()=>{
+ const crypto=require('node:crypto');
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-hibernate-cache-'));
+ const modelDirectory=path.join(directory,'models'),cacheDirectory=path.join(directory,'cache'),ortModule=path.join(directory,'mock-ort.cjs');
+ fs.mkdirSync(modelDirectory,{recursive:true});
+ const assetFiles={
+  'mobileclip-s2-image.onnx':'synthetic-image-model',
+  'mobileclip-s2-text.onnx':'synthetic-text-model',
+  'clip-vocab.json':JSON.stringify({'red</w>':11,'square</w>':12}),
+  'clip-merges.txt':'#version\nr e\nre d</w>\n',
+  'model-source.json':JSON.stringify({version:'synthetic-v1'})
+ };
+ const filesConfig={};
+ for(const [name,content]of Object.entries(assetFiles)){
+  const file=path.join(modelDirectory,name);
+  fs.writeFileSync(file,content);
+  const bytes=Buffer.byteLength(content),sha256=crypto.createHash('sha256').update(content).digest('hex');
+  filesConfig[name]={bytes,sha256};
+ }
+ fs.writeFileSync(ortModule,`'use strict';
+class Tensor{constructor(type,data,dims){this.type=type;this.data=data;this.dims=dims;}dispose(){}}
+const InferenceSession={async create(){return{outputNames:['embedding'],async run(){const data=new Float32Array(512);data[0]=1;return{embedding:new Tensor('float32',data,[1,512])};},async release(){}};}};
+module.exports={Tensor,InferenceSession,env:{logLevel:'error',wasm:{}}};
+`);
+ const records=[{id,kind:'image',imageFile:key+'.png'}];
+ let reads=0;
+ const search=new ImageSearch({
+  modelDirectory,
+  cacheDirectory,
+  ortModule,
+  modelConfig:{schemaVersion:1,version:'synthetic-v1',files:filesConfig},
+  idleTimeoutMs:40,
+  items:()=>records,
+  readImage:()=>{reads++;const bitmap=new Uint8Array(256*256*4);bitmap.fill(200);return{bitmap,width:256,height:256};}
+ });
+ try{
+  assert.equal(await search.ready,true);
+  search.refresh();
+  for(let i=0;i<40&&!search.known.has(key);i++)await new Promise(resolve=>setTimeout(resolve,15));
+  assert.equal(search.known.has(key),true);
+  assert.equal(reads,1);
+  assert.equal(fs.existsSync(path.join(cacheDirectory,key+'.bin')),true,'first worker must persist embedding to cacheDirectory');
+  for(let i=0;i<20&&search.worker!==null;i++)await new Promise(resolve=>setTimeout(resolve,15));
+  assert.equal(search.worker,null,'real worker must hibernate after indexing');
+  const result=await search.search('red square',[id]);
+  assert.equal(reads,1,'respawned worker must load cached embedding from disk without re-reading pixels');
+  assert.deepEqual(result.ids,[id]);
+  assert.ok(Math.abs(result.scores[0].score-1)<1e-5);
+ }finally{
+  await search.stop();
+  fs.rmSync(directory,{recursive:true,force:true});
+ }
 });
