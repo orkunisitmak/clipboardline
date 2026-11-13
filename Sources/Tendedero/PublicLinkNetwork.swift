@@ -471,6 +471,8 @@ private struct HTMLText {
 
     private static let comment = Array("<!--".utf8), commentEnd = Array("-->".utf8), script = Array("<script".utf8),
         style = Array("<style".utf8), meta = Array("<meta".utf8), title = Array("<title".utf8), less = Array("<".utf8), greater = Array(">".utf8)
+    /// Built once: a literal inside the scan loop would allocate a new array for every `<` on the page.
+    private static let rawTextElements: [(tag: [UInt8], name: String)] = [(Self.script, "script"), (Self.style, "style")]
 
     func removingCommentsScriptsAndStyles() -> HTMLText {
         var kept: [Unicode.Scalar] = [], copied = 0, index = 0
@@ -481,7 +483,7 @@ private struct HTMLText {
             if starts(Self.comment, at: open) {
                 end = commentClose.next(from: open + 4) { from in first(Self.commentEnd, from: from).map { $0..<$0 + 3 } }?.upperBound
             } else {
-                for (name, element) in [(Self.script, "script"), (Self.style, "style")] where starts(name, at: open) && endsWord(at: open + name.count) {
+                for (name, element) in Self.rawTextElements where starts(name, at: open) && endsWord(at: open + name.count) {
                     if let tag = tagClose.next(from: open + name.count, { from in first(Self.greater, from: from).map { $0..<$0 + 1 } }) {
                         end = element == "script" ? scriptClose.next(from: tag.upperBound) { closing("script", from: $0) }?.upperBound
                             : styleClose.next(from: tag.upperBound) { closing("style", from: $0) }?.upperBound

@@ -200,8 +200,9 @@ import XCTest
         for page in pages {
             let start = Date()
             _ = try PublicLinkHTMLMetadata(data: Data(page.utf8), url: url)
-            // The quadratic patterns took seconds at 32 KiB and minutes at this size; a linear scan takes milliseconds.
-            XCTAssertLessThan(Date().timeIntervalSince(start), 2, String(page.prefix(12)))
+            // The quadratic patterns took seconds at 32 KiB and minutes at this size. A linear scan stays well under the bound
+            // even in an unoptimized test build on a shared CI runner, where 512 KiB of `<` took about 2 seconds.
+            XCTAssertLessThan(Date().timeIntervalSince(start), 10, String(page.prefix(12)))
         }
     }
 
