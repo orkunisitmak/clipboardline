@@ -1043,13 +1043,14 @@ final class Line: ObservableObject {
     /// of that folder. If the Trash refuses it, it still leaves the line.
     /// Moves along a line that holds more than fit, from a scroll gesture.
     /// Inbox mode: keep a screenshot by moving it to the Desktop.
-    func saveToDesktop(_ id: UUID) {
+    func saveToDesktop(_ id: UUID, desktop: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")) {
         guard onFlushPreview() else { return }
         guard let item = items.first(where: { $0.id == id }) else { return }
-        let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
         let target = uniqueURL(in: desktop, for: item.url.lastPathComponent)
         do {
-            try FileManager.default.moveItem(at: item.url, to: target)
+            // With the Library the record keeps pointing at the app's file, so it is copied, not moved.
+            if library != nil { try FileManager.default.copyItem(at: item.url, to: target) }
+            else { try FileManager.default.moveItem(at: item.url, to: target) }
             drop(id, quietly: true)
         } catch {
             log.error("Could not save to Desktop: \(error.localizedDescription, privacy: .public)")
