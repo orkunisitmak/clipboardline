@@ -191,6 +191,17 @@ import XCTest
         let html = "<meta property='og:image:secure_url' content='http://public.example.org/secure.png'><meta property='og:image' content='/a.png'>"
         XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url).thumbnailURL?.absoluteString, "https://public.example.org/a.png")
     }
+
+    func testUnclosedCommentRunsToTheEndAndQuotedCommentStartKeepsTheThumbnail() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        for hidden in ["<!-- <div><meta property='og:image' content='https://public.example.org/hidden.png'>", "<!-- a > b <meta property='og:image' content='https://public.example.org/hidden.png'>"] {
+            XCTAssertNil(try PublicLinkHTMLMetadata(data: Data(hidden.utf8), url: url).thumbnailURL)
+        }
+        let empty = try PublicLinkHTMLMetadata(data: Data("<!--><meta property='og:image' content='https://public.example.org/real.png'>".utf8), url: url)
+        XCTAssertEqual(empty.thumbnailURL?.absoluteString, "https://public.example.org/real.png")
+        let quoted = try PublicLinkHTMLMetadata(data: Data("<meta name='description' content='a <!-- b'><meta property='og:image' content='https://public.example.org/real.png'>".utf8), url: url)
+        XCTAssertEqual(quoted.thumbnailURL?.absoluteString, "https://public.example.org/real.png")
+    }
 }
 
 #if !STANDALONE_TESTS
