@@ -137,6 +137,7 @@ enum HistoryTestRunner {
         let tests = ImageHistoryTests()
         let settings = SettingsTests()
         let favorites = FavoritesTests()
+        let captureCopy = CaptureCopyTests()
         let textZoom = TextAndZoomTests()
         let unifiedMarkup = UnifiedMarkupToolbarTests()
         let textDedupStore = TextDedupStoreTests()
@@ -636,6 +637,8 @@ enum HistoryTestRunner {
             ("testClearPersistsAndDoesNotReimportOrphans", tests.testClearPersistsAndDoesNotReimportOrphans),
             ("testNestedClipboardNamesAreNotDeleted", tests.testNestedClipboardNamesAreNotDeleted),
             ("testSettingsOfferEveryDurationAndPersistSelection", tests.testSettingsOfferEveryDurationAndPersistSelection),
+            ("testNewCaptureCopiesOnlyWhenEnabled", captureCopy.testNewCaptureCopiesOnlyWhenEnabled),
+            ("testSettingSurvivesRestart", captureCopy.testSettingSurvivesRestart),
             ("testPinnedClipboardSurvivesExpiryAndRestart", favorites.testPinnedClipboardSurvivesExpiryAndRestart),
             ("testExternalPinCreatesPrivateCopyAndPreservesOriginal", favorites.testExternalPinCreatesPrivateCopyAndPreservesOriginal),
             ("testFavoritesFilterAndClearPreservePins", favorites.testFavoritesFilterAndClearPreservePins),

@@ -846,6 +846,14 @@ final class Line: ObservableObject {
         set { defaults.set(!newValue, forKey: "soundOff") }
     }
 
+    /// A new screenshot, or a new image in a watched folder, also goes to the
+    /// clipboard so it pastes right after the capture. Off out of the box,
+    /// because it replaces what the clipboard held.
+    var copiesNewCaptures: Bool {
+        get { defaults.bool(forKey: "copyNewCaptures") }
+        set { defaults.set(newValue, forKey: "copyNewCaptures") }
+    }
+
     var liveCount: Int { items.filter { !$0.falling }.count }
 
     init(defaults: UserDefaults = .standard, inbox: URL = Inbox.folder,
@@ -905,6 +913,15 @@ final class Line: ObservableObject {
         setScrollOffset(0)
         if !quietly { play("Tink", volume: 0.35) }
         return item.id
+    }
+
+    /// Hangs a capture that just arrived from the screenshot or a watched
+    /// folder. With copiesNewCaptures on, a still image is copied as well;
+    /// recordings only hang.
+    @discardableResult func hangCapture(_ url: URL, flying: Bool = false) -> UUID? {
+        guard let id = hang(url, flying: flying) else { return nil }
+        if copiesNewCaptures, !isRecordingFile(url) { copy(id) }
+        return id
     }
 
     /// The capture has reached the line: the real card takes over.

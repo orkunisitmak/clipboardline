@@ -63,6 +63,7 @@
 "Folders" = "Folders";
 "General" = "General";
 "Handle screenshots" = "Ekran şəkillərini idarə et";
+"Copy new screenshots to the clipboard" = "Yeni ekran görüntülərini panoya kopyala";
 "Hang copied images" = "Kopyalanmış şəkilləri as";
 "Hang copied text" = "Hang copied text";
 "Hide line" = "İpi gizlət";

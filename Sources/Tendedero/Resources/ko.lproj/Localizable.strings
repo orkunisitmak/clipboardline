@@ -63,6 +63,7 @@
 "Folders" = "Folders";
 "General" = "General";
 "Handle screenshots" = "스크린샷 관리";
+"Copy new screenshots to the clipboard" = "새 스크린샷을 클립보드에 복사";
 "Hang copied images" = "복사한 이미지 걸기";
 "Hang copied text" = "Hang copied text";
 "Hide line" = "빨랫줄 가리기";

@@ -267,6 +267,7 @@ private struct SettingsView: View {
             Section {
                 Toggle(L("Handle screenshots"), isOn: model.binding(get: { Inbox.isEnabled }, set: model.setScreenshots))
                     .disabled(!model.allowsSystemChanges)
+                Toggle(L("Copy new screenshots to the clipboard"), isOn: model.binding(get: { line.copiesNewCaptures }, set: { line.copiesNewCaptures = $0 }))
             } header: { Text(L("Screenshots")) } footer: {
                 Text(L("Screenshots hang instantly and skip the Desktop. Your macOS screenshot settings are restored when the app quits."))
             }

@@ -504,7 +504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// place on the line. Without a known capture area it simply drops in.
     private func hangCapture(_ url: URL) {
         guard line.presentation.shelves.contains(.images) else {
-            line.hang(url)
+            line.hangCapture(url)
             return
         }
         if !isRevealed && Self.peeksAtNew && !isPasting {
@@ -524,7 +524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // the new one flies in.
         let wasRevealed = isRevealed
         comeDown(on: screen)
-        guard let id = line.hang(url, flying: from != nil) else {
+        guard let id = line.hangCapture(url, flying: from != nil) else {
             // Nothing hung after all, so an empty line goes away again.
             itemsChanged()
             return

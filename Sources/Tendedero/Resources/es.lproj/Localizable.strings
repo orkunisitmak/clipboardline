@@ -63,6 +63,7 @@
 "Folders" = "Folders";
 "General" = "General";
 "Handle screenshots" = "Encargarse de las capturas";
+"Copy new screenshots to the clipboard" = "Copiar las capturas nuevas al portapapeles";
 "Hang copied images" = "Colgar imágenes copiadas";
 "Hang copied text" = "Colgar texto copiado";
 "Hide line" = "Ocultar tendedero";

@@ -63,6 +63,7 @@
 "Folders" = "Folders";
 "General" = "General";
 "Handle screenshots" = "スクリーンショットを任せる";
+"Copy new screenshots to the clipboard" = "新しいスクリーンショットをクリップボードにコピー";
 "Hang copied images" = "コピーした画像を吊るす";
 "Hang copied text" = "Hang copied text";
 "Hide line" = "ロープを非表示";

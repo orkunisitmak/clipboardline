@@ -63,6 +63,7 @@
 "Folders" = "Folders";
 "General" = "General";
 "Handle screenshots" = "接管截图";
+"Copy new screenshots to the clipboard" = "将新截图拷贝到剪贴板";
 "Hang copied images" = "挂上复制的图片";
 "Hang copied text" = "挂起复制的文本";
 "Hide line" = "隐藏晾衣绳";
