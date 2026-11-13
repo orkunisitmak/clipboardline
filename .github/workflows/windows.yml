@@ -43,6 +43,10 @@ jobs:
           npm test
         env:
           CLIPBOARDLINE_PARITY_REPORT: validation/parity/windows.json
+      - name: Install Chromium for Library keyboard acceptance
+        run: npx playwright install chromium
+      - name: Run Library keyboard browser regression
+        run: npm run test:library-keyboard
       - name: Real Windows Electron runtime acceptance
         run: npm run test:electron
         env:
