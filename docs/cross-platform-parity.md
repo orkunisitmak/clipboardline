@@ -29,7 +29,7 @@ versioned behavioral specification. Its synthetic items use portable aliases and
 are listed newest first. Every step contains an expected active row, focused
 item, complete selection, visible rows and native search-editing state.
 
-The current sixteen scenarios (95 observations per platform) cover one selected image on opening, reopening,
+The current seventeen scenarios (102 observations per platform) cover one selected image on opening, reopening,
 hidden/empty/filtered image fallback, column-preserving vertical navigation and
 clamping, hidden/empty row skipping, horizontal navigation, adding and hiding
 rows, search caret keys, empty shelves, remapping, disabling and restoring defaults,
@@ -41,6 +41,10 @@ panel and checks recorded vectors and composited pixels; a control view verifies
 window-level delivery in the test process. The canvas accepts first mouse during
 markup/crop so a non-key preview can draw. Windows uses its existing renderer
 pointer handlers and has no AppKit first-mouse gate.
+The
+`tracking-parameter-links` scenario copies links through the real stores
+(`LibraryStore.captureLink`, `Store.insert`); its `copyLink` steps report which stored
+link (numbered by first appearance) the copy resolved to and that link's stored address.
 A future user-visible change must add
 or amend the relevant scenarios and both adapters in the same change. Extend the
 contract's scope as the product grows; passing the current shelf scenarios is not
@@ -62,6 +66,10 @@ declared character set (byte-order mark, `Content-Type`, XHTML declaration, earl
 Turkish letters.
 `image-recopy-dedupe` requires copying the same image again to keep one Library item,
 moved to the front with its pin, name, tags and folders.
+`link-tracking-parameters` requires a link copied again with different `utm_*`,
+`fbclid` or `gclid` parameters to be the same item, keeping its first stored address,
+while any other query parameter or fragment makes a separate item; both adapters
+run the `tracking-parameter-links` scenario.
 `mixed-selection-pin` requires Pin on a
 selection of pinned and unpinned items to pin all of them, and to unpin only
 when every selected item is already pinned; the Library keyboard contract executes

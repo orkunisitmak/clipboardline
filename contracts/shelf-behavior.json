@@ -78,6 +78,12 @@
         "windows": "Store.insert matches a live image by its managed PNG hash and moves it to the front; model.test.cjs 'exact image recopy moves the image in front of another image and preserves saved organization' covers it."
       },
       {
+        "id": "link-tracking-parameters",
+        "behavior": "Copying a link again that differs only by tracking query parameters (names starting with utm_, fbclid or gclid, in any letter case) is the same item: it is refreshed and keeps its first stored address, and links whose other parameters or fragment differ stay separate.",
+        "macos": "LinkIdentity.normalized drops those parameters before LibraryStore.captureLink matches an existing item; CrossPlatformBehaviorContractTests runs the tracking-parameter-links scenario through LibraryStore.captureLink, and LibraryStoreTests.testLinkIdentityPreservesMeaningfulParametersAndDeduplicatesVideoForms covers it.",
+        "windows": "linkIdentity in lib/model.cjs applies the same rule when Store.insert matches an existing link, and merges older duplicates whose name and note do not clash into the kept item, which takes the oldest stored address; renderer-ui.test.cjs runs the tracking-parameter-links scenario through Store.insert, and model.test.cjs covers it."
+      },
+      {
         "id": "mixed-selection-pin",
         "behavior": "Pin on a selection that contains both pinned and unpinned items pins every item; only a selection that is already fully pinned unpins.",
         "macos": "LibraryStore.toggleFavorite and Line.pinActiveSelection compute one target for the whole selection, matching the action bar, which offers Unpin only when every selected item is pinned; LibraryKeyboardContractTests runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json.",
@@ -1973,6 +1979,88 @@
             ],
             "searchEditing": false,
             "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "tracking-parameter-links",
+      "itemSet": "empty",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7&utm_source=news",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?fbclid=x&id=7&GCLID=y&UTM_Campaign=z",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=8",
+          "expect": {
+            "link": {
+              "item": "link-2",
+              "address": "https://example.com/a?id=8"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7&ref=x",
+          "expect": {
+            "link": {
+              "item": "link-3",
+              "address": "https://example.com/a?id=7&ref=x"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7#top",
+          "expect": {
+            "link": {
+              "item": "link-4",
+              "address": "https://example.com/a?id=7#top"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?utm_medium=mail&id=7",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
           }
         }
       ]
