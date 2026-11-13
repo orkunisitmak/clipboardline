@@ -64,7 +64,7 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
  async function pointer(type,x,y){const target=document.getElementById('markup-canvas');for(const listener of listeners.get(type)||[])listener({target,clientX:x,clientY:y,pointerId:1,shiftKey:false,preventDefault(){}});await ready();}
  async function input(id,value){const target=document.getElementById(id);target.value=value;target.selectionStart=value.length;for(const listener of listeners.get('input')||[])await listener({target});await ready();}
  async function change(id,value){const target=document.getElementById(id);target.value=value;for(const listener of listeners.get('change')||[])await listener({target});await ready();}
- return{async cardClick(id,{ctrl=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;for(const listener of listeners.get('click')||[])await listener({target:card,ctrlKey:ctrl,metaKey:false,shiftKey:false,stopPropagation(){}});await ready();},grid(columns){document.querySelectorAll=selector=>selector==='.library-grid > .card'?[...document.getElementById('app').innerHTML.matchAll(/<article class="[^"]*"[^>]*data-item-id="([^"]+)"/g)].map((match,index)=>({offsetTop:Math.floor(index/columns)*200,dataset:{itemId:match[1]}})):[];},editor(id){const node=document.getElementById(id);node.tagName='INPUT';node.matches=selector=>selector.includes('input');return node;},ready,key,input,change,click,pointer,async blur(){for(const listener of listeners.get('window:blur')||[])listener();await ready();},imageLoads,paintCalls,animationFrames,flushAnimationFrames(){for(const fn of animationFrames.splice(0))fn();},releaseInitialState(){releaseInitialState?.();},deferReply(action){let release;const promise=new Promise(resolve=>{release=resolve;});delayedReply={action,promise};return release;},deferImageBroadcast({surface=true}={}){deferredImageBroadcast={surface};},releaseImageBroadcast(){const next=pendingImageBroadcast;pendingImageBroadcast=null;if(next)subscriber?.(next);},failExportOnce(){exportFailures++;},failCleanupOnce(){cleanupFailures++;},failEditOnce(){editFailures++;},state,commands,nodes,image,text1,text2,link,api,get main(){return nodes.get('app').innerHTML;},get overlay(){return nodes.get('overlay-root').innerHTML;}};
+ return{async cardContextMenu(id,{child=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;const inner=new Element();inner.closest=card.closest;const event={target:child?inner:card,preventDefault(){this.prevented=true;}};for(const listener of listeners.get('contextmenu')||[])await listener(event);await ready();return event;},async cardClick(id,{ctrl=false,shift=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;for(const listener of listeners.get('click')||[])await listener({target:card,ctrlKey:ctrl,metaKey:false,shiftKey:shift,stopPropagation(){}});await ready();},grid(columns){document.querySelectorAll=selector=>selector==='.library-grid > .card'?[...document.getElementById('app').innerHTML.matchAll(/<article class="[^"]*"[^>]*data-item-id="([^"]+)"/g)].map((match,index)=>({offsetTop:Math.floor(index/columns)*200,dataset:{itemId:match[1]}})):[];},editor(id){const node=document.getElementById(id);node.tagName='INPUT';node.matches=selector=>selector.includes('input');return node;},ready,key,input,change,click,pointer,async blur(){for(const listener of listeners.get('window:blur')||[])listener();await ready();},imageLoads,paintCalls,animationFrames,flushAnimationFrames(){for(const fn of animationFrames.splice(0))fn();},releaseInitialState(){releaseInitialState?.();},deferReply(action){let release;const promise=new Promise(resolve=>{release=resolve;});delayedReply={action,promise};return release;},deferImageBroadcast({surface=true}={}){deferredImageBroadcast={surface};},releaseImageBroadcast(){const next=pendingImageBroadcast;pendingImageBroadcast=null;if(next)subscriber?.(next);},failExportOnce(){exportFailures++;},failCleanupOnce(){cleanupFailures++;},failEditOnce(){editFailures++;},state,commands,nodes,image,text1,text2,link,api,get main(){return nodes.get('app').innerHTML;},get overlay(){return nodes.get('overlay-root').innerHTML;}};
 }
 
 function selectedCards(f){return [...f.main.matchAll(/<article class="([^"]*)"[^>]*data-item-id="([^"]+)"/g)].filter(match=>match[1].split(' ').includes('selected')).map(match=>match[2]);}
@@ -789,6 +789,43 @@ test('the Move to Trash confirmation uses the shared localized catalog entry',as
  assert.match(f.overlay,/1 içerik geri alınabilir Çöp’e taşınsın mı\?/);
  f.api.emit({settings:{...f.state.settings,language:'en'}});await f.click('close-modal');await f.click('trash');
  assert.match(f.overlay,/Move 1 items to recoverable Trash\?/);
+});
+
+test('right-clicking a shelf card selects it and opens Actions for that card',async()=>{
+ const f=fixture();await f.ready();assert.deepEqual(selectedCards(f),[f.image]);
+ const event=await f.cardContextMenu(f.text2);assert.equal(event.prevented,true);
+ assert.deepEqual(selectedCards(f),[f.text2]);assert.match(f.overlay,/class="dialog palette"/);
+ await f.input('modal-query','pin');await f.key('Enter');
+ assert.equal(f.state.items.find(value=>value.id===f.text2).pinned,true);assert.equal(f.state.items.find(value=>value.id===f.image).pinned,false);
+});
+
+test('right-clicking a card inside a multi-selection keeps the selection for Actions',async()=>{
+ const f=fixture();await f.ready();await f.cardClick(f.text1,{ctrl:true});await f.cardClick(f.text2,{ctrl:true});await f.cardClick(f.image,{ctrl:true});
+ assert.deepEqual(selectedCards(f).sort(),[f.text1,f.text2].sort());
+ await f.cardContextMenu(f.text1);assert.deepEqual(selectedCards(f).sort(),[f.text1,f.text2].sort());
+ await f.input('modal-query','pin');await f.key('Enter');
+ assert.equal(f.state.items.find(value=>value.id===f.text1).pinned,true);assert.equal(f.state.items.find(value=>value.id===f.text2).pinned,true);
+});
+
+test('right-clicking inside a card resolves the card and keeps only its shelf in a mixed selection',async()=>{
+ const f=fixture();await f.ready();await f.cardClick(f.text1,{ctrl:true});
+ assert.deepEqual(selectedCards(f).sort(),[f.image,f.text1].sort());
+ // Leave the anchor on the image shelf, so the Shift-click below tests the cross-shelf anchor.
+ await f.cardClick(f.image,{ctrl:true});await f.cardClick(f.image,{ctrl:true});
+ assert.deepEqual(selectedCards(f).sort(),[f.image,f.text1].sort());
+ const event=await f.cardContextMenu(f.text1,{child:true});assert.equal(event.prevented,true);
+ assert.deepEqual(selectedCards(f),[f.text1]);
+ await f.input('modal-query','pin');await f.key('Enter');
+ assert.equal(f.state.items.find(value=>value.id===f.text1).pinned,true);assert.equal(f.state.items.find(value=>value.id===f.image).pinned,false);
+ await f.cardClick(f.text2,{shift:true});
+ assert.deepEqual(selectedCards(f).sort(),[f.text1,f.text2].sort());
+});
+
+test('right-click does nothing while a preview is open',async()=>{
+ const f=fixture();await f.ready();await f.key('Space');assert.match(f.overlay,/id="preview-dialog"/);
+ const before=selectedCards(f);
+ const event=await f.cardContextMenu(f.text1);assert.equal(event.prevented,undefined);assert.match(f.overlay,/id="preview-dialog"/);
+ assert.deepEqual(selectedCards(f),before);
 });
 
 test('shelf M opens focused photo for marker drawing and Escape saves editable marks',async()=>{
