@@ -191,6 +191,31 @@ import XCTest
         let html = "<meta property='og:image:secure_url' content='http://public.example.org/secure.png'><meta property='og:image' content='/a.png'>"
         XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url).thumbnailURL?.absoluteString, "https://public.example.org/a.png")
     }
+
+    func testPagesOfUnclosedTagsParseInLinearTime() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        func filled(_ unit: String) -> String { String(repeating: unit, count: 512 * 1024 / unit.utf8.count) }
+        let pages = ["<title", "<title>", "<!--", "<script>", "<style x", "<meta ", "<", "&amp;"].map(filled)
+            + [String(repeating: "<meta " + String(repeating: "a", count: 4000) + ">", count: 128)]
+        for page in pages {
+            let start = Date()
+            _ = try PublicLinkHTMLMetadata(data: Data(page.utf8), url: url)
+            // The quadratic patterns took seconds at 32 KiB and minutes at this size. A linear scan stays well under the bound
+            // even in an unoptimized test build on a shared CI runner, where 512 KiB of `<` took about 2 seconds.
+            XCTAssertLessThan(Date().timeIntervalSince(start), 10, String(page.prefix(12)))
+        }
+    }
+
+    func testTagsAfterUnclosedOrOversizedTagsAreStillRead() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        func parsed(_ html: String) throws -> PublicLinkHTMLMetadata { try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url) }
+        XCTAssertEqual(try parsed("<title x <TITLE >Second</title >").title, "Second")
+        XCTAssertEqual(try parsed("<title>" + String(repeating: "a", count: 8193) + "</title><title>Short</title>").title, "Short")
+        XCTAssertEqual(try parsed("<meta " + String(repeating: "a", count: 8193) + "><meta property='og:title' content='Meta'><title>Page</title>").title, "Meta")
+        XCTAssertEqual(try parsed("<script><title>Hidden</title></script ><!-- <title>Gone</title> --><title>Shown</title>").title, "Shown")
+        XCTAssertEqual(try parsed("<title>Ti<b>t</b>le</title><script>").title, "Title")
+        XCTAssertEqual(try parsed("<meta x" + String(repeating: "b", count: 3000) + " property='og:title' content='A &amp; B'>").title, "A & B")
+    }
 }
 
 #if !STANDALONE_TESTS
