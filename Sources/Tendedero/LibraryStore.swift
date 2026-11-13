@@ -738,7 +738,7 @@ extension String {
         if previous.deletedAt == nil, value.deletedAt != nil { value.trashRevision = UUID() }
         else if previous.deletedAt != nil, value.deletedAt == nil { value.trashRevision = nil }
         if value.retainedAt != nil { try ensureOwned(&value) }
-        guard (value.text?.utf8.count ?? 0) <= TextClipboardWatcher.maximumDataBytes, value.note.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
+        guard (value.text?.utf8.count ?? 0) <= TextClipboardWatcher.maximumDataBytes, value.note.utf8.count <= TextClipboardWatcher.maximumDataBytes, value.title.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
         let textFileRollback = value.kind == .text ? try rewriteMaterializedText(previous, to: value.text ?? "") : nil
         do { try db.transaction { try put(value) } }
         catch { if let rollback = textFileRollback { try? writePrivate(rollback.data, to: rollback.url) }; throw error }
@@ -780,6 +780,18 @@ extension String {
     }
     /// A mixed selection pins every item, as on Windows and as the action bar's
     /// Unpin title assumes; only a selection that is already fully pinned unpins.
+    /// True when every id exists and is pinned; reads only the favorite column, in chunks under SQLite's variable limit.
+    func allPinned(_ ids: [UUID]) throws -> Bool {
+        var seen = Set<UUID>(); let unique = ids.filter { seen.insert($0).inserted }
+        guard !unique.isEmpty else { return false }
+        var pinned = 0
+        for start in stride(from: 0, to: unique.count, by: 500) {
+            let chunk = unique[start..<min(start + 500, unique.count)]
+            let rows = try db.rows("SELECT COUNT(*) AS n FROM items WHERE favorite=1 AND id IN (" + chunk.map { _ in "?" }.joined(separator: ",") + ")", chunk.map { .text($0.uuidString) })
+            if case .integer(let count)? = rows.first?["n"] { pinned += Int(count) }
+        }
+        return pinned == unique.count
+    }
     func toggleFavorite(_ ids: [UUID]) throws {
         let pin = try records(ids).contains { !$0.favorite }
         try mutate(ids) { $0.favorite = pin; if pin && $0.retainedAt == nil { $0.retainedAt = self.now() } }
@@ -940,7 +952,7 @@ extension String {
         invalidateShelfUndo(eligible); invalidateTrashUndo(eligible); changed(eligible)
         return eligible
     }
-    func restore(_ ids: [UUID]) throws { try mutate(ids, owning: false) { $0.deletedAt = nil; $0.onShelf = true; $0.trashRevision = nil }; invalidateShelfUndo(ids) }
+    func restore(_ ids: [UUID]) throws { try mutate(ids, owning: false) { $0.deletedAt = nil; $0.onShelf = true; $0.trashRevision = nil; $0.lastCapturedAt = self.now() }; invalidateShelfUndo(ids) }
     func markCopied(_ ids: [UUID]) throws { try mutate(ids) { $0.lastCopiedAt = self.now(); $0.captureRevision = UUID() } }
     func prune() throws {
         var expired = [LibraryRecord]()

@@ -6,6 +6,7 @@ import SwiftUI
     private weak var line: Line?
     let shelf: Shelf
     private var focusedRequest = -1
+    private var selectionToRestore: (request: Int, range: NSRange)?
 
     init(line: Line, shelf: Shelf) {
         self.line = line; self.shelf = shelf
@@ -23,6 +24,15 @@ import SwiftUI
     }
     required init?(coder: NSCoder) { fatalError() }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); synchronize() }
+    /// The shelf window is being made again (LinePanel.makeReplacement) and
+    /// the field editor stays with the old one. The focus request it answered
+    /// there is open again in the new window, and the caret comes back where
+    /// it was rather than selecting the query.
+    func editorWillStayBehind(_ editor: NSTextView) {
+        guard let line else { return }
+        focusedRequest = -1
+        selectionToRestore = (line.searchFocusRequests[shelf, default: 0], editor.selectedRange())
+    }
     override func becomeFirstResponder() -> Bool {
         let accepted = super.becomeFirstResponder()
         if accepted { line?.shelfSearchBeganEditing(shelf) }
@@ -49,7 +59,14 @@ import SwiftUI
                     // selectText restarts AppKit's field editor and emits an end-edit
                     // notification, which would clear the requested shelf focus.
                     if let editor = self.currentEditor() as? NSTextView {
-                        editor.setSelectedRange(NSRange(location: 0, length: (self.stringValue as NSString).length))
+                        let length = (self.stringValue as NSString).length
+                        let restored = self.selectionToRestore.flatMap { saved -> NSRange? in
+                            guard saved.request == request else { return nil }
+                            let location = min(saved.range.location, length)
+                            return NSRange(location: location, length: min(saved.range.length, length - location))
+                        }
+                        self.selectionToRestore = nil
+                        editor.setSelectedRange(restored ?? NSRange(location: 0, length: length))
                         (window as? LinePanel)?.deliverPendingSearchKeys(for: ShelfSearchFocus(shelf: self.shelf, request: request), to: editor)
                     }
                 }

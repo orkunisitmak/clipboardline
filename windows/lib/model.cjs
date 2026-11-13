@@ -96,6 +96,11 @@ const graphemes=new Intl.Segmenter('en',{granularity:'grapheme'});
 // 64 graphemes can span far more UTF-16 units; this only bounds raw input.
 const TAG_INPUT_LIMIT=4096;
 const validTagName=name=>!/[\p{Cc}\p{Cf}]/u.test(name)&&[...graphemes.segment(name)].length<=64;
+// Match macOS nameAndPin: 1-160 Characters, at most 1024 UTF-8 bytes, and no
+// control, line or paragraph separator characters.
+// Swift's .whitespacesAndNewlines also trims U+0085, which String.trim() keeps.
+const trimName=value=>value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu,'');
+function itemName(value){let name='';try{name=text(typeof value==='string'?trimName(value):value,TAG_INPUT_LIMIT,true);}catch{}if(!name||[...graphemes.segment(name)].length>160||Buffer.byteLength(name)>1024||/[\p{Cc}\p{Zl}\p{Zp}]/u.test(name))fail('Enter a name (1–160 characters)');return name;}
 function saved(item) { return item.retainedAt != null || item.pinned || item.folderIds.length > 0 || item.tags.length > 0; }
 // Match macOS LinkIdentity.standalone: a copied URL keeps its link identity
 // when the source adds a trailing newline or surrounding spaces.
@@ -237,7 +242,7 @@ class Store {
     return {kind,ids:items.map(item=>item.id).sort(),captures:Object.fromEntries(items.map(item=>[item.id,{revision:item.captureRevision??null,createdAt:item.createdAt,updatedAt:item.updatedAt,lastCopiedAt:item.lastCopiedAt??null}]))};
   }
   invalidateTrashUndo(value){const affected=new Set(value);this.trashUndoStack=this.trashUndoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
-  markCopied(value){this.modify('markCopied',{ids:value});}
+  markCopied(value){if(value.length)this.modify('markCopied',{ids:value});}
   // Applies fetched preview metadata only while the link is still live, so a link removed during the fetch gets no stored thumbnail.
   setLinkMetadata(item,url,{title,author,thumbnail}){
     if(!this.data.items.includes(item)||item.trashedAt||item.url!==url)return false;
@@ -306,7 +311,7 @@ class Store {
       const before=clone(this.data),live=this.liveItems(),now=this.clock();
       try{
         const item=prior||{id:crypto.randomUUID(),kind:'image',recording:true,text:'',url:'',title:'',name:'',pinned:false,folderIds:[],tags:[],note:'',retainedAt:null,lastCopiedAt:null,createdAt:now,updatedAt:now,trashedAt:null,hiddenFromShelf:false,annotations:[],crop:null,ocrText:'',imageFile:assets.posterFile,renderedFile:'',videoFile:assets.videoFile,renderedVideoFile:'',...assets.details};
-        item.createdAt=now;item.updatedAt=now;item.hiddenFromShelf=false;item.captureRevision=crypto.randomUUID();
+        item.createdAt=now;if(prior)item.lastCapturedAt=now;item.updatedAt=now;item.hiddenFromShelf=false;item.captureRevision=crypto.randomUUID();
         this.data.items=[item,...this.data.items.filter(entry=>entry.id!==item.id)];this.expire(false);this.persist();return item;
       }catch(error){this.rollback(before,live);throw error;}
     }finally{this.releaseInFlightMedia(assets.inFlightMediaFiles);}
@@ -342,7 +347,7 @@ class Store {
     const now = this.clock();
     const item = prior || {id: crypto.randomUUID(), kind, text: textValue, url, title: '', name: '', pinned: false, folderIds: [], tags: [],
       imageFile, renderedFile: '', ocrText: '', annotations: [], crop: null, note:'', retainedAt:null, lastCopiedAt:null, createdAt: now, updatedAt: now, trashedAt: null, hiddenFromShelf: false};
-    if(kind==='link'&&prior){item.lastCopiedAt=now;item.lastCapturedAt=now;}else item.createdAt=now;
+    if(prior)item.lastCapturedAt=now;if(kind==='link'&&prior)item.lastCopiedAt=now;else item.createdAt=now;
     item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
     if(kind==='text')item.text=textValue;
     if (extra.title) item.title = text(extra.title, 500, true);
@@ -428,7 +433,7 @@ class Store {
     if(action==='cleanup'){this.finishPermanentDeletion();return;}
     if (action === 'setSettings') { this.data.settings = settings(payload.patch, this.data.settings);this.pruneRecentFolders();this.expire(false); this.persist(); return; }
     if (action === 'createFolder') {
-      const name = text(payload.name, TAG_INPUT_LIMIT).trim(); if (!name) fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');
+      const name = trimName(text(payload.name, TAG_INPUT_LIMIT)); if (!name) fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');
       const parentId = payload.parentId || null;
       if(parentId){const parent=this.data.folders.find(f=>f.id===parentId);if(!parent)fail('Parent folder is unavailable');if(parent.parentId!=null)fail('Only top-level folders can contain subfolders');}
       if(this.data.folders.some(f=>(f.parentId??null)===parentId&&foldedName(f.name)===foldedName(name)))fail('A folder with this name already exists');
@@ -436,7 +441,7 @@ class Store {
     }
     if(action==='renameFolder'||action==='removeFolder') {
       const folder=this.data.folders.find(f=>f.id===payload.id);if(!folder)fail('Folder unavailable');const originalMemberships=new Map(this.data.items.map(item=>[item.id,JSON.stringify(item.folderIds)]));
-      if(action==='renameFolder'){const name=text(payload.name,TAG_INPUT_LIMIT).trim();if(!name)fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');folder.name=name;if(this.data.folders.some(f=>f!==folder&&(f.parentId??null)===(folder.parentId??null)&&foldedName(f.name)===foldedName(folder.name)))fail('A folder with this name already exists');}
+      if(action==='renameFolder'){const name=trimName(text(payload.name,TAG_INPUT_LIMIT));if(!name)fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');folder.name=name;if(this.data.folders.some(f=>f!==folder&&(f.parentId??null)===(folder.parentId??null)&&foldedName(f.name)===foldedName(folder.name)))fail('A folder with this name already exists');}
       else {const removed=new Set([folder.id]);let changed=true;while(changed){changed=false;for(const child of this.data.folders)if(removed.has(child.parentId)&&!removed.has(child.id)){removed.add(child.id);changed=true;}}this.data.folders=this.data.folders.filter(f=>!removed.has(f.id));for(const item of this.data.items)if(item.folderIds.some(id=>removed.has(id))){item.retainedAt??=now;item.folderIds=item.folderIds.filter(id=>!removed.has(id));}}
       this.pruneRecentFolders();this.persist();this.invalidateTrashUndo(this.data.items.filter(item=>originalMemberships.get(item.id)!==JSON.stringify(item.folderIds)).map(item=>item.id));return;
     }
@@ -471,12 +476,12 @@ class Store {
       else if(action==='retain')item.retainedAt??=now;
       else if(action==='note')item.note=sizedText(payload.note,true);
       else if(action==='details') {
-        if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
+        if(payload.name!==undefined)item.name=sizedText(payload.name,true).trim();
         if(payload.note!==undefined)item.note=sizedText(payload.note,true);
         if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }
       else if(action==='markCopied'){item.lastCopiedAt=now;item.captureRevision=crypto.randomUUID();}
-      else if (action === 'name') { item.name = text(payload.name, 200, true).trim(); item.pinned = true; item.retainedAt??=now; }
+      else if (action === 'name') { item.name = itemName(payload.name); item.pinned = true; item.retainedAt??=now; }
       else if (action === 'folder') {
         if (!this.data.folders.some(f => f.id === payload.folderId)) fail('Folder unavailable');
         if(payload.pinning!==undefined&&typeof payload.pinning!=='boolean')fail('Invalid folder pin option');
@@ -489,14 +494,14 @@ class Store {
         const tag=text(payload.tag,TAG_INPUT_LIMIT).trim();item.tags=item.tags.filter(value=>value!==tag);
       } else if (action === 'tag') {
         if (!Array.isArray(payload.tags)) fail('Invalid tags');
-        const tags = [...new Set(payload.tags.map(tag => { tag = text(tag, TAG_INPUT_LIMIT).trim(); if (item.tags.includes(tag)) return tag; tag = tag.replace(/^#+|#+$/g, '').trim(); const key = foldedName(tag), known = item.tags.find(own => foldedName(own) === key) ?? knownTags.get(key) ?? tag; if (tag) knownTags.set(key, known); return tag && known; }).filter(Boolean))];
+        const tags = [...new Set(payload.tags.map(tag => { tag = trimName(text(tag, TAG_INPUT_LIMIT)); if (item.tags.includes(tag)) return tag; tag = trimName(tag.replace(/^#+|#+$/g, '')); const key = foldedName(tag), known = item.tags.find(own => foldedName(own) === key) ?? knownTags.get(key) ?? tag; if (tag) knownTags.set(key, known); return tag && known; }).filter(Boolean))];
         // Existing longer tags stay editable; only newly added names must fit.
         if (tags.some(tag => !item.tags.includes(tag) && !validTagName(tag))) fail('Invalid tag name');
         item.tags = tags;
         if(item.tags.length)item.retainedAt??=now;
       } else if (action === 'remove') { if (saved(item)) item.hiddenFromShelf = true; else{item.trashedAt = now;item.trashRevision=crypto.randomUUID();} }
       else if (action === 'trash') item.trashedAt = now;
-      else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; }
+      else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; item.lastCapturedAt=now; }
       else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = sizedText(payload.text, true); }
       else if (action === 'saveImage') {
         if (item.kind !== 'image' || item.recording || typeof payload.dataUrl !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(payload.dataUrl) || payload.dataUrl.length > 90_000_000) fail('Invalid image edit');
@@ -510,7 +515,7 @@ class Store {
     }
     if(action==='folder'&&payload.rememberRecent===true)this.data.settings.recentPinFolderIds=[payload.folderId,...this.data.settings.recentPinFolderIds.filter(id=>id!==payload.folderId)].slice(0,8);
     if (action === 'delete') { const removed = new Set(items); this.data.items = this.data.items.filter(i => !removed.has(i)); }
-    if (['delete', 'trash', 'restore'].includes(action)) this.undoStack = this.undoStack.filter(batch => !batch.some(old => items.some(i => i.id === old.id)));
+    if (['delete', 'trash', 'restore'].includes(action)) {const affected=new Set(items.map(i=>i.id));this.undoStack=this.undoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
     if(action==='delete')this.preparePermanentDeletion();
     this.persist();
     {const affected=new Set(items.map(item=>item.id));this.trashUndoStack=this.trashUndoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
