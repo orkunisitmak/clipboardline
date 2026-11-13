@@ -64,6 +64,7 @@
 "General" = "General";
 "Handle screenshots" = "스크린샷 관리";
 "Copy new screenshots to the clipboard" = "새 스크린샷을 클립보드에 복사";
+"With Copy new screenshots to the clipboard on, new images here are copied too." = "새 스크린샷을 클립보드에 복사가 켜져 있으면 여기에 추가된 새 이미지도 복사됩니다.";
 "Hang copied images" = "복사한 이미지 걸기";
 "Hang copied text" = "Hang copied text";
 "Hide line" = "빨랫줄 가리기";

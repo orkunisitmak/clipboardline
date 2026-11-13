@@ -6,11 +6,11 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const {Store}=require('../lib/model.cjs');
-const {copyNewCapture}=require('../lib/capture-copy.cjs');
+const {copyNewCapture,PASTE_SETTLE_MS}=require('../lib/capture-copy.cjs');
 
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
 function fixture(fn){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-capture-copy-'));return Promise.resolve().then(()=>fn(new Store(dir,{clock:()=>1000}),dir)).finally(()=>fs.rmSync(dir,{recursive:true,force:true}));}
-function arrive(store,item,written,write=async selected=>{written.push(selected.map(entry=>entry.id));}){return copyNewCapture({settings:store.data.settings,item,items:store.data.items,write,warn:()=>{}});}
+function arrive(store,item,written,pasting=false,write=async selected=>{written.push(selected.map(entry=>entry.id));}){return copyNewCapture({settings:store.data.settings,item,items:store.data.items,write,pasting,warn:()=>{}});}
 
 test('copy new screenshots is off by default, validated and kept across restart like macOS',()=>fixture((s,dir)=>{
   assert.equal(s.data.settings.copyNewCaptures,false);
@@ -51,4 +51,17 @@ test('a failed copy is reported and does not stop the capture from hanging',()=>
   assert.equal(copied,false);
   assert.deepEqual(warnings,['New capture copy error: Clipboard busy']);
   assert.ok(s.data.items.includes(image));
+}));
+
+test('a capture during a direct paste, or just after it, hangs without replacing what is being pasted',()=>fixture(async s=>{
+  s.modify('setSettings',{patch:{copyNewCaptures:true}});
+  const written=[];
+  const during=s.insert('image',png);
+  assert.equal(await arrive(s,during,written,true),false);
+  assert.deepEqual(written,[]);
+  assert.ok(s.data.items.includes(during));
+  const later=s.insert('image',Buffer.concat([png,Buffer.from([3])]));
+  assert.equal(await arrive(s,later,written,false),true);
+  assert.deepEqual(written,[[later.id]]);
+  assert.equal(PASTE_SETTLE_MS,1000,'Matches the macOS settle time after a direct paste');
 }));

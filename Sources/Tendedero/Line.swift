@@ -917,10 +917,11 @@ final class Line: ObservableObject {
 
     /// Hangs a capture that just arrived from the screenshot or a watched
     /// folder. With copiesNewCaptures on, a still image is copied as well;
-    /// recordings only hang.
-    @discardableResult func hangCapture(_ url: URL, flying: Bool = false) -> UUID? {
+    /// recordings only hang. `copies` is false while another app may still
+    /// be reading the clipboard for a direct paste.
+    @discardableResult func hangCapture(_ url: URL, flying: Bool = false, copies: Bool = true) -> UUID? {
         guard let id = hang(url, flying: flying) else { return nil }
-        if copiesNewCaptures, !isRecordingFile(url) { copy(id) }
+        if copies, copiesNewCaptures, !isRecordingFile(url) { copy(id) }
         return id
     }
 

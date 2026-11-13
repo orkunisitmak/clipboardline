@@ -638,6 +638,8 @@ enum HistoryTestRunner {
             ("testNestedClipboardNamesAreNotDeleted", tests.testNestedClipboardNamesAreNotDeleted),
             ("testSettingsOfferEveryDurationAndPersistSelection", tests.testSettingsOfferEveryDurationAndPersistSelection),
             ("testNewCaptureCopiesOnlyWhenEnabled", captureCopy.testNewCaptureCopiesOnlyWhenEnabled),
+            ("testImageCopiedFromAnotherAppIsNotCopiedBackButAScreenshotIs", captureCopy.testImageCopiedFromAnotherAppIsNotCopiedBackButAScreenshotIs),
+            ("testCaptureDuringDirectPasteKeepsOffTheClipboard", captureCopy.testCaptureDuringDirectPasteKeepsOffTheClipboard),
             ("testSettingSurvivesRestart", captureCopy.testSettingSurvivesRestart),
             ("testPinnedClipboardSurvivesExpiryAndRestart", favorites.testPinnedClipboardSurvivesExpiryAndRestart),
             ("testExternalPinCreatesPrivateCopyAndPreservesOriginal", favorites.testExternalPinCreatesPrivateCopyAndPreservesOriginal),

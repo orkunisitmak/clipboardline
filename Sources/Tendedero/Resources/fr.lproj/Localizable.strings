@@ -64,6 +64,7 @@
 "General" = "General";
 "Handle screenshots" = "Gérer les captures d’écran";
 "Copy new screenshots to the clipboard" = "Copier les nouvelles captures dans le presse-papiers";
+"With Copy new screenshots to the clipboard on, new images here are copied too." = "Si Copier les nouvelles captures dans le presse-papiers est activé, les nouvelles images de ces dossiers sont aussi copiées.";
 "Hang copied images" = "Accrocher les images copiées";
 "Hang copied text" = "Hang copied text";
 "Hide line" = "Masquer la corde";

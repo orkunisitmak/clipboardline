@@ -68,7 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var safetyWatcher: ScreenshotWatcher?
     private var folderWatchers: [ScreenshotWatcher] = []
     private lazy var clipboardWatcher: ClipboardWatcher = {
-        let callback: (URL) -> Void = { [weak self] in self?.hangCapture($0) }
+        // A copied image hangs but never copies itself back over the original.
+        let callback: (URL) -> Void = { [weak self] in self?.hangCapture($0, fromClipboard: true) }
         if let clipboardSource { return ClipboardWatcher(source: clipboardSource, folder: line.historyFiles.inbox, onImage: callback) }
         return ClipboardWatcher(onImage: callback)
     }()
@@ -88,6 +89,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var tagPicker: TagPicker?
     private(set) var nameAndPinPicker: NameAndPinPicker?
     private var isPasting = false
+    /// The target app reads the clipboard after the paste keystroke, so a
+    /// new capture keeps off the clipboard for a moment after a direct paste.
+    private var pasteSettlesAt = Date.distantPast
+    private static let pasteSettleTime: TimeInterval = 1
+    private func pasteEnded() { isPasting = false; pasteSettlesAt = Date().addingTimeInterval(Self.pasteSettleTime) }
     private(set) var preview: ImagePreview?
     private(set) var textPreview: TextPreview?
     private(set) var linkPreview: LinkPreview?
@@ -502,19 +508,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// A new screenshot lifts off from where it was taken and flies to its
     /// place on the line. Without a known capture area it simply drops in.
-    private func hangCapture(_ url: URL) {
+    private func hangCapture(_ url: URL, fromClipboard: Bool = false) {
+        let copies = !fromClipboard && !isPasting && Date() >= pasteSettlesAt
         guard line.presentation.shelves.contains(.images) else {
-            line.hangCapture(url)
+            line.hangCapture(url, copies: copies)
             return
         }
         if !isRevealed && Self.peeksAtNew && !isPasting {
-            withPasteTargetForFocusHandoff { presentCapture(url) }
+            withPasteTargetForFocusHandoff { presentCapture(url, copies: copies) }
         } else {
-            presentCapture(url)
+            presentCapture(url, copies: copies)
         }
     }
 
-    private func presentCapture(_ url: URL) {
+    /// Tests deliver a screenshot or poll the real clipboard image watcher
+    /// without launching the app.
+    func receiveCaptureForTesting(_ url: URL) { hangCapture(url) }
+    func pollClipboardImagesForTesting() { clipboardWatcher.start(); clipboardWatcher.check() }
+    func stopClipboardImagesForTesting() { clipboardWatcher.stop() }
+
+    private func presentCapture(_ url: URL, copies: Bool) {
         let from = captureRect(of: url)
         let screen = from.flatMap { from in
             NSScreen.screens.first { NSMouseInRect(CGPoint(x: from.midX, y: from.midY), $0.frame, false) }
@@ -524,7 +537,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // the new one flies in.
         let wasRevealed = isRevealed
         comeDown(on: screen)
-        guard let id = line.hangCapture(url, flying: from != nil) else {
+        guard let id = line.hangCapture(url, flying: from != nil, copies: copies) else {
             // Nothing hung after all, so an empty line goes away again.
             itemsChanged()
             return
@@ -1426,7 +1439,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard pasteFocusHandoffDepth == 0 else { return }
         let start = ProcessInfo.processInfo.systemUptime
         defer { recordShelfPresentation("paste-target.capture", since: start) }
-        directPaste.cancel(); isPasting = false
+        directPaste.cancel(); if isPasting { pasteEnded() }
         let ownFocus = ownsKeyboardFocus()
         DirectPasteDiagnostics.log.debug("Capture boundary ownsKeyboard=\(ownFocus)")
         guard !ownFocus else { return }
@@ -1501,7 +1514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             directPaste.paste(items: items, dismiss: { [weak self] in
                 self?.dismissBrowsingForPaste()
             }, completion: { [weak self] result in
-                guard let self else { return }; self.isPasting = false
+                guard let self else { return }; self.pasteEnded()
                 switch result {
                 case .pasted:
                     try? store.markCopied(ids)

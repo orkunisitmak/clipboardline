@@ -286,7 +286,7 @@ private struct SettingsView: View {
                 Button(L("Add Folder…")) { model.addFolder(); model.refresh() }
                     .disabled(AppDelegate.extraFolders.count >= AppDelegate.maxExtraFolders || !model.allowsSystemChanges)
             } header: { Text(L("Also watch folders")) } footer: {
-                Text(L("Watch up to three folders for new images. Removing a folder leaves its files untouched."))
+                Text(L("Watch up to three folders for new images. Removing a folder leaves its files untouched.") + " " + L("With Copy new screenshots to the clipboard on, new images here are copied too."))
             }
         }
     }

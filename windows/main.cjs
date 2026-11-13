@@ -23,7 +23,7 @@ const {MediaJobs,MAXIMUM_VIDEO_BYTES}=require('./lib/media.cjs');
 const {copyFiles,cancelFileCopies}=require('./lib/native-files.cjs');
 const {exportCopies}=require('./lib/export-copies.cjs');
 const {decodeTextFile}=require('./lib/text-file.cjs');
-const {copyNewCapture}=require('./lib/capture-copy.cjs');
+const {copyNewCapture,PASTE_SETTLE_MS}=require('./lib/capture-copy.cjs');
 const native = require('./lib/native.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
@@ -46,7 +46,7 @@ app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
 let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
-let pastePromise=null,hidePromise=null,pasteGeneration=0;
+let pastePromise=null,hidePromise=null,pasteGeneration=0,pasteSettlesAt=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
 const shelfMotion=new MotionBridge(value=>{if(window&&!window.isDestroyed())window.webContents.send('clipboardline:shelf-motion',value);});
@@ -224,7 +224,7 @@ async function writeClipboard(selected) {
   await clipboard.write([new ClipboardItem(data)]);
   ownFingerprint=(await clipboardContent())?.fingerprint||'';store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));
 }
-function copyCapture(item){return copyNewCapture({settings:store.data.settings,item,items:store.data.items,write:writeClipboard});}
+function copyCapture(item){return copyNewCapture({settings:store.data.settings,item,items:store.data.items,write:writeClipboard,pasting:pastePromise!==null||Date.now()<pasteSettlesAt});}
 async function copy(payload,paste=false) {
   if(pastePromise)return pastePromise;
   const selected=store.selected(ids(payload.ids));
@@ -243,7 +243,7 @@ async function copy(payload,paste=false) {
       await native.validatePaste(target);current();await writeClipboard(selected);current();
       await native.paste({...target,prepared:true});current();if(store.data.settings.sounds)shell.beep();
     }catch(error){if(generation===pasteGeneration)await show(view);throw error;}})();
-    pastePromise=operation;try{return await operation;}finally{if(pastePromise===operation)pastePromise=null;}
+    pastePromise=operation;try{return await operation;}finally{pasteSettlesAt=Date.now()+PASTE_SETTLE_MS;if(pastePromise===operation)pastePromise=null;}
   }
   await writeClipboard(selected);
   if(store.data.settings.sounds)shell.beep();
