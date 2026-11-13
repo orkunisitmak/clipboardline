@@ -362,6 +362,11 @@ import Combine
         if selectedIDs.count == ids.count { return ids }
         return selectedIDs.filter { indices[$0] != nil }.sorted { indices[$0]! < indices[$1]! }
     }
+    /// Right-click "Name and pin…": a row inside a multi-selection names the whole selection, like the key.
+    func requestNameAndPin(_ id: UUID) {
+        let ids = actionIDs
+        if selectedIDs.contains(id), ids.count > 1 { onNameAndPinBatchRequested?(ids) } else { onNameAndPinRequested?(id) }
+    }
     func copy(to board: NSPasteboard? = nil) {
         guard flushEdits(), !actionIDs.isEmpty else { return }
         copyRecords(actionIDs, to: board ?? copyPasteboard)

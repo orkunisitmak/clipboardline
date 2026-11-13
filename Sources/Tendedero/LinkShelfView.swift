@@ -102,7 +102,7 @@ struct LinkGrabArea: NSViewRepresentable {
             menu.addItem(ClosureMenuItem(L("Copy")) { links.copyAction(id) })
             menu.addItem(ClosureMenuItem(L("Preview")) { line.onLinkPreviewRequested?(id) })
             menu.addItem(ClosureMenuItem(entry.favorite ? L("Unpin") : L("Pin favorite")) { links.togglePin(id) })
-            menu.addItem(ClosureMenuItem(L("Name and pin…")) { line.onNameAndPinRequested?(id) })
+            menu.addItem(ClosureMenuItem(L("Name and pin…")) { line.requestNameAndPin(id, on: .links) })
             menu.addItem(ClosureMenuItem(L("Open in browser")) { if let url = entry.linkURL { NSWorkspace.shared.open(url) } })
             menu.addItem(ClosureMenuItem(L("Move to Trash…")) {
                 line.focusShelf(.links)
