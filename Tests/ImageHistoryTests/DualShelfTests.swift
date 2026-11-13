@@ -280,4 +280,37 @@ final class DualShelfTests: HistoryTestCase {
         XCTAssertEqual(panel.frame.height, Layout.panelHeight * 2)
         XCTAssertEqual(panel.frame.maxY, screen.visibleFrame.maxY)
     }
+    @MainActor func testMenuPinOnSelectedCardPinsWholeSelectionOnTextAndImageShelves() throws {
+        try fixture { f in
+            let line = f.line()
+            for _ in 0..<3 { line.hang(try f.image(), quietly: true) }
+            for i in 0..<3 { line.texts.add("Synthetic \(i)") }
+            line.selectAll(); line.texts.selectAll()
+            let textID = try XCTUnwrap(line.texts.selectedEntries.first?.id), imageID = try XCTUnwrap(line.selectedItems.first?.id)
+            XCTAssertFalse(line.menuPinIsUnpin(textID, shelf: .texts))
+            line.texts.togglePin(textID)
+            XCTAssertTrue(line.texts.entries.first { $0.id == textID }?.pinned ?? false)
+            XCTAssertFalse(line.menuPinIsUnpin(textID, shelf: .texts))
+            line.texts.togglePin(textID)
+            line.pinFromMenu(textID, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).count, 3)
+            XCTAssertTrue(line.menuPinIsUnpin(textID, shelf: .texts))
+            line.pinFromMenu(imageID, shelf: .images)
+            XCTAssertEqual(line.items.filter(\.pinned).count, 3)
+            line.pinFromMenu(textID, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).count, 0)
+            line.texts.select(textID, width: line.viewportWidth)
+            let other = try XCTUnwrap(line.texts.entries.first { $0.id != textID }?.id)
+            line.pinFromMenu(other, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).map(\.id), [other])
+            line.texts.select(textID, width: line.viewportWidth)
+            line.texts.select(other, toggle: true, width: line.viewportWidth)
+            let outside = try XCTUnwrap(line.texts.entries.first { $0.id != textID && $0.id != other }?.id)
+            let selection = line.texts.selectedIDs
+            XCTAssertEqual(selection.count, 2); XCTAssertFalse(selection.contains(outside))
+            line.pinFromMenu(outside, shelf: .texts)
+            XCTAssertEqual(Set(line.texts.entries.filter(\.pinned).map(\.id)), Set([other, outside]))
+            XCTAssertEqual(line.texts.selectedIDs, selection)
+        }
+    }
 }
