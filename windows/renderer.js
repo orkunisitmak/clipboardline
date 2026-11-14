@@ -69,24 +69,24 @@ function mediaTime(ms){const centiseconds=Math.max(0,Math.round((Number(ms)||0)/
 
 const hotkey = action => state.settings.localShortcuts?.[action] ?? DEFAULT_KEYS[action] ?? '';
 function shortcutContext(){if(ui.editingText)return'textEditing';if(ui.editor)return'imageMarkup';if(ui.preview)return item(ui.preview)?.kind+'Preview';return ui.view;}
-function shortcutAllowed(action,context=shortcutContext()){
+function shortcutAllowed(action,context=shortcutContext(),view=ui.view){
  if(action==='actions')return true;
  if(['focusNextPane','focusPreviousPane','newNote','newFolder'].includes(action))return context==='library';
- if(action==='undoTrash')return context==='library'||ui.view==='library'&&context.endsWith('Preview');
+ if(action==='undoTrash')return context==='library'||view==='library'&&context.endsWith('Preview');
  if(context==='settings')return action==='close';
  if(context==='textEditing')return ['finishEditing','pin','pinnedOnly'].includes(action);
  if(['copy','paste'].includes(action))return true;
  if(context==='imageMarkup')return ['markup','crop',...Object.keys(MARKUP_TOOLS)].includes(action);
  if(Object.hasOwn(MARKUP_TOOLS,action))return false;
  if(action==='finishEditing')return false;
- if(action==='switchShelf')return context==='shelves'||context.endsWith('Preview')&&ui.view==='shelves';
+ if(action==='switchShelf')return context==='shelves'||context.endsWith('Preview')&&view==='shelves';
  if(['library','toggleShelves','toggleLinks','toggleTexts','toggleImages','search'].includes(action)||/^select[1-9]$/.test(action))return context==='shelves';
  if(['librarySearch','allTypes','images','texts','links'].includes(action))return context==='library';
  if(['extendPrevious','extendNext','extendUp','extendDown','selectAll','export'].includes(action))return context==='shelves'||context==='library';
- if(action==='trash')return context==='shelves'||context==='library'||ui.view==='library'&&context.endsWith('Preview');
+ if(action==='trash')return context==='shelves'||context==='library'||view==='library'&&context.endsWith('Preview');
  if(['first','last','previousPage','nextPage'].includes(action))return context==='shelves'||context==='library'||context.endsWith('Preview');
- if(action==='remove')return context==='shelves'||context.endsWith('Preview')&&ui.view==='shelves';
- if(action==='undo')return context==='shelves'||context.endsWith('Preview')&&ui.view==='shelves';
+ if(action==='remove')return context==='shelves'||context.endsWith('Preview')&&view==='shelves';
+ if(action==='undo')return context==='shelves'||context.endsWith('Preview')&&view==='shelves';
  if(action==='open')return context==='library'||context==='linkPreview';
  if(action==='edit')return context==='textPreview'||context==='library';
  if(action==='markup'&&context==='shelves')return true;
@@ -99,13 +99,13 @@ function shortcutAllowed(action,context=shortcutContext()){
 // Electron accelerators name arrows Up/Down/Left/Right and the plus key Plus; DOM names are rejected.
 function globalAccelerator(key){return key.replace('Ctrl+','Control+').replace(/(^|\+)(Arrow(Up|Down|Left|Right)|\+)$/,(_match,prefix,name,arrow)=>prefix+(arrow||'Plus'));}
 function canonicalShortcut(value){return value.replace(/(^|\+)([a-z])$/,(_match,prefix,key)=>prefix+key.toUpperCase());}
-function shortcutCandidates(action,context=shortcutContext()){
- if(!shortcutAllowed(action,context))return[];
+function shortcutCandidates(action,context=shortcutContext(),view=ui.view){
+ if(!shortcutAllowed(action,context,view))return[];
  const stored=state.settings.localShortcuts||{};
  if(Object.hasOwn(stored,action)){const key=canonicalShortcut(stored[action]||'');return key&&!(action==='undoTrash'&&context==='imagePreview'&&key==='Ctrl+Z')?[key]:[];}
  const values=[DEFAULT_KEYS[action],...(DEFAULT_ALIASES[action]||[])].filter(Boolean);
- if(action==='trash'&&(context==='library'||ui.view==='library'&&context.endsWith('Preview')))return ['S',...values,'Ctrl+Backspace'].map(canonicalShortcut);
- if(action==='undoTrash'&&(context==='library'||ui.view==='library'&&context.endsWith('Preview')))return ['Backspace',...values].map(canonicalShortcut).filter(key=>context!=='imagePreview'||key!=='Ctrl+Z');
+ if(action==='trash'&&(context==='library'||view==='library'&&context.endsWith('Preview')))return ['S',...values,'Ctrl+Backspace'].map(canonicalShortcut);
+ if(action==='undoTrash'&&(context==='library'||view==='library'&&context.endsWith('Preview')))return ['Backspace',...values].map(canonicalShortcut).filter(key=>context!=='imagePreview'||key!=='Ctrl+Z');
  return values.map(canonicalShortcut);
 }
 function resolveShortcut(shortcut,context=shortcutContext()){
@@ -662,7 +662,9 @@ async function confirmModal(){const modal=ui.modal;if(!modal||modal.saving)retur
  if(modal.type==='tags'){const tags=(modal.value||'').split(',').map(value=>value.trim()).filter(Boolean);for(const id of modal.ids){const value=item(id);if(value&&!await command('tag',{ids:[id],tags:[...new Set([...(value.tags||[]),...tags])]}))return;}closeModal(modal);return;}
  if(modal.type==='record'){if(!modal.recordingReady)return;const key=canonicalShortcut(modal.key||'');
   if(modal.global&&key&&!key.split('+').some(part=>['Ctrl','Alt','Meta'].includes(part))){toast(t('Use Control or Alt with a key for a global shortcut.'));return;}
-  if(!modal.global&&key){const contexts=['shelves','library','imagePreview','textPreview','linkPreview','imageMarkup','textEditing','settings'];const conflict=Object.keys(DEFAULT_KEYS).find(action=>action!==modal.action&&contexts.some(context=>shortcutAllowed(modal.action,context)&&shortcutCandidates(action,context).includes(key)));if(conflict){toast(t('This shortcut is already used for %@').replace('%@',t(ACTION_TITLES[conflict])));return;}}
+  if(!modal.global&&key){const contexts=['shelves','library','imagePreview','textPreview','linkPreview','imageMarkup','textEditing','settings'];
+   // Preview shortcuts depend on their origin; validate both shelf and library contexts.
+   const conflict=Object.keys(DEFAULT_KEYS).find(action=>action!==modal.action&&['shelves','library'].some(view=>contexts.some(context=>shortcutAllowed(modal.action,context,view)&&shortcutCandidates(action,context,view).includes(key))));if(conflict){toast(t('This shortcut is already used for %@').replace('%@',t(ACTION_TITLES[conflict])));return;}}
   let saved=modal.global?globalAccelerator(key):key;const previous=state.settings.shortcuts?.[modal.action]||'';if(modal.global&&canonicalShortcut(previous)===saved)saved=previous;
   await command('setSettings',{recordingToken:modal.recordingToken,patch:{[modal.global?'shortcuts':'localShortcuts']:{[modal.action]:saved}}});closeModal(modal);return;}
  if(modal.type==='confirm'){if(modal.command==='trash'&&ui.view==='library'){if(await trashLibrarySelection(modal.payload.ids)&&ui.modal===modal)closeModal(modal);return;}const activeFolderRemoved=modal.command==='removeFolder'&&ui.scope==='folder'&&folderSubtreeContains(modal.payload?.id,ui.folder);const result=await command(modal.command,modal.payload);if(result&&ui.modal===modal){if(modal.command==='deleteTag'){ui.scope='saved';ui.tag=null;ui.favoritesOnly=false;ui.filterTags=ui.filterTags.filter(tag=>tag!==modal.payload.tag);}if(activeFolderRemoved){ui.scope='saved';ui.folder=null;}if(modal.command!=='removeFolder'||activeFolderRemoved){ui.selected.clear();ui.preview=null;ui.focus=null;focusFirst();}render();closeModal(modal);}return;}

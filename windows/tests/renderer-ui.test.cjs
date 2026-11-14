@@ -650,6 +650,12 @@ test('recording a fallback letter detects a conflicting legacy lowercase remap',
  assert.match(f.overlay,/Record shortcut/);assert.match(f.nodes.get('toast').textContent,/already used for Take down/);assert.equal(f.state.settings.localShortcuts.pin,undefined);
  await f.key('Escape');
 });
+test('recording a key that a preview uses for another action is a conflict like macOS',async()=>{
+ const f=fixture();await f.ready();await f.api.command('settings');await f.ready();
+ await f.click('record-local',{keyAction:'remove'});await f.key('KeyO',{ctrl:true});await f.click('confirm-modal');
+ assert.match(f.overlay,/Record shortcut/);assert.match(f.nodes.get('toast').textContent,/already used for Open in browser/);assert.equal(f.state.settings.localShortcuts.remove,undefined);
+ await f.key('Escape');
+});
 
 test('recording the same legacy lowercase global binding keeps its exact registration value',async()=>{
  const f=fixture();await f.ready();f.api.emit({settings:{...f.state.settings,shortcuts:{...f.state.settings.shortcuts,search:'Control+Alt+s'}}});await f.ready();await f.api.command('settings');await f.ready();

@@ -24,6 +24,19 @@ import XCTest
         XCTAssertEqual(try store(f).query(LibraryQuery()).map(\.id), values.map(\.id))
         XCTAssertTrue(FileManager.default.fileExists(atPath: library.root.appendingPathComponent("Backups").path))
     }
+    func testRemovingTagFromItsLastItemDropsTheTagButKeepsItWhileAnotherItemHasIt() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let first = try XCTUnwrap(library.captureText("one")), second = try XCTUnwrap(library.captureText("two"))
+        try library.addTag("draft", to: [first.id, second.id])
+        let tag = try XCTUnwrap(library.tags().first)
+        try library.removeTag(tag.id, from: first.id)
+        XCTAssertEqual(try library.tags().map(\.name), ["draft"])
+        try library.removeTag(tag.id, from: second.id)
+        XCTAssertTrue(try library.tags().isEmpty)
+        try library.addTag("draft", to: [first.id])
+        XCTAssertEqual(try library.tags(for: first.id).map(\.name), ["draft"])
+    }
     func testCorruptSourceBlocksMigrationAndDoesNotOverwriteArchive() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let texts = f.texts(); texts.add("original"); let bad = Data("broken".utf8); try bad.write(to: texts.archive)
