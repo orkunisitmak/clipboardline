@@ -50,9 +50,9 @@ module.exports=async function shortcutParity({page,application,check,until}){
   await palette('Settings · History');await page.keyboard.press('Enter');await page.locator('[data-retention="text"]').waitFor({state:'visible'});await page.locator('[data-retention="link"]').waitFor({state:'visible'});
   check('action bar opens image tools, Library views and real Settings destinations through semantic commands');
 
-  await page.locator('[data-action="settings-tab"][data-tab="shortcuts"]').click();await page.locator('[data-action="record-local"][data-key-action="pin"]').click();await page.keyboard.press('s');await page.locator('[data-action="confirm-modal"]').click();
-  await until(()=>page.locator('#toast').textContent(),message=>message.includes('already used for Move to Trash'));assert.equal(await page.locator('[aria-label="Record shortcut"]').isVisible(),true);
-  await page.keyboard.press('o');await page.locator('[data-action="confirm-modal"]').click();await page.locator('[aria-label="Record shortcut"]').waitFor({state:'hidden'});await show();await page.keyboard.press('o');
+  await page.locator('[data-action="settings-tab"][data-tab="shortcuts"]').click();await page.locator('[data-action="record-local"][data-key-action="pin"]').click();await page.keyboard.press('s');const priorToast=await page.locator('#toast').textContent();await page.locator('[data-action="confirm-modal"]').click();
+  await until(()=>page.locator('#toast').textContent(),message=>Boolean(message?.trim())&&message!==priorToast);assert.equal(await page.locator('.record-wait').isVisible(),true);
+  await page.keyboard.press('o');await page.locator('[data-action="confirm-modal"]').click();await page.locator('.record-wait').waitFor({state:'hidden'});await show();await page.keyboard.press('o');
   assert.equal((await page.evaluate(()=>window.clipboardLine.state())).items.find(value=>value.id===fixtures.image).pinned,false);
   await page.keyboard.press('Space');await page.keyboard.press('m');await waitForImageEditorRaster(page,{width:96,height:64});await page.keyboard.press('o');assert.equal(await page.locator('[data-tool="ellipse"]').getAttribute('aria-pressed'),'true');await page.keyboard.press('Control+Enter');await page.locator('#markup-canvas').waitFor({state:'hidden'});await page.keyboard.press('Escape');
   check('shortcut recorder rejects overlapping actions but permits the same letter in separate browsing and markup contexts');

@@ -51,7 +51,8 @@ async function waitForCropBox(page,viewport,raster={width:900,height:220}){
   return ready.box;
 }
 async function main(){
-  const args=['--test-mode','--test-data='+data,'--test-tray'];
+  // Keep English-label native acceptance deterministic regardless of host Windows locale.
+  const args=['--lang=en-US','--test-mode','--test-data='+data,'--test-tray'];
   application=await electron.launch({...(process.env.CLIPBOARDLINE_EXECUTABLE?{executablePath:path.resolve(process.env.CLIPBOARDLINE_EXECUTABLE)}:{args:[path.resolve('.'),...args]}),...(process.env.CLIPBOARDLINE_EXECUTABLE?{args}:{}),timeout:60000});
   const page=await application.firstWindow();activePage=page;await page.waitForFunction(()=>!!window.clipboardLine);
   report.rendererErrors=[];page.on('pageerror',error=>{if(report.rendererErrors.length<20)report.rendererErrors.push(String(error.stack||error.message).slice(0,2000));});
