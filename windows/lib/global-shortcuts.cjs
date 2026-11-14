@@ -26,6 +26,47 @@ class GlobalShortcuts{
  }
  update(shortcuts){
   const rejected=[],swapped=new Set();
+  // Release explicitly disabled actions first so their keys can be reused
+  // by another action in this same settings update.
+  if(!this.suspended&&!this.disposed)for(const action of ACTIONS){
+   if(shortcuts[action]||!this.registered.has(action))continue;
+   const key=this.registered.get(action);
+   if(this.active.has(action))this.registry.unregister(key);
+   this.active.delete(action);this.epochs.delete(action);this.registered.delete(action);
+  }
+  // A circular permutation of three or more keys is also entirely owned.
+  // Release the full cycle before registering any replacement, then roll back
+  // every key if the OS refuses one. Two-way swaps use the existing path below.
+  if(!this.suspended&&!this.disposed)for(const action of ACTIONS){
+   if(swapped.has(action)||!this.active.has(action))continue;
+   const cycle=[],visited=new Set();let cursor=action;
+   while(cursor&&!visited.has(cursor)&&!swapped.has(cursor)){
+    visited.add(cursor);
+    const previous=this.registered.get(cursor),next=shortcuts[cursor]||'';
+    if(!previous||!next||next===previous||!this.active.has(cursor))break;
+    cycle.push({action:cursor,previous,next});
+    cursor=ACTIONS.find(candidate=>this.active.has(candidate)&&this.registered.get(candidate)===next);
+   }
+   if(cursor!==action||cycle.length<3)continue;
+   const installed=[];let success=true;
+   try{
+    for(const item of cycle){this.registry.unregister(item.previous);this.active.delete(item.action);this.epochs.delete(item.action);}
+    for(const item of cycle){if(!this.register(item.action,item.next)){success=false;break;}this.active.add(item.action);installed.push(item);}
+   }catch{success=false;}
+   if(success)for(const item of cycle)this.registered.set(item.action,item.next);
+   else{
+    for(const item of installed){try{this.registry.unregister(item.next);}catch{}this.active.delete(item.action);this.epochs.delete(item.action);}
+    const restorationFailed=new Set();
+    for(const item of cycle){
+     if(this.active.has(item.action))continue;
+     let restored=false;try{restored=this.register(item.action,item.previous);}catch{}
+     if(restored)this.active.add(item.action);
+     else{this.registered.delete(item.action);restorationFailed.add(item.action);this.failed(new Error('A shortcut could not be restored after a failed rotation.'));}
+    }
+    rejected.push(...cycle.map(item=>({action:item.action,shortcut:item.next,previous:item.previous,...(restorationFailed.has(item.action)?{restorationFailed:true}:{})})));
+   }
+   for(const item of cycle)swapped.add(item.action);
+  }
   // A reciprocal swap only uses two shortcuts already owned by this instance.
   // Release both together, then restore both on failure instead of rejecting
   // valid bindings merely because each is still held by its old action.

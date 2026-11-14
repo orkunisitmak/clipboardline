@@ -63,7 +63,7 @@ struct PublicLinkDestination: Equatable, Sendable {
         guard input.absoluteString.utf8.count <= 8192,
               var c = URLComponents(url: input, resolvingAgainstBaseURL: false),
               c.scheme?.lowercased() == "https", c.user == nil, c.password == nil,
-              c.port == nil || c.port == 443, let host = c.host?.lowercased(),
+              c.port == nil || c.port == 443, let host = c.encodedHost?.lowercased(),
               host.utf8.count <= 253, host.utf8.allSatisfy({ (97...122).contains($0) || (48...57).contains($0) || $0 == 45 || $0 == 46 }),
               host.contains("."), !host.hasSuffix("."),
               !["local", "localhost", "internal", "home", "arpa", "lan", "corp", "localdomain", "onion", "test", "invalid", "example", "alt"].contains(where: { host == $0 || host.hasSuffix("." + $0) }) else { return nil }
@@ -72,7 +72,7 @@ struct PublicLinkDestination: Equatable, Sendable {
               labels.last?.contains(where: { $0.isLetter }) == true else { return nil }
         let secretNames: Set<String> = ["token", "accesstoken", "refreshtoken", "idtoken", "auth", "authorization", "authentication", "authtoken", "password", "secret", "clientsecret", "key", "apikey", "accesskeyid", "signature", "sig", "code", "session", "sessionid", "credential", "credentials", "jwt", "bearer", "state", "policy", "keypairid", "verifier"]
         guard !(c.queryItems ?? []).contains(where: {
-            let name = $0.name.lowercased().replacingOccurrences(of: "-", with: "").replacingOccurrences(of: "_", with: "")
+            let name = String($0.name.lowercased().unicodeScalars.filter { (97...122).contains($0.value) || (48...57).contains($0.value) })
             return secretNames.contains(name) || name.hasPrefix("xamz") || name.hasPrefix("xgoog") || name.hasPrefix("oauth")
         }) else { return nil }
         c.scheme = "https"; c.host = host; c.port = nil; c.fragment = nil
@@ -327,7 +327,16 @@ struct PublicLinkNetwork: Sendable {
          exchange: @escaping Exchange = { plan, limit in try await PublicLinkExchange(limit: limit).run(plan) }) {
         self.resolve = resolve; self.exchange = exchange
     }
-    func fetch(_ url: URL, limit: Int, allowed: @Sendable (URL) -> Bool = { _ in true }) async throws -> PublicLinkResponse {
+    /// `deadline` bounds the whole call, redirects and DNS included, like Windows' 20 s metadata fetch.
+    func fetch(_ url: URL, limit: Int, deadline: Duration = .seconds(20), allowed: @escaping @Sendable (URL) -> Bool = { _ in true }) async throws -> PublicLinkResponse {
+        return try await withThrowingTaskGroup(of: PublicLinkResponse.self) { group in
+            group.addTask { try await follow(url, limit: limit, allowed: allowed) }
+            group.addTask { try await Task.sleep(for: deadline); throw PublicLinkError.timeout }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
+    }
+    private func follow(_ url: URL, limit: Int, allowed: @Sendable (URL) -> Bool) async throws -> PublicLinkResponse {
         guard (1...5 * 1024 * 1024).contains(limit) else { throw PublicLinkError.tooLarge }
         var current = url
         for hop in 0...3 {
@@ -355,9 +364,9 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     let author: String?
     let thumbnailURL: URL?
 
-    init(data: Data, url: URL) throws {
+    init(data: Data, url: URL, contentType: String = "") throws {
         guard data.count <= 512 * 1024 else { throw PublicLinkError.tooLarge }
-        let source = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
+        let source = Self.decode(data, contentType: contentType)
         let html = Self.replacing(#"(?is)<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>"#, in: source, with: "")
         let tags = try NSRegularExpression(pattern: #"(?is)<meta\b([^>]{0,8192})>"#)
         let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)
@@ -375,10 +384,46 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         let titleTag = try NSRegularExpression(pattern: #"(?is)<title\b[^>]*>(.{0,8192}?)</title\s*>"#)
         let titleMatch = titleTag.firstMatch(in: html, range: NSRange(html.startIndex..., in: html))
             .flatMap { Range($0.range(at: 1), in: html) }.map { Self.entities(Self.replacing(#"<[^>]*>"#, in: String(html[$0]), with: "")) }
-        title = Self.clean(metadata["og:title"] ?? metadata["twitter:title"] ?? titleMatch, limit: 500)
+        title = Self.clean(metadata["og:title"], limit: 500)
+            ?? Self.clean(metadata["twitter:title"], limit: 500)
+            ?? Self.clean(titleMatch, limit: 500)
         author = Self.clean(metadata["author"] ?? metadata["og:site_name"], limit: 200)
-        let image = metadata["og:image:secure_url"] ?? metadata["og:image"] ?? metadata["twitter:image"]
-        thumbnailURL = image.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }.flatMap { PublicLinkDestination($0)?.url }
+        thumbnailURL = ["og:image:secure_url", "og:image", "twitter:image"]
+            .compactMap { metadata[$0] }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .compactMap { URL(string: $0, relativeTo: url)?.absoluteURL }
+            .compactMap { PublicLinkDestination($0)?.url }
+            .first
+    }
+    /// Encoding sniffing order, as in windows/lib/network.cjs decodeHTML: UTF-8 BOM, Content-Type charset,
+    /// XML declaration (XHTML only), early <meta charset>. Unknown labels fall through; undeclared bytes
+    /// that are not UTF-8 are windows-1252. The first 2048 bytes are read as Latin-1 only to find a label.
+    static func decode(_ data: Data, contentType: String = "") -> String {
+        let head = String(data: data.prefix(2048), encoding: .isoLatin1) ?? ""
+        func labels(_ pattern: String, in text: String) -> [String] {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return [] }
+            return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range(at: 1), in: text).map { String(text[$0]) } }
+        }
+        let hasBOM = data.starts(with: [0xef, 0xbb, 0xbf]), bom = hasBOM ? ["utf-8"] : []
+        let xml = contentType.range(of: "application/xhtml+xml", options: .caseInsensitive) == nil ? [] :
+            Array(labels(#"^\s*<\?xml[^>]*\sencoding\s*=\s*["']([\w.:-]+)"#, in: head).prefix(1))
+        // A meta declaration of UTF-16 cannot be true for ASCII-compatible markup; HTML treats it as UTF-8.
+        let meta = labels(#"<meta[^>]*[\s"';]charset\s*=\s*["']?([\w.:-]+)"#, in: head).map { $0.lowercased().hasPrefix("utf-16") ? "utf-8" : $0 }
+        let header = Array(labels(#"(?:^|;)\s*charset\s*=\s*["']?([\w.:-]+)"#, in: contentType).prefix(1))
+        let declared: [String] = bom + header + xml + meta
+        if let encoding = declared.lazy.compactMap(Self.encoding(for:)).first {
+            if encoding == .utf8 { return String(decoding: hasBOM ? data.dropFirst(3) : data, as: UTF8.self) }
+            if let text = String(data: data, encoding: encoding) { return text }
+        }
+        return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .windowsCP1252) ?? String(data: data, encoding: .isoLatin1) ?? ""
+    }
+    private static func encoding(for label: String) -> String.Encoding? {
+        // WHATWG maps the Latin-1 and Latin-5 labels to their Windows supersets.
+        let aliases = ["iso-8859-1": "windows-1252", "latin1": "windows-1252", "us-ascii": "windows-1252", "ascii": "windows-1252", "iso-8859-9": "windows-1254", "latin5": "windows-1254"]
+        let name = label.lowercased(), converted = CFStringConvertIANACharSetNameToEncoding((aliases[name] ?? name) as CFString)
+        guard converted != 0xFFFF_FFFF else { return nil }
+        return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(converted))
     }
     private static func replacing(_ pattern: String, in value: String, with replacement: String) -> String {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return value }
@@ -386,19 +431,26 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     }
     private static func clean(_ value: String?, limit: Int) -> String? {
         guard let value else { return nil }
-        let clean = value.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) || CharacterSet.whitespacesAndNewlines.contains($0) }
+        // Drop Cc and the bidirectional marks, overrides, embeddings and isolates that can reorder a title to spoof another one.
+        // CharacterSet.controlCharacters also holds Cf, which includes the joiners emoji and Persian text need.
+        let clean = value.unicodeScalars.filter {
+            let bidi = [0x061C, 0x200E, 0x200F].contains($0.value) || (0x202A...0x202E).contains($0.value) || (0x2066...0x2069).contains($0.value)
+            return ($0.properties.generalCategory != .control && !bidi) || CharacterSet.whitespacesAndNewlines.contains($0)
+        }
         let result = String(String.UnicodeScalarView(clean)).split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return result.isEmpty ? nil : String(result.prefix(limit))
     }
+    private static let namedEntities = ["amp": "&", "quot": "\"", "lt": "<", "gt": ">", "apos": "'", "nbsp": " ", "ccedil": "ç", "Ccedil": "Ç", "ouml": "ö", "Ouml": "Ö", "uuml": "ü", "Uuml": "Ü", "gbreve": "ğ", "Gbreve": "Ğ", "scedil": "ş", "Scedil": "Ş", "inodot": "ı", "Idot": "İ", "acirc": "â", "icirc": "î", "ucirc": "û", "auml": "ä", "Auml": "Ä", "szlig": "ß", "eacute": "é", "Eacute": "É", "egrave": "è", "agrave": "à", "aacute": "á", "iacute": "í", "oacute": "ó", "uacute": "ú", "ntilde": "ñ", "ndash": "–", "mdash": "—", "hellip": "…", "lsquo": "‘", "rsquo": "’", "ldquo": "“", "rdquo": "”", "laquo": "«", "raquo": "»", "bull": "•", "middot": "·", "copy": "©", "reg": "®", "trade": "™", "euro": "€", "pound": "£"]
+
     private static func entities(_ value: String) -> String {
-        let named = ["amp": "&", "quot": "\"", "lt": "<", "gt": ">", "apos": "'", "nbsp": " "]
-        guard let regex = try? NSRegularExpression(pattern: #"&(#x[0-9A-Fa-f]{1,6}|#[0-9]{1,7}|amp|quot|lt|gt|apos|nbsp);"#) else { return value }
+        let named = namedEntities, names = named.keys.joined(separator: "|")
+        guard let regex = try? NSRegularExpression(pattern: #"&(#[xX][0-9A-Fa-f]{1,6}|#[0-9]{1,7}|\#(names));"#) else { return value }
         var result = value
         for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
             guard let whole = Range(match.range, in: result), let nameRange = Range(match.range(at: 1), in: value) else { continue }
             let name = String(value[nameRange]); var replacement = named[name]
-            if name.hasPrefix("#x"), let number = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
-            else if name.hasPrefix("#"), let number = UInt32(name.dropFirst()), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
+            if name.lowercased().hasPrefix("#x"), let number = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(number), scalar.properties.generalCategory != .control { replacement = String(scalar) }
+            else if name.hasPrefix("#"), let number = UInt32(name.dropFirst()), let scalar = UnicodeScalar(number), scalar.properties.generalCategory != .control { replacement = String(scalar) }
             if let replacement { result.replaceSubrange(whole, with: replacement) }
         }
         return result

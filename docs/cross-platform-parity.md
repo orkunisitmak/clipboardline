@@ -29,14 +29,81 @@ versioned behavioral specification. Its synthetic items use portable aliases and
 are listed newest first. Every step contains an expected active row, focused
 item, complete selection, visible rows and native search-editing state.
 
-The current eleven scenarios (62 observations per platform) cover one selected image on opening, reopening,
+The current sixteen scenarios (95 observations per platform) cover one selected image on opening, reopening,
 hidden/empty/filtered image fallback, column-preserving vertical navigation and
 clamping, hidden/empty row skipping, horizontal navigation, adding and hiding
-rows, search caret keys, empty shelves, remapping, disabling and restoring defaults.
+rows, search caret keys, empty shelves, remapping, disabling and restoring defaults,
+and Enter, S, P, Space and Ctrl/Command+C doing nothing on an empty active shelf
+while other shelves hold items (`command` steps also observe their `effects`:
+any copy, preview, pin or take down; the expected list is empty). M also opens markup for the focused shelf photo directly; empty and non-image shelves ignore it. Marker drag, saved marks and native text input guards are covered by the nearby annotation interaction tests on both platforms.
+Mac preview mouse coverage sends down/drag/up events through the real nonactivating
+panel and checks recorded vectors and composited pixels; a control view verifies
+window-level delivery in the test process. The canvas accepts first mouse during
+markup/crop so a non-key preview can draw. Windows uses its existing renderer
+pointer handlers and has no AppKit first-mouse gate.
 A future user-visible change must add
 or amend the relevant scenarios and both adapters in the same change. Extend the
 contract's scope as the product grows; passing the current shelf scenarios is not
 a claim that every feature has cross-platform coverage.
+
+`policy.sharedBehaviors` records shared user-visible behavior outside shelf
+navigation, with how macOS and Windows each implement it; the checker rejects an
+entry missing either platform. `localized-notices` requires notices and the
+shortcut-conflict message to follow the selected language, including refilled
+templates such as `Exported %d · failed %d`. Its Windows evidence is the
+renderer test that runs the shipped export through the Export shortcut.
+`localized-selection-count` requires the Library footer and the multi-selection
+details panel to show the count with the localized `%d selected` entry. The
+Windows folder picker uses the same entry; the macOS folder picker keeps its own
+`Pin %d items to a folder` heading.
+`link-title-charset` requires a fetched page title to be decoded with the page's
+declared character set (byte-order mark, `Content-Type`, XHTML declaration, early
+`<meta charset>`), falling back to windows-1252, so windows-1254 pages show their
+Turkish letters.
+`image-recopy-dedupe` requires copying the same image again to keep one Library item,
+moved to the front with its pin, name, tags and folders.
+`mixed-selection-pin` requires Pin on a
+selection of pinned and unpinned items to pin all of them, and to unpin only
+when every selected item is already pinned; the Library keyboard contract executes
+this on both platforms with an image, a text and a link selected.
+`subfolder-title` requires the Library title of a subfolder to list every
+ancestor, outermost first (`Parent / Child`, `Parent / Middle / Child`), so
+same-named subfolders of different parents can be told apart.
+`link-title-format-characters` requires a fetched page title to keep the
+zero-width joiner and non-joiner (emoji sequences, Persian words) while removing
+the bidirectional marks, embeddings, overrides and isolates that can spoof a title,
+whether written directly or as numeric references; numeric references to control
+code points stay literal.
+`trash-restore-selection` requires restoring items from Library Trash to move
+focus and selection to the first item that remains in Trash and to clear the
+details panel when none remain.
+`trash-copy` requires the Copy action to stay enabled for an item in Library
+Trash, as the copy shortcut already works there, while editing actions wait for
+Restore.
+`item-name-trimming` requires an item name to be used without surrounding
+whitespace and a whitespace-only name to count as no name.
+`folder-removal-view` requires removing a folder to return the Library to My
+library only when the open view is that folder or one of its subfolders.
+`inspector-title-length` requires a Library inspector title longer than 200 characters to be saved on both
+platforms, up to 1 MiB of UTF-8 bytes.
+`text-and-note-size-limit` requires a text or a note over 1 MiB of UTF-8 bytes to be refused on both
+platforms, not 1 MiB of UTF-16 units on Windows.
+`name-fold-keeps-script-marks` requires tag and folder names that differ only by a kana voiced mark or a
+Devanagari or Thai vowel sign to stay distinct on both platforms.
+`width-insensitive-search` also keeps a voiced kana and a Hangul syllable whole, so searching は or 하 does
+not find ばら or 한국 on either platform.
+`item-display-title` requires an unnamed text to be titled by its first non-blank
+line, trimmed and capped at 120 grapheme clusters (Untitled note when every line is
+blank), and a link without a fetched title by its host name (Link when the stored URL
+does not parse).
+`item-name-validation` requires Name and pin to accept a trimmed name of 1-160
+characters and at most 1024 UTF-8 bytes without control or line/paragraph
+separators, and to reject anything else with `Enter a name (1–160 characters)`.
+Its evidence is `LibraryStore.nameAndPin` on macOS and the Windows `model.test.cjs`
+Name and pin case.
+`unavailable-watched-folder` requires a watched folder that is unavailable, such as one on an
+unmounted volume, to stay in the saved list while it is skipped, so adding or removing another
+watched folder does not forget it.
 
 The adapters execute application behavior:
 
@@ -130,7 +197,7 @@ with that exact counterpart; both feeds must say 1.7.6 before Latest promotion.
 
 Mac build78 and Windows build71 implement the same Library keyboard workflow.
 See [the bilingual guide](library-keyboard.md). The additive
-`contracts/library-keyboard.json` specifies 10 scenarios / 87 observations through the
+`contracts/library-keyboard.json` specifies 11 scenarios / 92 observations through the
 shipping Mac Model/Store and Windows renderer/Store. This contract proves state,
 not physical focus; native Mac focus/workflow tests, Cua acceptance and Windows
 source/packaged/installed keyboard journeys separately verify controls, panes,

@@ -5,6 +5,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');const path=require('node:path');const os=require('node:os');const crypto=require('node:crypto');const {spawn}=require('node:child_process');
 const {_electron:electron}=require('playwright');
 const {windowsEnvironment}=require('../lib/windows-environment.cjs');
+const {readJsonRetry}=require('./read-json-retry.cjs');
 const appIconAcceptance=require('./app-icon-acceptance.cjs');
 const statusTrayAcceptance=require('./status-tray-acceptance.cjs');
 const shelfPerformanceAcceptance=require('./shelf-performance-acceptance.cjs');
@@ -27,7 +28,8 @@ const edgeConsumer=require('./consumer-edge-acceptance.cjs');
 const notepadConsumer=require('./notepad-acceptance.cjs');
 if(process.platform!=='win32')throw new Error('Run native acceptance on the actual Windows runner.');
 const output=path.resolve(process.env.CLIPBOARDLINE_VALIDATION||'validation');fs.mkdirSync(output,{recursive:true});
-const data=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-runtime-'));
+// A non-ASCII data folder sends such paths through every native helper in source, packaged and installed runs.
+const data=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-çalışma-'));
 const report={platform:process.platform,arch:process.arch,node:process.version,sourceRevision:process.env.GITHUB_SHA||'',packaged:!!process.env.CLIPBOARDLINE_EXECUTABLE,checks:[],startedAt:new Date().toISOString()};
 let application,fixture,otherFixture,activePage;
 const check=(name,details={})=>{report.checks.push({name,passed:true,...details});console.log('PASS '+name);};
@@ -140,7 +142,7 @@ async function main(){
   await application.evaluate(async()=>{const h=global.__clipboardLineTest;h.store.insert('link','https://example.com/reference');await h.command('show');});
   await page.locator(`[data-shelf="text"] [data-item-id="${textItem.id}"]`).click();
   await page.keyboard.press('Space');await page.locator('#preview-dialog').waitFor({state:'visible'});
-  await page.keyboard.press('ArrowDown');await until(()=>page.locator('#preview-dialog').getAttribute('aria-label'),label=>label.includes('example.com/reference'));
+  await page.keyboard.press('ArrowDown');await until(()=>page.locator('#preview-dialog').getAttribute('aria-label'),label=>label==='example.com');
   await page.keyboard.press('ArrowUp');await until(()=>page.locator('#preview-dialog').getAttribute('aria-label'),label=>label==='Named synthetic key');
   await page.keyboard.press('p');await until(()=>page.evaluate(()=>window.clipboardLine.state()),value=>value.items.find(i=>i.id===textItem.id).pinned===false);
   await page.keyboard.press('p');await until(()=>page.evaluate(()=>window.clipboardLine.state()),value=>value.items.find(i=>i.id===textItem.id).pinned===true);
@@ -157,6 +159,7 @@ async function main(){
   await shortcutParity({page,application,check,until,output});
   await libraryPreview({page,application,check,until,output,waitForCropBox});
   await libraryKeyboardAcceptance({page,application,check,until,output});
+  await require('./settings-toggle-focus-acceptance.cjs')({page,until,check});
   await textPreview({page,application,check,until,output});
   await scrollStateAcceptance({page,application,check,until,output});
   await libraryFolderDrag({page,application,check,until,output});
@@ -169,7 +172,7 @@ async function main(){
   await page.evaluate(()=>window.clipboardLine.command('hide'));
   const fixtureOutput=path.join(data,'native-target.json');const ps=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
   fixture=spawn(ps,['-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',path.resolve('tests/native-fixture.ps1'),'-Output',fixtureOutput],{windowsHide:false,stdio:'ignore',env:windowsEnvironment()});
-  const fixtureState=()=>JSON.parse(fs.readFileSync(fixtureOutput,'utf8'));
+  const fixtureState=()=>readJsonRetry(fixtureOutput);
   const fixtureCommand=async payload=>{const serial=crypto.randomUUID(),file=fixtureOutput+'.commands';fs.writeFileSync(file+'.tmp',JSON.stringify({...payload,serial}));for(let attempt=0;;attempt++){try{fs.renameSync(file+'.tmp',file);break;}catch(error){if(!['EPERM','EACCES','EBUSY'].includes(error.code)||attempt>=20)throw error;await new Promise(resolve=>setTimeout(resolve,25));}}const result=await until(fixtureState,value=>value.lastSerial===serial);assert.equal(result.commandError,'',result.commandError);return result;};
   await until(fixtureState,s=>s.ready);
   await application.evaluate(()=>global.__clipboardLineTest.command('show'));
@@ -330,7 +333,7 @@ async function main(){
   await page.evaluate(()=>window.clipboardLine.command('hide'));await fixtureCommand({action:'focus',target:'plain'});await application.evaluate(()=>global.__clipboardLineTest.command('show'));
   const protectedTarget=await application.evaluate(()=>global.__clipboardLineTest.getTarget()),otherOutput=path.join(data,'unrelated-target.json');
   otherFixture=spawn(ps,['-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',path.resolve('tests/native-fixture.ps1'),'-Output',otherOutput],{windowsHide:false,stdio:'ignore',env:windowsEnvironment()});
-  const otherState=()=>JSON.parse(fs.readFileSync(otherOutput,'utf8'));await until(otherState,value=>value.ready&&value.foreground===value.handle);
+  const otherState=()=>readJsonRetry(otherOutput);await until(otherState,value=>value.ready&&value.foreground===value.handle);
   const unrelated=await application.evaluate(async(_electron,target)=>{try{await global.__clipboardLineTest.native.preparePaste(target);return{ok:true};}catch(error){return{error:error.message};}},protectedTarget);
   assert.match(unrelated.error||'',/Another (?:application|window)/);const unrelatedAfter=otherState();assert.equal(unrelatedAfter.foreground,unrelatedAfter.handle);assert.equal(unrelatedAfter.text,'');
   const otherExited=new Promise(resolve=>otherFixture.once('exit',resolve));otherFixture.kill();await otherExited;otherFixture=null;
@@ -339,10 +342,11 @@ async function main(){
   const secondImage=await application.evaluate(({nativeImage},value)=>{const h=global.__clipboardLineTest;return h.store.insert('image',nativeImage.createFromDataURL(value).crop({x:0,y:0,width:150,height:100}).toPNG()).id;},edited);
   // The original and this PNG are different managed originals, so the FileDrop
   // batch contains two actual files, with the first raster as an app fallback.
-  const batch=await page.evaluate(ids=>window.clipboardLine.command('copy',{ids,keepOpen:true}),[imageItem.id,secondImage]);assert.ok(!batch.result?.error,batch.result?.error);
-  await until(fixtureState,s=>s.dropCount===2&&s.pngAvailable);
+  const batchText=await application.evaluate(()=>global.__clipboardLineTest.store.insert('text','şğü ıİ').id);
+  const batch=await page.evaluate(ids=>window.clipboardLine.command('copy',{ids,keepOpen:true}),[imageItem.id,secondImage,batchText]);assert.ok(!batch.result?.error,batch.result?.error);
+  await until(fixtureState,s=>s.dropCount===2&&s.pngAvailable);assert.equal(await application.evaluate(async({clipboard})=>clipboard.readText()),'şğü ıİ');
   await application.evaluate(()=>global.__clipboardLineTest.readClipboard());assert.equal((await page.evaluate(()=>window.clipboardLine.state())).items.length,batch.items.length);
-  check('multi-image copy supplies native Windows FileDrop batch and full-resolution PNG fallback without recapture');
+  await page.evaluate(ids=>window.clipboardLine.command('trash',{ids}),[batchText]);await page.evaluate(ids=>window.clipboardLine.command('delete',{ids}),[batchText]);check('multi-image copy supplies native Windows FileDrop batch and full-resolution PNG fallback without recapture');
   const copied=await page.evaluate(id=>window.clipboardLine.command('copy',{ids:[id]}),textItem.id);assert.ok(!copied.result?.error);assert.equal(await application.evaluate(()=>global.__clipboardLineTest.getWindow().isVisible()),false);check('plain Enter copy dismisses shelves/preview host and restores previous application');
   await fixtureCommand({action:'focus',target:'plain'});await application.evaluate(()=>global.__clipboardLineTest.command('show'));
   const closedTarget=await application.evaluate(()=>global.__clipboardLineTest.getTarget());assert.ok(closedTarget.editable);

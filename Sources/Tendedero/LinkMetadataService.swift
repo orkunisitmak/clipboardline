@@ -104,7 +104,10 @@ struct LinkMetadata: Equatable {
         let imageURL = response.thumbnail_url.flatMap(URL.init(string:)).flatMap { url -> URL? in
             guard url.scheme == "https", let host = url.host?.lowercased(), host == "i.ytimg.com" || host.hasSuffix(".ytimg.com") else { return nil }; return url
         }
-        return (LinkMetadata(title: response.title, author: response.author_name), imageURL)
+        func trimmed(_ value: String?) -> String? {
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }; return value
+        }
+        return (LinkMetadata(title: trimmed(response.title), author: trimmed(response.author_name)), imageURL)
     }
     static func fetchMetadata(_ url: URL) async throws -> LinkMetadata {
         guard PublicLinkDestination(url) != nil else { throw PublicLinkError.blockedURL }
@@ -125,7 +128,7 @@ struct LinkMetadata: Equatable {
         let type = response.headers["content-type"]?.lowercased() ?? ""
         guard type.contains("text/html") || type.contains("application/xhtml+xml") else { return LinkMetadata(title: response.url.host) }
         let parsed = try await Task.detached(priority: .utility) {
-            try PublicLinkHTMLMetadata(data: response.body, url: response.url)
+            try PublicLinkHTMLMetadata(data: response.body, url: response.url, contentType: type)
         }.value
         var result = LinkMetadata(title: parsed.title, author: parsed.author)
         if let thumbnail = parsed.thumbnailURL {

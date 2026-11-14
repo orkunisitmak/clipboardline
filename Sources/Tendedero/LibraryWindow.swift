@@ -203,7 +203,7 @@ final class LibraryNativeWindow: NSWindow {
         alert.addButton(withTitle: L("Remove folder")); alert.addButton(withTitle: L("Cancel"))
         presentAlert(alert) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            self.model.perform { try self.model.store.removeCollection(folder.id) }; self.model.changeScope(.saved)
+            self.model.removeFolder(folder.id)
         }
     }
     func renameTag(_ tag: LibraryTag) {
@@ -395,7 +395,7 @@ final class LibraryNativeWindow: NSWindow {
         if model.selectedIDs.count > 1 {
             VStack(alignment: .leading, spacing: 18) {
                 Text(String(format: L("%d selected"), model.selectedIDs.count)).font(.title3.weight(.semibold))
-                HStack { Button(L("Copy")) { model.copy() }; Button(L("Pin favorite")) { model.favorite() } }
+                HStack { Button(L("Copy")) { model.copy() }; Button(model.actionsArePinned ? L("Unpin") : L("Pin favorite")) { model.favorite() } }
                 Divider()
                 Menu(L("Add to folder")) { ForEach(model.collections) { folder in Button(folder.name) { model.assign(folder.id) } } }.disabled(model.collections.isEmpty)
                 Button(L("Add tag…")) { actions?.promptTag() }

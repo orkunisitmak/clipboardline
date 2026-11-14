@@ -31,3 +31,33 @@ test('installer timeout remains retryable without bypassing signature or integri
   await assert.rejects(s.updates.download(),/timed out/);assert.equal(s.updates.state.status,'available');assert.equal(s.updates.installer,null);
   s.updates.fetcher=async()=>({bytes:s.f.bytes});const file=await s.updates.download();assert.deepEqual(fs.readFileSync(file),s.f.bytes);assert.equal(s.updates.state.status,'ready');
 });
+
+
+test('automatic retry cooldown starts when a slow failed update check ends',async t=>{
+ const s=setup(t),scheduler=new AutomaticUpdateScheduler(s.updates,{clock:s.options.clock});
+ s.updates.fetcher=async()=>{s.calls.push('slow-offline');s.time(1_600_000);throw new Error('timed out');};
+ await scheduler.tick();
+ assert.equal(s.updates.state.lastAttemptAt,1_600_000);
+ s.updates.fetcher=async()=>{s.calls.push('retry');return{bytes:s.f.envelope(s.f.manifest)};};
+ s.time(1_899_999);await scheduler.tick();assert.deepEqual(s.calls,['slow-offline']);
+ s.time(1_900_000);await scheduler.tick();assert.deepEqual(s.calls,['slow-offline','retry']);
+});
+
+
+test('failed automatic update retry deadline survives restart with a signed cached offer',async t=>{
+ const s=setup(t);await s.updates.check();
+ s.time(2_000_000);s.updates.fetcher=async()=>{throw new Error('synthetic outage');};
+ await s.updates.check();
+ assert.equal(s.updates.state.lastAttemptAt,2_000_000);
+ const cache=JSON.parse(fs.readFileSync(path.join(s.directory,'update-state.json'),'utf8'));
+ assert.equal(cache.lastAttemptAt,2_000_000,'the failed check time must be persisted');
+ assert.equal(cache.lastAttemptFailed,true);
+ let requests=0;
+ const recovered=new Updates(s.directory,{...s.options,fetcher:async()=>{requests++;return{bytes:s.f.envelope(s.f.manifest)};}});
+ assert.equal(recovered.state.lastAttemptAt,2_000_000);
+ assert.ok(recovered.state.error,'the scheduler must know that the last check failed');
+ const scheduler=new AutomaticUpdateScheduler(recovered,{clock:s.options.clock});
+ s.time(2_299_999);await scheduler.tick();assert.equal(requests,0);
+ s.time(2_300_000);await scheduler.tick();assert.equal(requests,1);
+ assert.equal(recovered.state.error,null);
+});

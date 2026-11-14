@@ -26,6 +26,13 @@ import XCTest
     private func key(_ code: UInt16, _ value: String, _ flags: NSEvent.ModifierFlags = []) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil, characters: value, charactersIgnoringModifiers: value, isARepeat: false, keyCode: code)!
     }
+    func testGlobalShortcutDisplayNamesArrowFunctionAndReturnKeys() throws {
+        func display(_ code: UInt16, _ character: String, _ flags: NSEvent.ModifierFlags) throws -> String { try XCTUnwrap(Shortcut(event: key(code, character, flags))).display }
+        XCTAssertEqual(try display(123, "\u{F702}", [.control, .option]), "⌃⌥←")
+        XCTAssertEqual(try display(96, "\u{F708}", .command), "⌘F5")
+        XCTAssertEqual(try display(36, "\r", .control), "⌃↩")
+        XCTAssertEqual(try display(17, "t", [.control, .option]), "⌃⌥T")
+    }
     func testOwnedGlobalLeaseSuspendsAllAndBlocksStaleCallbacksUntilLastRecorderEnds() throws {
         let registry = Registry(); var actions = [Int]()
         let globals = (1...(try contract()).commonGlobalActions.count).map { index in registry.make(index) { actions.append(index) } }

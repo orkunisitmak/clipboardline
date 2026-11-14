@@ -12,20 +12,37 @@ final class ScreenshotWatcher {
     /// Tendedero's own folder, where nothing else is saved.
     private let acceptsRecordings: Bool
     private var known: Set<String>?
+    /// What the folder held when it was replaced. The descriptor on the old
+    /// folder can still fire and list the replacement by path, so its images
+    /// may already be reported when the replacement is first listed.
+    private var knownBeforeReplacement: Set<String> = []
     private var source: DispatchSourceFileSystemObject?
+    private var parentSource: DispatchSourceFileSystemObject?
     private var pending: DispatchWorkItem?
+    private var pendingFolderCheck: DispatchWorkItem?
+    private var identityTimer: DispatchSourceTimer?
+    private var identityCheckInFlight = false
+    /// Identity of the directory currently found at folder.
+    private var folderIdentity: FolderIdentity?
+    /// Invalidates a listing or open that started before the folder changed.
+    private var generation = 0
     /// A `start()` that is still waiting on the folder, off the main thread.
     private var starting = false
     /// A folder listing that is still on its way, off the main thread.
     private var listing = false
     /// A capture landed while that listing was in flight.
     private var missed = false
-    /// `stop()` arrived while one of the two was still pending.
+    /// `stop()` arrived while an open or listing was still pending.
     private var stopped = false
     private let onNew: (URL) -> Void
     private let onChange: () -> Void
 
     private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "tif", "tiff", "gif", "webp"]
+
+    private struct FolderIdentity: Equatable {
+        let device: UInt64
+        let inode: UInt64
+    }
 
     static let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
 
@@ -70,25 +87,70 @@ final class ScreenshotWatcher {
     /// that put the screenshot settings back never ran.
     func start() {
         stopped = false
-        guard source == nil, !starting else { return }
+        guard parentSource == nil, source == nil, !starting else { return }
         starting = true
+        let parent = folder.deletingLastPathComponent()
+        let expectedGeneration = generation
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let fd = open(self.folder.path, O_EVTONLY)
-            DispatchQueue.main.async { self.watch(fd) }
+            let parentFD = open(parent.path, O_EVTONLY)
+            let previousIdentity = self.identityOfFolder()
+            let folderFD = open(self.folder.path, O_EVTONLY)
+            let identity = self.identityOfFolder()
+            DispatchQueue.main.async {
+                self.starting = false
+                self.watchParent(parentFD)
+                self.startIdentityMonitor()
+                self.folderIdentity = identity
+                if previousIdentity == identity {
+                    self.watch(folderFD, generation: expectedGeneration, identity: identity)
+                } else {
+                    if folderFD >= 0 { close(folderFD) }
+                    self.openFolderIfAvailable()
+                }
+            }
         }
     }
 
-    /// Starts watching, then reads the folder. The watcher is live before the
-    /// listing begins, so a capture that lands in between is not lost.
-    private func watch(_ fd: Int32) {
-        starting = false
+    /// Tracks the containing directory so replacing the watched folder can be
+    /// detected even though its original descriptor still points at the old inode.
+    private func watchParent(_ fd: Int32) {
         guard !stopped else {
             if fd >= 0 { close(fd) }
             return
         }
         guard fd >= 0 else {
+            NSLog("Tendedero: cannot watch parent of \(folder.path)")
+            return
+        }
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .attrib, .rename, .delete], queue: .main)
+        src.setEventHandler { [weak self] in self?.scheduleFolderCheck() }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        parentSource = src
+    }
+
+    /// Starts the child watcher before listing so a capture that lands in
+    /// between is not lost.
+    private func watch(_ fd: Int32, generation expectedGeneration: Int, identity expectedIdentity: FolderIdentity?) {
+        starting = false
+        guard !stopped else {
+            if fd >= 0 { close(fd) }
+            return
+        }
+        guard expectedGeneration == generation else {
+            if fd >= 0 { close(fd) }
+            openFolderIfAvailable()
+            return
+        }
+        guard fd >= 0 else {
             NSLog("Tendedero: cannot watch \(folder.path)")
+            return
+        }
+        guard expectedIdentity == folderIdentity else {
+            close(fd)
+            reconcileFolder(expectedIdentity)
             return
         }
         let src = DispatchSource.makeFileSystemObjectSource(
@@ -100,6 +162,80 @@ final class ScreenshotWatcher {
         refresh()
     }
 
+    private func openFolderIfAvailable() {
+        guard !stopped, source == nil, !starting, !listing, folderIdentity != nil else { return }
+        starting = true
+        let expectedGeneration = generation
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let previousIdentity = self.identityOfFolder()
+            let fd = open(self.folder.path, O_EVTONLY)
+            let identity = self.identityOfFolder()
+            DispatchQueue.main.async {
+                guard previousIdentity == identity else {
+                    if fd >= 0 { close(fd) }
+                    self.starting = false
+                    self.scheduleFolderCheck()
+                    return
+                }
+                self.watch(fd, generation: expectedGeneration, identity: identity)
+            }
+        }
+    }
+
+    private func startIdentityMonitor() {
+        guard identityTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1), leeway: .milliseconds(100))
+        timer.setEventHandler { [weak self] in self?.readFolderIdentity() }
+        timer.resume()
+        identityTimer = timer
+    }
+
+    private func scheduleFolderCheck() {
+        pendingFolderCheck?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.readFolderIdentity() }
+        pendingFolderCheck = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
+    }
+
+    private func readFolderIdentity() {
+        guard !stopped, !identityCheckInFlight else { return }
+        identityCheckInFlight = true
+        let expectedGeneration = generation
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let identity = self.identityOfFolder()
+            DispatchQueue.main.async {
+                self.identityCheckInFlight = false
+                guard !self.stopped, expectedGeneration == self.generation else { return }
+                self.reconcileFolder(identity)
+            }
+        }
+    }
+
+    private func reconcileFolder(_ currentIdentity: FolderIdentity?) {
+        guard !stopped else { return }
+        guard currentIdentity != folderIdentity else { return }
+        folderIdentity = currentIdentity
+        generation += 1
+        pending?.cancel()
+        pending = nil
+        knownBeforeReplacement.formUnion(known ?? [])
+        known = nil
+        missed = false
+        source?.cancel()
+        source = nil
+        openFolderIfAvailable()
+    }
+
+    private func identityOfFolder() -> FolderIdentity? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: folder.path),
+              let device = attributes[.systemNumber] as? NSNumber,
+              let inode = attributes[.systemFileNumber] as? NSNumber else { return nil }
+        return FolderIdentity(device: device.uint64Value, inode: inode.uint64Value)
+    }
+
     /// Safe to call while `start()` or a listing is still pending: the file
     /// descriptor is closed as soon as it arrives, and a listing that lands
     /// afterwards is dropped.
@@ -108,8 +244,15 @@ final class ScreenshotWatcher {
         missed = false
         pending?.cancel()
         pending = nil
+        pendingFolderCheck?.cancel()
+        pendingFolderCheck = nil
+        identityTimer?.cancel()
+        identityTimer = nil
+        generation += 1
         source?.cancel()
         source = nil
+        parentSource?.cancel()
+        parentSource = nil
     }
 
     private func scheduleScan() {
@@ -129,27 +272,35 @@ final class ScreenshotWatcher {
             return
         }
         listing = true
+        let requestedGeneration = generation
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let files = self.listFolder()
             let settled = files.filter { self.creationDate($0) < self.launchDate }
             let candidates = files.filter { self.isCandidate($0) }
-            DispatchQueue.main.async { self.adopt(files, settled, candidates) }
+            DispatchQueue.main.async {
+                self.adopt(files, settled, candidates, generation: requestedGeneration)
+            }
         }
     }
 
     /// Takes a finished listing, reports what is new, then runs the listing
     /// that was asked for while this one was in flight.
-    private func adopt(_ files: [URL], _ settled: [URL], _ candidates: [URL]) {
+    private func adopt(_ files: [URL], _ settled: [URL], _ candidates: [URL], generation requestedGeneration: Int) {
         listing = false
         guard !stopped else { return }
+        guard requestedGeneration == generation else {
+            openFolderIfAvailable()
+            return
+        }
         // The first listing adopts everything that was already there when the
         // app launched. Later ones compare against the previous listing.
         let first = known == nil
-        let base = known ?? Set(settled.map(\.path))
+        let base = known ?? Set(settled.map(\.path)).union(knownBeforeReplacement)
         for url in candidates where !base.contains(url.path) {
             onNew(url)
         }
+        knownBeforeReplacement = []
         known = Set(files.map(\.path))
         if !first { onChange() }
         if missed {

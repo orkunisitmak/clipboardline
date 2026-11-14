@@ -54,7 +54,7 @@ class LibraryKeyboardParityTests(unittest.TestCase):
         self.assertTrue(result['passed']); self.assertEqual(result['sourceRevision'], REVISION)
         self.assertEqual(result['contractSHA256'], hashlib.sha256(self.contract_path.read_bytes()).hexdigest())
         self.assertEqual(result['platforms'], ['macos', 'windows'])
-        self.assertEqual(result['scenarios'], 10); self.assertEqual(result['observationsPerPlatform'], 87)
+        self.assertEqual(result['scenarios'], 11); self.assertEqual(result['observationsPerPlatform'], 92)
 
     def test_full_exact_source_revision_is_required_for_both_platforms(self):
         self.reports['windows']['sourceRevision'] = 'b' * 40; self.rejected()

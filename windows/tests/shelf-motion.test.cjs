@@ -45,3 +45,12 @@ test('an unexpectedly canceled Web Animation settles the latest open layer inste
 test('changing reduced-motion preference settles the latest active transition immediately',async()=>{
  const f=fixture(),opening=f.controller.run({phase:'open'});f.motion.matches=true;f.motion.change();assert.deepEqual(await opening,{completed:true});assert.equal(f.animations[0].canceled,true);assert.equal(f.body.dataset.shelfMotion,undefined);
 });
+
+
+test('a renderer IPC send failure settles the motion without stranding a pending close',async()=>{
+ const canceled=[],scheduled=[],bridge=new MotionBridge(()=>{throw new Error('Renderer was destroyed');},{schedule:(fn,ms)=>{scheduled.push({fn,ms});return 1;},cancel:id=>canceled.push(id)});
+ assert.deepEqual(await bridge.request('close'),{completed:false});
+ assert.equal(bridge.pending,null);
+ assert.deepEqual(canceled,[1]);
+ assert.equal(bridge.acknowledge({token:1,phase:'close',completed:true}),false);
+});

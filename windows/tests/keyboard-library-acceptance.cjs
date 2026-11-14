@@ -96,7 +96,7 @@ module.exports=async function keyboardLibrary({page,application,textItem,folder,
   await page.locator(`[data-shelf="image"] [data-item-id="${fixtures.image}"]`).click();await page.keyboard.press('Space');
   await page.locator('#preview-dialog').waitFor({state:'visible'});await page.keyboard.press('ArrowDown');
   await until(()=>page.locator('#preview-dialog').getAttribute('aria-label'),label=>label==='Shared search fixture result');
-  await page.keyboard.press('ArrowDown');await until(()=>page.locator('#preview-dialog').getAttribute('aria-label'),label=>label.includes('shared-search-fixture'));
+  await page.keyboard.press('ArrowDown');await until(()=>page.locator('#preview-dialog').getAttribute('aria-label'),label=>label==='example.com');
   await page.keyboard.press('Escape');await page.keyboard.press('Shift+l');await until(()=>page.locator('[data-shelf="link"]').count(),count=>count===0);
   assert.equal(await page.locator(`[data-item-id="${fixtures.link}"]`).count(),0);assert.equal(await page.locator('[data-item-id]').count(),2);
   await page.keyboard.press('Shift+l');await until(()=>page.locator('[data-shelf="link"]').count(),count=>count===1);

@@ -18,10 +18,42 @@ test('query and pin changes immediately invalidate rows; changing fields on the 
  const f=fixture();await f.ready();const {api}=f;api.ui.search='CAFE istanbul blue';assert.deepEqual(plain(api.rowItems('image')),[f.initial.items[0].id]);api.ui.search='CAFE missing';assert.deepEqual(plain(api.rowItems('image')),[]);api.ui.search='body';assert.deepEqual(plain(api.rowItems('text')),[f.initial.items[1].id,f.initial.items[2].id]);api.ui.pinned.text=true;assert.deepEqual(plain(api.rowItems('text')),[f.initial.items[2].id]);
  const changed=f.raw.items.map(value=>value.id===f.initial.items[1].id?{...value,pinned:true,text:'New body needle'}:value);f.emit(changed);api.ui.search='new needle';assert.deepEqual(plain(api.rowItems('text')),[f.initial.items[1].id]);api.ui.search='';api.ui.pinned.text=false;assert.deepEqual(plain(api.rowItems('text')),[f.initial.items[1].id,f.initial.items[4].id,f.initial.items[2].id]);
 });
+test('search ignores character width like the Mac library (full-width Latin, half-width katakana)',async()=>{
+ const f=fixture();await f.ready();const {api}=f;const wide={...structuredClone(f.initial.items[1]),id:'71000000-0000-4000-8000-000000000001',createdAt:5000,text:'ＡＢＣ ﾃｽﾄ report'};
+ f.emit([wide,...f.raw.items]);
+ for(const query of ['abc','テスト','ABC report','ａｂｃ']){api.ui.search=query;assert.ok(plain(api.rowItems('text')).includes(wide.id),query);}
+ api.ui.search='xyz';assert.ok(!plain(api.rowItems('text')).includes(wide.id));
+ // Width only, like the Mac: ligatures and circled digits are not folded.
+ const compat={...structuredClone(f.initial.items[1]),id:'71000000-0000-4000-8000-000000000002',createdAt:5001,text:'ﬁnance ①'};f.emit([compat,wide,...f.raw.items]);
+ for(const query of ['finance','1']){api.ui.search=query;assert.ok(!plain(api.rowItems('text')).includes(compat.id),query);}
+ api.ui.search='ﬁnance ①';assert.ok(plain(api.rowItems('text')).includes(compat.id));
+ // One width step only, like the Mac: half-width ﾡ is the compatibility jamo ㄱ, and ￣ is ¯ (NFKC would turn it into a space that matches everything).
+ const jamo={...structuredClone(f.initial.items[1]),id:'71000000-0000-4000-8000-000000000003',createdAt:5002,text:'ﾡ ￣'};f.emit([jamo,compat,wide,...f.raw.items]);
+ for(const query of ['ㄱ','ﾡ','¯','￣']){api.ui.search=query;assert.ok(plain(api.rowItems('text')).includes(jamo.id),query);}
+ api.ui.search='￣';assert.ok(!plain(api.rowItems('text')).includes(wide.id));
+});
 test('hide, Trash, restored kind and visible-shelf changes never retain prior row contents or duplicate selection',async()=>{
  const f=fixture();await f.ready();const {api}=f;f.emit(f.raw.items.map(value=>value.id===f.initial.items[0].id?{...value,hiddenFromShelf:true}:value.id===f.initial.items[1].id?{...value,trashedAt:2}:value.id===f.initial.items[5].id?{...value,hiddenFromShelf:false}:value));assert.deepEqual(plain(api.rowItems('image')),[f.initial.items[5].id]);assert.deepEqual(plain(api.rowItems('text')),[f.initial.items[4].id,f.initial.items[2].id]);
  f.emit(f.raw.items.map(value=>value.id===f.initial.items[5].id?{...value,kind:'text',text:'Moved kind'}:value),{visibleKinds:['text','link']});assert.deepEqual(plain(api.rowItems('image')),[]);assert.deepEqual(plain(api.rowItems('text')),[f.initial.items[5].id,f.initial.items[4].id,f.initial.items[2].id]);assert.equal(api.ui.active,'text');assert.deepEqual(Array.from(api.selectedIds()),[f.initial.items[5].id]);
 });
 test('large shelf row results use the newest complete projection and keep AND/diacritic OCR matching across repeated queries',async()=>{
  const f=fixture();await f.ready();const extra=Array.from({length:3000},(_,index)=>({...structuredClone(f.initial.items[0]),id:'70000000-0000-4000-8000-'+String(index).padStart(12,'0'),createdAt:index,pinned:index%2===0,name:'Image '+index,ocrText:index===2048?'Über résumé needle':'Unrelated body'}));f.emit([...extra,...f.raw.items]);const {api}=f;api.ui.search='RESUME uber needle';assert.deepEqual(plain(api.rowItems('image')),[extra[2048].id]);api.ui.search='RESUME missing';assert.deepEqual(plain(api.rowItems('image')),[]);api.ui.search='';assert.equal(api.rowItems('image').length,3001);f.emit(f.raw.items.filter(value=>value.id!==extra[2048].id));api.ui.search='résumé';assert.deepEqual(plain(api.rowItems('image')),[]);assert.equal(api.item(extra[2048].id),undefined);
+});
+test('the Link shelf lists a link copied later first and falls back to its capture time, while Text keeps capture order',async()=>{
+ const f=fixture();await f.ready();const {api}=f,link=(n,createdAt,extra={})=>({...structuredClone(f.initial.items[3]),id:'61000000-0000-4000-8000-'+String(n).padStart(12,'0'),createdAt,updatedAt:createdAt,url:'https://l'+n+'.example.com/',...extra});
+ const items=[...f.raw.items,link(1,10),link(2,20),link(3,30)];f.emit(items);const ids=api.rowItems('link').map(value=>value.url);assert.deepEqual(ids,['https://example.com/reference','https://l3.example.com/','https://l2.example.com/','https://l1.example.com/']);
+ f.emit(items.map(value=>value.url==='https://l1.example.com/'?{...value,lastCopiedAt:100}:value.kind==='text'&&value.text==='First body'?{...value,lastCopiedAt:900}:value));
+ assert.deepEqual(api.rowItems('link').map(value=>value.url),['https://l1.example.com/','https://example.com/reference','https://l3.example.com/','https://l2.example.com/']);
+ assert.deepEqual(plain(api.rowItems('text')),['000000000002','000000000005','000000000003'].map(suffix=>'60000000-0000-4000-8000-'+suffix));
+});
+test('a link whose capture time is newer than its older copy time keeps its capture position on the Link shelf',async()=>{
+ const f=fixture();await f.ready();const {api}=f,link=(n,createdAt,extra={})=>({...structuredClone(f.initial.items[3]),id:'62000000-0000-4000-8000-'+String(n).padStart(12,'0'),createdAt,updatedAt:createdAt,url:'https://m'+n+'.example.com/',...extra});
+ f.emit([...f.raw.items.filter(value=>value.kind!=='link'),link(1,500,{lastCopiedAt:50}),link(2,300,{lastCopiedAt:400}),link(3,200)]);
+ assert.deepEqual(api.rowItems('link').map(value=>value.url),['https://m1.example.com/','https://m2.example.com/','https://m3.example.com/']);
+});
+test('search does not find a bare kana or Hangul jamo inside a voiced kana or syllable, like the Mac',async()=>{
+ const f=fixture();await f.ready();const {api}=f;const kana={...structuredClone(f.initial.items[1]),id:'71000000-0000-4000-8000-000000000011',createdAt:5100,text:'ばら 한국 バス'};
+ f.emit([kana,...f.raw.items]);
+ for(const query of ['は','하','ハ'])api.ui.search=query,assert.ok(!plain(api.rowItems('text')).includes(kana.id),query);
+ for(const query of ['ば','한','バ','ばら'])api.ui.search=query,assert.ok(plain(api.rowItems('text')).includes(kana.id),query);
 });

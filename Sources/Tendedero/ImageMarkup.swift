@@ -163,10 +163,10 @@ enum ImageMarkupError: Error, LocalizedError, Equatable {
     case invalidDocument, unreadableImage, imageTooLarge, renderFailed
     var errorDescription: String? {
         switch self {
-        case .invalidDocument: return "The image markup document is invalid."
-        case .unreadableImage: return "This image could not be opened for markup."
-        case .imageTooLarge: return "Markup supports images up to 80 megapixels."
-        case .renderFailed: return "The marked image could not be rendered."
+        case .invalidDocument: return L("The image markup document is invalid.")
+        case .unreadableImage: return L("This image could not be opened for markup.")
+        case .imageTooLarge: return L("Markup supports images up to 80 megapixels.")
+        case .renderFailed: return L("The marked image could not be rendered.")
         }
     }
 }

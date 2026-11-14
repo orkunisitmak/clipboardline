@@ -270,6 +270,7 @@ public static class ClipBoardLineNative {
   }
   public static void EmitCurrentFocus() { try { EmitFocus(FocusSnapshot()); } catch(Exception) {} }
   public static void EmitSequence(uint sequence) { lock(outputLock) { Console.Out.WriteLine("{\"sequence\":"+sequence+"}");Console.Out.Flush(); } }
+  public static void EmitReady() { lock(outputLock) { Console.Out.WriteLine("{\"ready\":true}");Console.Out.Flush(); } }
   public static void ObserveSequenceQueries() {
     var reader=new System.Threading.Thread(delegate() {
       try {
@@ -325,7 +326,7 @@ try {
   if ($Mode -eq 'CopyImages') {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
-    $payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    $payload = (New-Object IO.StreamReader([Console]::OpenStandardInput(),[Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
     if ($payload.files.Count -lt 1 -or $payload.files.Count -gt 1000) { throw 'Invalid image batch.' }
     foreach ($file in $payload.files) { if (-not [System.IO.File]::Exists($file) -or [System.IO.Path]::GetExtension($file) -ne '.png') { throw 'Managed image is unavailable.' } }
     $data = New-Object System.Windows.Forms.DataObject
@@ -348,7 +349,9 @@ try {
   } elseif ($Mode -eq 'Monitor') {
     [ClipBoardLineNative]::ObserveSequenceQueries()
     [ClipBoardLineNative]::ObserveFocus()
-    $last = [uint32]0
+    # The clipboard present at launch is never reported, even when its sequence is 0; only later changes are.
+    $last = [ClipBoardLineNative]::GetClipboardSequenceNumber()
+    [ClipBoardLineNative]::EmitReady()
     while ($true) {
       $sequence = [ClipBoardLineNative]::GetClipboardSequenceNumber()
       if ($sequence -ne $last) { [ClipBoardLineNative]::EmitSequence($sequence); $last=$sequence }
@@ -365,7 +368,7 @@ try {
     $captureInfo | ConvertTo-Json -Compress
   } else {
     $phase=@{started=[DateTime]::UtcNow.ToString('o')}
-    $expected = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    $expected = (New-Object IO.StreamReader([Console]::OpenStandardInput(),[Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
     if ($expected.handle -notmatch '^\d+$' -or $expected.processId -le 0) { throw 'No previous application was captured.' }
     $window = [IntPtr][Int64]::Parse($expected.handle)
     [uint32]$owner = 0

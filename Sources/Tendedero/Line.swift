@@ -15,6 +15,7 @@ struct Pegged: Identifiable, Equatable {
     var managedCopy = false
     var originalPath: String?
     var title: String?
+    var exportName: String { HistoryFiles.exportName(for: url, originalPath: originalPath, title: title) }
     /// Every photo hangs a little crooked, like on a real line.
     let tilt = Double.random(in: -2.5...2.5)
     var falling = false
@@ -512,11 +513,16 @@ final class Line: ObservableObject {
         }
     }
 
+    /// A mixed selection pins every item, as on Windows; only a fully pinned selection unpins.
     func pinActiveSelection() {
+        func apply(_ ids: Set<UUID>, pinned: (UUID) -> Bool, toggle: (UUID) -> Void) {
+            let pin = ids.contains { !pinned($0) }
+            for id in ids where pinned(id) != pin { toggle(id) }
+        }
         switch activeShelf {
-        case .texts: for id in texts.selectedIDs.isEmpty ? Set(texts.focusedID.map { [$0] } ?? []) : texts.selectedIDs { texts.togglePin(id) }
-        case .links: for id in links.selectedIDs.isEmpty ? Set(links.focusedID.map { [$0] } ?? []) : links.selectedIDs { links.togglePin(id) }
-        case .images: for id in selectedIDs.isEmpty ? Set(focusedID.map { [$0] } ?? []) : selectedIDs { pinFromUI(id) }
+        case .texts: apply(texts.selectedIDs.isEmpty ? Set(texts.focusedID.map { [$0] } ?? []) : texts.selectedIDs, pinned: { id in texts.entries.first { $0.id == id }?.pinned ?? false }, toggle: { texts.togglePin($0) })
+        case .links: apply(links.selectedIDs.isEmpty ? Set(links.focusedID.map { [$0] } ?? []) : links.selectedIDs, pinned: { id in links.entries.first { $0.id == id }?.favorite ?? false }, toggle: { links.togglePin($0) })
+        case .images: apply(selectedIDs.isEmpty ? Set(focusedID.map { [$0] } ?? []) : selectedIDs, pinned: { id in items.first { $0.id == id }?.pinned ?? false }, toggle: { pinFromUI($0) })
         }
     }
     var focusedActionID: UUID? {
@@ -686,7 +692,7 @@ final class Line: ObservableObject {
         guard let folder else { return nil }
         guard onFlushPreview() else { throw HistoryFiles.Failure.unsafeFile }
         let sources = selectedItems.map { item in
-            (url: item.url, name: HistoryFiles.exportName(for: item.url, originalPath: item.originalPath))
+            (url: item.url, name: item.exportName)
         }
         return try history.files.export(sources, to: folder)
     }

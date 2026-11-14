@@ -24,6 +24,19 @@ import XCTest
         XCTAssertEqual(try store(f).query(LibraryQuery()).map(\.id), values.map(\.id))
         XCTAssertTrue(FileManager.default.fileExists(atPath: library.root.appendingPathComponent("Backups").path))
     }
+    func testRemovingTagFromItsLastItemDropsTheTagButKeepsItWhileAnotherItemHasIt() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let first = try XCTUnwrap(library.captureText("one")), second = try XCTUnwrap(library.captureText("two"))
+        try library.addTag("draft", to: [first.id, second.id])
+        let tag = try XCTUnwrap(library.tags().first)
+        try library.removeTag(tag.id, from: first.id)
+        XCTAssertEqual(try library.tags().map(\.name), ["draft"])
+        try library.removeTag(tag.id, from: second.id)
+        XCTAssertTrue(try library.tags().isEmpty)
+        try library.addTag("draft", to: [first.id])
+        XCTAssertEqual(try library.tags(for: first.id).map(\.name), ["draft"])
+    }
     func testCorruptSourceBlocksMigrationAndDoesNotOverwriteArchive() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let texts = f.texts(); texts.add("original"); let bad = Data("broken".utf8); try bad.write(to: texts.archive)
@@ -43,6 +56,21 @@ import XCTest
         XCTAssertTrue(try library.item(temporary.id)?.deletedAt != nil)
         XCTAssertEqual(try library.query(LibraryQuery(scope: .unorganized)).count, 3)
     }
+    func testAllPinnedNeedsEveryIdPinnedAndExisting() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try XCTUnwrap(library.captureText("first")), second = try XCTUnwrap(library.captureText("second"))
+        XCTAssertFalse(try library.allPinned([]))
+        XCTAssertFalse(try library.allPinned([first.id, second.id]))
+        try library.toggleFavorite([first.id])
+        XCTAssertFalse(try library.allPinned([first.id, second.id]))
+        try library.toggleFavorite([second.id])
+        XCTAssertTrue(try library.allPinned([first.id, second.id, first.id]))
+        XCTAssertFalse(try library.allPinned([first.id, UUID()]))
+        let many = try (0..<501).map { try XCTUnwrap(library.captureText("note \($0)")).id }
+        try library.toggleFavorite(many)
+        XCTAssertTrue(try library.allPinned(many + [many[0]]))
+        XCTAssertFalse(try library.allPinned(many + [UUID()] + [many[0]]))
+    }
     func testCollectionsAreManyToManyNestedAndRemovalDoesNotDeleteContent() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let record = try library.captureImage(try f.image(owned: false)), parent = try library.createCollection("YouTube"), child = try library.createCollection("Thumbnail", parent: parent), other = try library.createCollection("Referanslar")
@@ -54,6 +82,23 @@ import XCTest
         XCTAssertEqual(try library.collections(for: record.id).map(\.id), [other])
         XCTAssertTrue(try library.item(record.id)?.retainedAt != nil)
         var failed = false; do { _ = try library.createCollection("child", parent: UUID()) } catch { failed = true }; XCTAssertTrue(failed)
+    }
+    func testPinnedImageWhoseManagedCopyIsGoneCanStillLeaveTheShelfGoToTrashAndRestore() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let record = try library.captureImage(try f.image(owned: false))
+        try library.toggleFavorite([record.id])
+        let managed = try XCTUnwrap(library.item(record.id)?.fileURL); XCTAssertTrue(library.files.isAppCopy(managed))
+        try FileManager.default.removeItem(at: managed)
+        // Removing a card must not need a file it can no longer protect.
+        try library.removeFromShelf([record.id])
+        XCTAssertEqual(try library.item(record.id)?.onShelf, false); XCTAssertNil(try library.item(record.id)?.deletedAt)
+        try library.trash([record.id])
+        XCTAssertNotNil(try library.item(record.id)?.deletedAt)
+        try library.restore([record.id])
+        let restored = try XCTUnwrap(library.item(record.id)); XCTAssertNil(restored.deletedAt); XCTAssertTrue(restored.onShelf)
+        // Pinning still refuses a file that cannot be copied.
+        let external = try library.captureImage(try f.image(owned: false)); try FileManager.default.removeItem(at: try XCTUnwrap(external.fileURL))
+        XCTAssertThrowsError(try library.toggleFavorite([external.id]))
     }
     func testMovingFromParentRemovesChildMembershipButKeepsOtherFoldersAndOriginal() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
@@ -74,6 +119,16 @@ import XCTest
         XCTAssertEqual(Set(try library.query(LibraryQuery(scope: .recent, domain: "YouTube.com")).map(\.id)), Set(expected))
         XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, domain: "WWW.YouTube.com.")).count, 3)
         XCTAssertTrue(try library.query(LibraryQuery(scope: .recent, domain: "%youtube.com")).isEmpty)
+    }
+    func testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let plan = try XCTUnwrap(library.captureText("Quarterly plan\nsecond line")), other = try XCTUnwrap(library.captureText("Middle"))
+        try library.retain([plan.id, other.id])
+        try library.update(plan.id) { $0.title = "   " }
+        XCTAssertEqual(try library.item(plan.id)?.displayTitle, "Quarterly plan")
+        try library.update(plan.id) { $0.title = "  Zulu \n" }
+        XCTAssertEqual(try library.item(plan.id)?.displayTitle, "Zulu")
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .saved, sort: .title)).map(\.id), [other.id, plan.id])
     }
     func testTagRenameSearchTurkishAndLiteralSQLCharacters() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
@@ -133,6 +188,9 @@ import XCTest
         XCTAssertTrue(differentTime.id != a.id)
         XCTAssertNil(LinkIdentity.standalone("a paragraph https://example.com")); XCTAssertNil(LinkIdentity.standalone("https://one.com https://two.com"))
         XCTAssertNil(LinkIdentity.standalone("file:///private/test")); XCTAssertNil(LinkIdentity.standalone("javascript:alert(1)"))
+        XCTAssertNil(LinkIdentity.standalone("https://example.com:99999/")); XCTAssertNotNil(LinkIdentity.standalone("https://example.com:65535/"))
+        for credentialed in ["https://user:" + "pass@example.com/a", "https://user@example.com/a", "https://:pass@example.com/a"] { XCTAssertNil(LinkIdentity.standalone(credentialed), credentialed) }
+        for plain in ["https://example.com/a", "https://example.com/a@b"] { XCTAssertNotNil(LinkIdentity.standalone(plain), plain) }
         XCTAssertFalse(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "http://192.168.1.2/doc"))))
         XCTAssertFalse(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "https://example.com/?token=private"))))
         XCTAssertTrue(LinkIdentity.mayFetchMetadata(try XCTUnwrap(URL(string: "https://example.com/articles"))))
@@ -158,6 +216,13 @@ import XCTest
         try library.prune(); XCTAssertNil(try library.item(first.id)?.deletedAt); XCTAssertTrue(try library.item(second.id)?.deletedAt != nil)
         f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(first.id)?.deletedAt != nil)
     }
+    func testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let item = try library.captureLink(URL(string: "https://example.com/old")!)
+        f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(item.id)?.deletedAt != nil)
+        try library.restore([item.id]); try library.prune(); XCTAssertNil(try library.item(item.id)?.deletedAt)
+        f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(item.id)?.deletedAt != nil)
+    }
     func testRestoringOldCopyAfterRecapturePreservesBothRecordsAndPinsExactImageID() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let original = try f.image(owned: false), first = try library.captureImage(original), link = try library.captureLink(URL(string: "https://example.com/repeated")!)
@@ -167,5 +232,28 @@ import XCTest
         XCTAssertTrue(first.id != second.id); XCTAssertTrue(link.id != secondLink.id); XCTAssertEqual(try library.item(first.id)?.note, "old note")
         let line = Line(defaults: f.defaults, inbox: f.inbox, breeze: false, library: library)
         line.pinFromUI(first.id); XCTAssertTrue(try library.item(first.id)?.favorite == true); XCTAssertFalse(try library.item(second.id)?.favorite == true)
+    }
+    func testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let first = try library.captureImage(f.image(identicalPixels: true)); f.date.addTimeInterval(1)
+        try library.toggleFavorite([first.id])
+        try library.update(first.id) { $0.title = "Logo" }
+        try library.addTag("brand", to: [first.id])
+        let folder = try library.createCollection("Work"); try library.assign([first.id], to: folder)
+        let other = try library.captureImage(f.image()); f.date.addTimeInterval(1)
+        let duplicate = try f.image(identicalPixels: true)
+        let again = try library.captureImage(duplicate)
+        XCTAssertEqual(again.id, first.id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: duplicate.path))
+        let items = try library.shelfItems(.image)
+        XCTAssertEqual(items.map(\.id), [first.id, other.id])
+        XCTAssertTrue(items[0].favorite)
+        XCTAssertEqual(items[0].title, "Logo")
+        XCTAssertEqual(try library.tags(for: first.id).map(\.name), ["brand"])
+        XCTAssertEqual(try library.collections(for: first.id).map(\.id), [folder])
+        let different = try library.captureImage(f.image())
+        XCTAssertNotEqual(different.id, first.id)
+        XCTAssertEqual(try library.shelfItems(.image).count, 3)
     }
 }

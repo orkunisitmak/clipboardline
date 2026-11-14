@@ -26,6 +26,10 @@ function text(value, maximum = 1024 * 1024, empty = false) {
   if (typeof value !== 'string' || value.length > maximum || (!empty && !value.length) || value.includes('\0')) fail('Invalid text');
   return value;
 }
+function sizedText(value, empty = false) {
+  if (typeof value === 'string' && Buffer.byteLength(value, 'utf8') > 1024 * 1024) fail('Invalid text');
+  return text(value, 1024 * 1024, empty);
+}
 function ids(value) {
   if (!Array.isArray(value) || value.length > 10000 || value.some(id => typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id))) fail('Invalid item selection');
   return [...new Set(value)];
@@ -78,28 +82,61 @@ function settings(patch, previous = DEFAULTS) {
   }
   return out;
 }
+// Match macOS libraryFolded: sibling folder and tag names ignore case, width and diacritics.
+// Only the ideographic space, compatibility jamo and the Halfwidth and Fullwidth Forms
+// block get compatibility mapping, so ＡＢＣ matches ABC while m² stays distinct from m2.
+const foldedName=value=>value.replace(/[\u3000\u3131-\u318e\uff01-\uffee]/g,character=>character==='\uffe3'?'\u00af':character.normalize('NFKC')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').normalize('NFC').toLowerCase();
 function trashUndoFingerprint(item){return crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex');}
 function trashUndoMatches(item,entry){return !!item&&item.trashedAt!=null&&item.trashedAt===entry.afterTrashedAt&&item.updatedAt===entry.afterUpdatedAt&&(item.captureRevision??null)===entry.captureRevision&&trashUndoFingerprint(item)===entry.fingerprint;}
 function availableTrashUndo(items,journal){if(!journal?.length)return false;const byID=new Map(items.map(item=>[item.id,item]));for(let index=journal.length-1;index>=0;index--)if(journal[index].some(entry=>trashUndoMatches(byID.get(entry.id),entry)))return true;return false;}
+// Match macOS cleanedName: at most 64 Characters (grapheme clusters, like
+// Swift's String.count) and nothing from CharacterSet.controlCharacters (Cc and
+// Cf), whether a tag or folder is added or renamed.
+const graphemes=new Intl.Segmenter('en',{granularity:'grapheme'});
+// 64 graphemes can span far more UTF-16 units; this only bounds raw input.
+const TAG_INPUT_LIMIT=4096;
+const validTagName=name=>!/[\p{Cc}\p{Cf}]/u.test(name)&&[...graphemes.segment(name)].length<=64;
+// Match macOS nameAndPin: 1-160 Characters, at most 1024 UTF-8 bytes, and no
+// control, line or paragraph separator characters.
+// Swift's .whitespacesAndNewlines also trims U+0085, which String.trim() keeps.
+const trimName=value=>value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu,'');
+function itemName(value){let name='';try{name=text(typeof value==='string'?trimName(value):value,TAG_INPUT_LIMIT,true);}catch{}if(!name||[...graphemes.segment(name)].length>160||Buffer.byteLength(name)>1024||/[\p{Cc}\p{Zl}\p{Zp}]/u.test(name))fail('Enter a name (1–160 characters)');return name;}
 function saved(item) { return item.retainedAt != null || item.pinned || item.folderIds.length > 0 || item.tags.length > 0; }
+// Match macOS LinkIdentity.standalone: a copied URL keeps its link identity
+// when the source adds a trailing newline or surrounding spaces.
 function plainURL(value) {
-  if (typeof value !== 'string' || /\s/.test(value) || value.length > 8192) return null;
+  if (typeof value !== 'string') return null;
+  value = value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, '');
+  if (!value || /\s/.test(value) || value.length > 8192 || !/^https?:\/\/[^/\\]/i.test(value)) return null;
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
 
+// A cold PowerShell start can exceed 15 seconds on a busy machine, for example
+// while antivirus scans it. The script is idempotent, so retry only a timed-out
+// attempt once with a longer limit before refusing to open the library.
+const PROTECTION_TIMEOUTS=[15000,45000];
+function protectDirectory(directory,{powershell,script,run=execFileSync}){
+  for(const [attempt,timeout] of PROTECTION_TIMEOUTS.entries()){
+    try{return run(powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-Directory',directory],{windowsHide:true,timeout,stdio:['ignore','pipe','pipe'],env:windowsEnvironment()});}
+    catch(error){if(error?.code!=='ETIMEDOUT'||attempt===PROTECTION_TIMEOUTS.length-1)throw error;}
+  }
+}
+function protectionFailureDetail(error,directory){return String(error.stderr||error.message||'').replaceAll(directory,'[application data]').replace(/[\r\n]+/g,' ').slice(0,900);}
 class Store {
   constructor(directory, {clock = Date.now} = {}) {
-    this.directory = path.resolve(directory); this.clock = clock; this.undoStack = []; this.trashUndoStack = []; this.textIdentities = new WeakMap();this.revision=0;
+    this.directory = path.resolve(directory); this.clock = clock; this.undoStack = []; this.trashUndoStack = []; this.textIdentities = new WeakMap();this.revision=0;this.inFlightMediaReferences=new Map();
     fs.mkdirSync(this.directory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.directory).isSymbolicLink())fail('Application data must not be a symlink.');
     if(process.platform==='win32'){
       const script=__dirname.includes('app.asar')?path.join(process.resourcesPath,'native','protect-directory.ps1'):path.join(__dirname,'..','native','protect-directory.ps1');
       const powershell=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
-      try{execFileSync(powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-Directory',this.directory],{windowsHide:true,timeout:15000,stdio:['ignore','pipe','pipe'],env:windowsEnvironment()});}
-      catch(error){const detail=String(error.stderr||error.message||'').replaceAll(this.directory,'[application data]').replace(/[\r\n]+/g,' ').slice(0,900);fail('The private application data permissions could not be secured. Existing files were preserved. '+detail);}
+      try{protectDirectory(this.directory,{powershell,script});}
+      catch(error){fail('The private application data permissions could not be secured. Existing files were preserved. '+protectionFailureDetail(error,this.directory));}
     }
     this.mediaDirectory = path.join(this.directory, 'media'); fs.mkdirSync(this.mediaDirectory, {recursive: true, mode: 0o700});
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
+    // Remove staging files a killed process left behind (putPNG '.png-' and putVideo '.video-'); exact names, regular files only.
+    for(const name of fs.readdirSync(this.mediaDirectory))if(/^\.(?:png|video)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(name))try{const file=path.join(this.mediaDirectory,name);if(fs.lstatSync(file).isFile())fs.unlinkSync(file);}catch{}
     this.file = path.join(this.directory, 'library.json');
     this.data = {schema: 1, items: [], folders: [], settings: clone(DEFAULTS)};
     if (fs.existsSync(this.file)) {
@@ -115,6 +152,8 @@ class Store {
     this.pruneRecentFolders();
     this.privacyWarning='';
     if(this.data.pendingBackupRefresh||this.data.pendingDeletionFiles?.length)try{this.finishPermanentDeletion();}catch(error){this.privacyWarning=error.message;}
+    // A killed process can leave a full copy of the library here, with text deleted since; exact names, regular files only.
+    for(const name of fs.readdirSync(this.directory))if(/^library\.json(?:\.backup)?\.tmp-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(name))try{const file=path.join(this.directory,name);if(fs.lstatSync(file).isFile())fs.unlinkSync(file);}catch(error){if(error.code!=='ENOENT')this.privacyWarning||='A temporary copy of the library could not be removed.';}
     this.expire();
   }
   pruneRecentFolders(){const known=new Set(this.data.folders.map(folder=>folder.id));this.data.settings.recentPinFolderIds=(this.data.settings.recentPinFolderIds||[]).filter(id=>known.has(id));}
@@ -123,8 +162,10 @@ class Store {
     ids([item.id]); if (!KINDS.includes(item.kind) || !Array.isArray(item.folderIds) || !Array.isArray(item.tags)) fail('Invalid library record');
     if (item.text != null) text(item.text, 1024 * 1024, true);
     if(item.note!=null)text(item.note,1024*1024,true);
+    if(item.createdAsNote!=null&&typeof item.createdAsNote!=='boolean')fail('Invalid note marker');
     if(item.retainedAt!=null&&(!Number.isFinite(item.retainedAt)||item.retainedAt<0))fail('Invalid saved timestamp');
     if(item.lastCopiedAt!=null&&(!Number.isFinite(item.lastCopiedAt)||item.lastCopiedAt<0))fail('Invalid copy timestamp');
+    if(item.lastCapturedAt!=null&&(!Number.isFinite(item.lastCapturedAt)||item.lastCapturedAt<0))fail('Invalid capture timestamp');
     if(item.retainedAt==null&&(item.pinned||item.folderIds.length||item.tags.length))item.retainedAt=item.updatedAt||item.createdAt||this.clock();
     for (const key of ['imageFile', 'renderedFile','thumbnailFile']) if (item[key] && !/^[a-f0-9]{64}\.png$/.test(item[key])) fail('Unsafe managed media path');
     if(item.recording!==undefined&&typeof item.recording!=='boolean')fail('Invalid recording record');
@@ -142,9 +183,30 @@ class Store {
     } finally { if (descriptor != null) fs.closeSync(descriptor); if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
   }
   mediaReferences(){return new Set(this.data.items.flatMap(item=>[item.imageFile,item.renderedFile,item.thumbnailFile,item.videoFile,item.renderedVideoFile]).filter(Boolean));}
+  retainInFlightMedia(filename){this.inFlightMediaReferences.set(filename,(this.inFlightMediaReferences.get(filename)||0)+1);}
+  releaseInFlightMedia(files){for(const filename of files){const count=this.inFlightMediaReferences.get(filename)||0;if(count<=1)this.inFlightMediaReferences.delete(filename);else this.inFlightMediaReferences.set(filename,count-1);}}
+  mediaReferencesForCapacityCleanup(){
+    const referenced=this.mediaReferences(),backup=this.file+'.backup';let backupStat;
+    try{backupStat=fs.lstatSync(backup);}catch(error){if(error.code!=='ENOENT')return null;}
+    if(backupStat){
+      if(!backupStat.isFile()||backupStat.size>64*1024*1024)return null;
+      let previous;try{previous=JSON.parse(fs.readFileSync(backup,'utf8'));}catch{return null;}
+      if(previous?.schema!==1||!Array.isArray(previous.items)||previous.items.length>20000)return null;
+      for(const item of previous.items){
+        if(!item||typeof item!=='object'||Array.isArray(item))return null;
+        for(const filename of [item.imageFile,item.renderedFile,item.thumbnailFile,item.videoFile,item.renderedVideoFile]){
+          if(filename==null||filename==='')continue;
+          if(typeof filename!=='string'||!MANAGED_MEDIA.test(filename))return null;
+          referenced.add(filename);
+        }
+      }
+    }
+    for(const filename of this.inFlightMediaReferences.keys())referenced.add(filename);
+    return referenced;
+  }
   preparePermanentDeletion(){
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Managed media must not be a symlink.');
-    const referenced=this.mediaReferences(),files=fs.readdirSync(this.mediaDirectory).filter(name=>MANAGED_MEDIA.test(name)&&!referenced.has(name));
+    const referenced=this.mediaReferences();for(const filename of this.inFlightMediaReferences.keys())referenced.add(filename);const files=fs.readdirSync(this.mediaDirectory).filter(name=>MANAGED_MEDIA.test(name)&&!referenced.has(name));
     this.data.pendingDeletionFiles=[...new Set([...(this.data.pendingDeletionFiles||[]),...files])];
     this.data.pendingBackupRefresh=true;
   }
@@ -163,7 +225,7 @@ class Store {
       // records cannot survive in that older snapshot or be resurrected from it.
       this.refreshPrivateBackup();
       if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())throw new Error('Managed media directory changed.');
-      const referenced=this.mediaReferences();
+      const referenced=this.mediaReferences();for(const filename of this.inFlightMediaReferences.keys())referenced.add(filename);
       for(const name of pending){if(!MANAGED_MEDIA.test(name))throw new Error('Invalid managed filename.');if(referenced.has(name))continue;try{fs.unlinkSync(path.join(this.mediaDirectory,name));}catch(error){if(error.code!=='ENOENT')throw error;}}
       this.data.pendingDeletionFiles=[];this.data.pendingBackupRefresh=false;
       try{this.persist();}catch(error){this.data.pendingDeletionFiles=pending;this.data.pendingBackupRefresh=true;throw error;}
@@ -178,14 +240,21 @@ class Store {
     return {kind,ids:items.map(item=>item.id).sort(),captures:Object.fromEntries(items.map(item=>[item.id,{revision:item.captureRevision??null,createdAt:item.createdAt,updatedAt:item.updatedAt,lastCopiedAt:item.lastCopiedAt??null}]))};
   }
   invalidateTrashUndo(value){const affected=new Set(value);this.trashUndoStack=this.trashUndoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
-  markCopied(value){this.modify('markCopied',{ids:value});}
+  markCopied(value){if(value.length)this.modify('markCopied',{ids:value});}
+  // Applies fetched preview metadata only while the link is still live, so a link removed during the fetch gets no stored thumbnail.
+  setLinkMetadata(item,url,{title,author,thumbnail}){
+    if(!this.data.items.includes(item)||item.trashedAt||item.url!==url)return false;
+    let thumbnailFile='';if(thumbnail)try{thumbnailFile=this.putPNG(thumbnail);}catch{}
+    item.title=title||new URL(url).hostname;item.author=author||'';if(thumbnailFile)item.thumbnailFile=thumbnailFile;this.persist();return true;
+  }
   putPNG(buffer) {
     if (!Buffer.isBuffer(buffer) || buffer.length < 24 || buffer.length > 64 * 1024 * 1024 || buffer.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') fail('Invalid PNG image');
     const width = buffer.readUInt32BE(16), height = buffer.readUInt32BE(20);
     if (!width || !height || width * height > 80_000_000) fail('Image is too large');
     const filename = crypto.createHash('sha256').update(buffer).digest('hex') + '.png';
     const destination = path.join(this.mediaDirectory, filename);
-    if (!fs.existsSync(destination)) fs.writeFileSync(destination, buffer, {flag: 'wx', mode: 0o600});
+    // Write beside the target and rename, so a failed or interrupted write never leaves a truncated file under the content hash.
+    if (!fs.existsSync(destination) || fs.statSync(destination).size !== buffer.length) {const temporary = path.join(this.mediaDirectory, '.png-' + crypto.randomUUID());try {fs.writeFileSync(temporary, buffer, {flag: 'wx', mode: 0o600});fs.renameSync(temporary, destination);} finally {fs.rmSync(temporary, {force: true});}}
     return filename;
   }
   mediaPath(id, original = false) {
@@ -200,7 +269,7 @@ class Store {
     if(item.kind!=='image'||!filename||!/^[a-f0-9]{64}\.png$/.test(filename))fail('Image poster unavailable');
     const file=path.join(this.mediaDirectory,filename);if(!fs.existsSync(file)||!fs.lstatSync(file).isFile()||fs.lstatSync(file).isSymbolicLink())fail('Image poster unavailable');return file;
   }
-  async putVideo(source,{signal}={}){
+  async putVideo(source,{signal,onManagedFile}={}){
     if(typeof source!=='string'||!path.isAbsolute(source)||!['.mp4','.mov'].includes(path.extname(source).toLowerCase()))fail('Invalid recording file');
     if(fs.lstatSync(this.mediaDirectory).isSymbolicLink())fail('Unsafe managed media directory');
     const before=await fs.promises.lstat(source);if(!before.isFile()||before.isSymbolicLink()||before.size<12||before.size>MAXIMUM_VIDEO_BYTES)fail('Recording exceeds the 2 GB limit or is unavailable');
@@ -211,50 +280,76 @@ class Store {
       for(;;){if(signal?.aborted)fail('Video operation canceled');const {bytesRead}=await input.read(buffer,0,buffer.length,null);if(!bytesRead)break;total+=bytesRead;if(total>MAXIMUM_VIDEO_BYTES)fail('Recording exceeds the 2 GB limit');const bytes=buffer.subarray(0,bytesRead);hash.update(bytes);let written=0;while(written<bytesRead){const result=await output.write(bytes,written,bytesRead-written,null);if(!result.bytesWritten)fail('Recording could not be saved');written+=result.bytesWritten;}}
       const after=await input.stat(),pathAfter=await fs.promises.lstat(source);if(total!==before.size||after.size!==before.size||after.mtimeMs!==before.mtimeMs||pathAfter.isSymbolicLink()||pathAfter.ino!==before.ino||pathAfter.mtimeMs!==before.mtimeMs)fail('Recording changed while importing');
       await output.sync();await output.close();output=null;if(signal?.aborted)fail('Video operation canceled');const filename=hash.digest('hex')+path.extname(source).toLowerCase(),destination=path.join(this.mediaDirectory,filename);
+      onManagedFile?.(filename);
       try{await fs.promises.link(temporary,destination);}catch(error){if(error.code!=='EEXIST')throw error;const existing=await fs.promises.lstat(destination);if(!existing.isFile()||existing.isSymbolicLink()||existing.size!==total)fail('Managed recording is unsafe');}
       if(signal?.aborted)fail('Video operation canceled');return filename;
     }finally{await input?.close();await output?.close();try{await fs.promises.unlink(temporary);}catch(error){if(error.code!=='ENOENT')throw error;}}
   }
   async recordingAssets(value){
-    const details=recordingMetadata(value),videoFile=await this.putVideo(value.file,{signal:value.signal});
-    let poster=value.posterPNG;
-    if(!poster){if(typeof value.posterFile!=='string'||!path.isAbsolute(value.posterFile))fail('Recording poster unavailable');const stat=await fs.promises.lstat(value.posterFile);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>4*1024*1024)fail('Recording poster unavailable');poster=await fs.promises.readFile(value.posterFile);}
-    if(!Buffer.isBuffer(poster)||poster.length>4*1024*1024)fail('Invalid recording poster');
-    if(value.signal?.aborted)fail('Video operation canceled');return{details,videoFile,posterFile:this.putPNG(poster)};
+    const inFlightMediaFiles=[],retain=filename=>{this.retainInFlightMedia(filename);inFlightMediaFiles.push(filename);};
+    try{
+      const details=recordingMetadata(value),videoFile=await this.putVideo(value.file,{signal:value.signal,onManagedFile:retain});
+      let poster=value.posterPNG;
+      if(!poster){if(typeof value.posterFile!=='string'||!path.isAbsolute(value.posterFile))fail('Recording poster unavailable');const stat=await fs.promises.lstat(value.posterFile);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>4*1024*1024)fail('Recording poster unavailable');poster=await fs.promises.readFile(value.posterFile);}
+      if(!Buffer.isBuffer(poster)||poster.length>4*1024*1024)fail('Invalid recording poster');
+      if(value.signal?.aborted)fail('Video operation canceled');const posterFile=this.putPNG(poster);retain(posterFile);return{details,videoFile,posterFile,inFlightMediaFiles};
+    }catch(error){this.releaseInFlightMedia(inFlightMediaFiles);throw error;}
   }
   async insertRecording(value){
-    const assets=await this.recordingAssets(value),matching=this.data.items.filter(item=>item.recording&&!item.trashedAt&&item.videoFile===assets.videoFile),prior=matching.sort((a,b)=>b.createdAt-a.createdAt)[0];
-    if(value.signal?.aborted)fail('Video operation canceled');
-    if(!prior&&this.data.items.length>=20000)fail('Library item limit reached');const before=clone(this.data),now=this.clock();
+    const assets=await this.recordingAssets(value);
     try{
-      const item=prior||{id:crypto.randomUUID(),kind:'image',recording:true,text:'',url:'',title:'',name:'',pinned:false,folderIds:[],tags:[],note:'',retainedAt:null,lastCopiedAt:null,createdAt:now,updatedAt:now,trashedAt:null,hiddenFromShelf:false,annotations:[],crop:null,ocrText:'',imageFile:assets.posterFile,renderedFile:'',videoFile:assets.videoFile,renderedVideoFile:'',...assets.details};
-      item.createdAt=now;item.updatedAt=now;item.hiddenFromShelf=false;item.captureRevision=crypto.randomUUID();
-      this.data.items=[item,...this.data.items.filter(entry=>entry.id!==item.id)];this.expire(false);this.persist();return item;
-    }catch(error){this.data=before;throw error;}
+      const matching=this.data.items.filter(item=>item.recording&&!item.trashedAt&&item.videoFile===assets.videoFile),prior=matching.sort((a,b)=>b.createdAt-a.createdAt)[0];
+      if(value.signal?.aborted)fail('Video operation canceled');
+      if(!prior&&this.data.items.length>=20000){
+        this.releaseInFlightMedia(assets.inFlightMediaFiles);assets.inFlightMediaFiles=[];
+        const error=new Error('Library item limit reached'),referenced=this.mediaReferencesForCapacityCleanup();
+        if(referenced)for(const filename of [assets.videoFile,assets.posterFile])if(MANAGED_MEDIA.test(filename)&&!referenced.has(filename))try{fs.unlinkSync(path.join(this.mediaDirectory,filename));}catch{}
+        throw error;
+      }
+      const before=clone(this.data),live=this.liveItems(),now=this.clock();
+      try{
+        const item=prior||{id:crypto.randomUUID(),kind:'image',recording:true,text:'',url:'',title:'',name:'',pinned:false,folderIds:[],tags:[],note:'',retainedAt:null,lastCopiedAt:null,createdAt:now,updatedAt:now,trashedAt:null,hiddenFromShelf:false,annotations:[],crop:null,ocrText:'',imageFile:assets.posterFile,renderedFile:'',videoFile:assets.videoFile,renderedVideoFile:'',...assets.details};
+        item.createdAt=now;if(prior)item.lastCapturedAt=now;item.updatedAt=now;item.hiddenFromShelf=false;item.captureRevision=crypto.randomUUID();
+        this.data.items=[item,...this.data.items.filter(entry=>entry.id!==item.id)];this.expire(false);this.persist();return item;
+      }catch(error){this.rollback(before,live);throw error;}
+    }finally{this.releaseInFlightMedia(assets.inFlightMediaFiles);}
   }
   async commitRecordingTrim(value){
     const expected=this.item(value.id);if(!expected.recording||expected.trashedAt||typeof value.sourceFingerprint!=='string'||(expected.renderedVideoFile||expected.videoFile).slice(0,64)!==value.sourceFingerprint)fail('The recording changed before trimming');
-    const assets=await this.recordingAssets(value),item=this.item(value.id);if(!item.recording||item.trashedAt||(item.renderedVideoFile||item.videoFile).slice(0,64)!==value.sourceFingerprint)fail('The recording changed while trimming');
-    if(value.signal?.aborted)fail('Video operation canceled');
-    const before=clone(this.data);try{Object.assign(item,assets.details,{renderedVideoFile:assets.videoFile,renderedFile:assets.posterFile,updatedAt:this.clock()});this.persist();return item;}catch(error){this.data=before;throw error;}
+    const assets=await this.recordingAssets(value);
+    try{
+      const item=this.item(value.id);if(!item.recording||item.trashedAt||(item.renderedVideoFile||item.videoFile).slice(0,64)!==value.sourceFingerprint)fail('The recording changed while trimming');
+      if(value.signal?.aborted)fail('Video operation canceled');
+      const before=clone(this.data),live=this.liveItems();try{Object.assign(item,assets.details,{renderedVideoFile:assets.videoFile,renderedFile:assets.posterFile,updatedAt:this.clock()});this.persist();return item;}catch(error){this.rollback(before,live);throw error;}
+    }finally{this.releaseInFlightMedia(assets.inFlightMediaFiles);}
   }
   insert(kind, value, extra = {}) {
     if (!KINDS.includes(kind)) fail('Invalid content kind');
     let textValue = '', url = '', imageFile = '';
     if (kind === 'image') imageFile = this.putPNG(value);
     else if (kind === 'link') { url = plainURL(value) || fail('Invalid URL'); }
-    else textValue = text(value);
+    else textValue = sizedText(value);
     const identity=kind==='text'?textIdentity(textValue):null;
-    const matching = this.data.items.filter(i => i.kind === kind && !i.trashedAt &&
+    // A new note is always its own record, like macOS createNote; only captures deduplicate,
+    // and they never match a note (createdAsNote), so a capture or import cannot merge or drop one.
+    const matching = extra.fresh ? [] : this.data.items.filter(i => i.kind === kind && !i.trashedAt && !i.createdAsNote &&
       (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? i.url === url : !i.recording&&i.imageFile === imageFile));
     const prior = matching.sort((a, b) => b.updatedAt - a.updatedAt)[0];
-    if(!prior&&this.data.items.length>=20000)fail('Library item limit reached');
+    if(!prior&&this.data.items.length>=20000){
+      if(kind==='image'){
+        const referenced=this.mediaReferencesForCapacityCleanup();
+        if(referenced&&!referenced.has(imageFile)&&MANAGED_MEDIA.test(imageFile))try{fs.unlinkSync(path.join(this.mediaDirectory,imageFile));}catch{}
+      }
+      fail('Library item limit reached');
+    }
     const now = this.clock();
     const item = prior || {id: crypto.randomUUID(), kind, text: textValue, url, title: '', name: '', pinned: false, folderIds: [], tags: [],
       imageFile, renderedFile: '', ocrText: '', annotations: [], crop: null, note:'', retainedAt:null, lastCopiedAt:null, createdAt: now, updatedAt: now, trashedAt: null, hiddenFromShelf: false};
-    item.createdAt = now; item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
+    if(prior)item.lastCapturedAt=now;if(kind==='link'&&prior)item.lastCopiedAt=now;else item.createdAt=now;
+    item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
     if(kind==='text')item.text=textValue;
     if (extra.title) item.title = text(extra.title, 500, true);
+    if (extra.createdAsNote) item.createdAsNote = true; // part of the first write, so a stop before retain cannot leave an unmarked note
     if (matching.length > 1) {
       item.pinned ||= matching.some(i => i.pinned);
       item.folderIds = [...new Set(matching.flatMap(i => i.folderIds))]; item.tags = [...new Set(matching.flatMap(i => i.tags))];
@@ -264,6 +359,13 @@ class Store {
     }
     this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
     this.expire(false); this.persist(); return item;
+  }
+  /** A new, retained note record, like macOS createNote. It never reuses a matching capture. */
+  createNote({text: value = '', title = ''} = {}) {
+    const item = this.insert('text', value || 'New note', {fresh: true, createdAsNote: true});
+    if (title) this.modify('details', {id: item.id, name: title});
+    this.modify('retain', {ids: [item.id]});
+    return item;
   }
   textIdentity(item) {
     if(typeof item.text!=='string')return null;
@@ -275,13 +377,17 @@ class Store {
     let changed = false;
     for (const item of this.data.items) {
       const days = this.data.settings.retentionDays[item.kind];
-      if (!item.trashedAt && !saved(item) && days > 0 && item.createdAt < this.clock() - days * 86400000) { item.trashedAt = this.clock(); item.trashRevision=crypto.randomUUID(); changed = true; }
+      if (!item.trashedAt && !saved(item) && days > 0 && (item.lastCapturedAt ?? item.createdAt) < this.clock() - days * 86400000) { item.trashedAt = this.clock(); item.trashRevision=crypto.randomUUID(); changed = true; }
     }
     if (persist && changed) this.persist();
   }
+  liveItems(){return [...this.data.items];}
+  // Restore in place: OCR and link-preview jobs hold item objects across awaits and drop their result once store.data.items no longer includes them.
+  // The snapshot and the live list were taken together, so match by position: each live object is reused at most once, even if a corrupt library repeats an id.
+  rollback(before,live){before.items=before.items.map((saved,index)=>{const item=live[index];if(!item||item.id!==saved.id)return saved;for(const key of Object.keys(item))delete item[key];return Object.assign(item,saved);});this.data=before;}
   modify(action, payload = {}) {
-    const before=clone(this.data), undo=clone(this.undoStack), trashUndo=clone(this.trashUndoStack);
-    try{return this.modifyTransaction(action,payload);}catch(error){if(!error.committed){this.data=before;this.undoStack=undo;this.trashUndoStack=trashUndo;}throw error;}
+    const before=clone(this.data), live=this.liveItems(), undo=clone(this.undoStack), trashUndo=clone(this.trashUndoStack);
+    try{return this.modifyTransaction(action,payload);}catch(error){if(!error.committed){this.rollback(before,live);this.undoStack=undo;this.trashUndoStack=trashUndo;}throw error;}
   }
   modifyTransaction(action, payload = {}) {
     const now = this.clock();
@@ -325,26 +431,26 @@ class Store {
     if(action==='cleanup'){this.finishPermanentDeletion();return;}
     if (action === 'setSettings') { this.data.settings = settings(payload.patch, this.data.settings);this.pruneRecentFolders();this.expire(false); this.persist(); return; }
     if (action === 'createFolder') {
-      const name = text(payload.name, 120).trim(); if (!name) fail('Folder name is empty');
+      const name = trimName(text(payload.name, TAG_INPUT_LIMIT)); if (!name) fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');
       const parentId = payload.parentId || null;
       if(parentId){const parent=this.data.folders.find(f=>f.id===parentId);if(!parent)fail('Parent folder is unavailable');if(parent.parentId!=null)fail('Only top-level folders can contain subfolders');}
+      if(this.data.folders.some(f=>(f.parentId??null)===parentId&&foldedName(f.name)===foldedName(name)))fail('A folder with this name already exists');
       const folder = {id: crypto.randomUUID(), name, parentId}; this.data.folders.push(folder); this.persist(); return folder;
     }
     if(action==='renameFolder'||action==='removeFolder') {
       const folder=this.data.folders.find(f=>f.id===payload.id);if(!folder)fail('Folder unavailable');const originalMemberships=new Map(this.data.items.map(item=>[item.id,JSON.stringify(item.folderIds)]));
-      if(action==='renameFolder'){folder.name=text(payload.name,120).trim();if(!folder.name)fail('Folder name is empty');}
+      if(action==='renameFolder'){const name=trimName(text(payload.name,TAG_INPUT_LIMIT));if(!name)fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');folder.name=name;if(this.data.folders.some(f=>f!==folder&&(f.parentId??null)===(folder.parentId??null)&&foldedName(f.name)===foldedName(folder.name)))fail('A folder with this name already exists');}
       else {const removed=new Set([folder.id]);let changed=true;while(changed){changed=false;for(const child of this.data.folders)if(removed.has(child.parentId)&&!removed.has(child.id)){removed.add(child.id);changed=true;}}this.data.folders=this.data.folders.filter(f=>!removed.has(f.id));for(const item of this.data.items)if(item.folderIds.some(id=>removed.has(id))){item.retainedAt??=now;item.folderIds=item.folderIds.filter(id=>!removed.has(id));}}
       this.pruneRecentFolders();this.persist();this.invalidateTrashUndo(this.data.items.filter(item=>originalMemberships.get(item.id)!==JSON.stringify(item.folderIds)).map(item=>item.id));return;
     }
     if(action==='renameTag'||action==='deleteTag') {
-      const tag=text(payload.tag,80).trim(),affected=this.data.items.filter(item=>item.tags.includes(tag));
+      const tag=text(payload.tag,TAG_INPUT_LIMIT).trim(),affected=this.data.items.filter(item=>item.tags.includes(tag));
       if(!tag||!affected.length)fail('Tag unavailable');
       let name;
       if(action==='renameTag'){
-        name=text(payload.name,256).trim();
-        if(!name||Array.from(name).length>64||/[\u0000-\u001f\u007f-\u009f]/u.test(name))fail('Invalid tag name');
-        const folded=value=>value.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase();
-        if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&folded(value)===folded(name))))fail('A tag with this name already exists');
+        name=text(payload.name,TAG_INPUT_LIMIT).trim();
+        if(!name||!validTagName(name))fail('Invalid tag name');
+        if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&foldedName(value)===foldedName(name))))fail('A tag with this name already exists');
       }
       for(const item of affected){item.retainedAt??=now;item.tags=action==='renameTag'?[...new Set(item.tags.map(value=>value===tag?name:value))]:item.tags.filter(value=>value!==tag);}
       this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return;
@@ -360,18 +466,20 @@ class Store {
       this.undoStack.push(items.map(i => ({id: i.id, trashedAt: i.trashedAt, hiddenFromShelf: i.hiddenFromShelf})));
       if (this.undoStack.length > 32) this.undoStack.shift();
     }
+    // Match macOS addTag: tags are unique ignoring case, width and diacritics, so a new spelling reuses the existing one.
+    const knownTags=new Map();if(action==='tag')for(const other of this.data.items)for(const tag of other.tags){const key=foldedName(tag);if(!knownTags.has(key))knownTags.set(key,tag);}
     const targetPin = typeof payload.value === 'boolean' ? payload.value : items.some(i => !i.pinned);
     for (const item of items) {
       if (action === 'pin') {item.pinned = targetPin;if(targetPin)item.retainedAt??=now;}
       else if(action==='retain')item.retainedAt??=now;
-      else if(action==='note')item.note=text(payload.note,1024*1024,true);
+      else if(action==='note')item.note=sizedText(payload.note,true);
       else if(action==='details') {
-        if(payload.name!==undefined)item.name=text(payload.name,200,true).trim();
-        if(payload.note!==undefined)item.note=text(payload.note,1024*1024,true);
-        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=text(payload.text,1024*1024,true);}
+        if(payload.name!==undefined)item.name=sizedText(payload.name,true).trim();
+        if(payload.note!==undefined)item.note=sizedText(payload.note,true);
+        if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }
       else if(action==='markCopied'){item.lastCopiedAt=now;item.captureRevision=crypto.randomUUID();}
-      else if (action === 'name') { item.name = text(payload.name, 200, true).trim(); item.pinned = true; item.retainedAt??=now; }
+      else if (action === 'name') { item.name = itemName(payload.name); item.pinned = true; item.retainedAt??=now; }
       else if (action === 'folder') {
         if (!this.data.folders.some(f => f.id === payload.folderId)) fail('Folder unavailable');
         if(payload.pinning!==undefined&&typeof payload.pinning!=='boolean')fail('Invalid folder pin option');
@@ -381,15 +489,18 @@ class Store {
         if(typeof payload.folderId!=='string'||!this.data.folders.some(f=>f.id===payload.folderId))fail('Folder unavailable');
         item.folderIds=item.folderIds.filter(id=>id!==payload.folderId);
       } else if(action==='removeTag') {
-        const tag=text(payload.tag,80).trim();item.tags=item.tags.filter(value=>value!==tag);
+        const tag=text(payload.tag,TAG_INPUT_LIMIT).trim();item.tags=item.tags.filter(value=>value!==tag);
       } else if (action === 'tag') {
-        if (!Array.isArray(payload.tags) || payload.tags.length > 50) fail('Invalid tags');
-        item.tags = [...new Set(payload.tags.map(tag => text(tag, 80).trim()).filter(Boolean))];
+        if (!Array.isArray(payload.tags)) fail('Invalid tags');
+        const tags = [...new Set(payload.tags.map(tag => { tag = trimName(text(tag, TAG_INPUT_LIMIT)); if (item.tags.includes(tag)) return tag; tag = trimName(tag.replace(/^#+|#+$/g, '')); const key = foldedName(tag), known = item.tags.find(own => foldedName(own) === key) ?? knownTags.get(key) ?? tag; if (tag) knownTags.set(key, known); return tag && known; }).filter(Boolean))];
+        // Existing longer tags stay editable; only newly added names must fit.
+        if (tags.some(tag => !item.tags.includes(tag) && !validTagName(tag))) fail('Invalid tag name');
+        item.tags = tags;
         if(item.tags.length)item.retainedAt??=now;
       } else if (action === 'remove') { if (saved(item)) item.hiddenFromShelf = true; else{item.trashedAt = now;item.trashRevision=crypto.randomUUID();} }
       else if (action === 'trash') item.trashedAt = now;
-      else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; }
-      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = text(payload.text, 1024 * 1024, true); }
+      else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; item.lastCapturedAt=now; }
+      else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = sizedText(payload.text, true); }
       else if (action === 'saveImage') {
         if (item.kind !== 'image' || item.recording || typeof payload.dataUrl !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(payload.dataUrl) || payload.dataUrl.length > 90_000_000) fail('Invalid image edit');
         const annotations = payload.annotations ?? []; const crop = payload.crop ?? null;
@@ -402,7 +513,7 @@ class Store {
     }
     if(action==='folder'&&payload.rememberRecent===true)this.data.settings.recentPinFolderIds=[payload.folderId,...this.data.settings.recentPinFolderIds.filter(id=>id!==payload.folderId)].slice(0,8);
     if (action === 'delete') { const removed = new Set(items); this.data.items = this.data.items.filter(i => !removed.has(i)); }
-    if (['delete', 'trash', 'restore'].includes(action)) this.undoStack = this.undoStack.filter(batch => !batch.some(old => items.some(i => i.id === old.id)));
+    if (['delete', 'trash', 'restore'].includes(action)) {const affected=new Set(items.map(i=>i.id));this.undoStack=this.undoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
     if(action==='delete')this.preparePermanentDeletion();
     this.persist();
     {const affected=new Set(items.map(item=>item.id));this.trashUndoStack=this.trashUndoStack.map(batch=>batch.filter(entry=>!affected.has(entry.id))).filter(batch=>batch.length);}
@@ -421,4 +532,4 @@ class Store {
     };
   }
 }
-module.exports = {Store, KINDS, DEFAULTS, settings, saved, plainURL, text, ids};
+module.exports = {Store, KINDS, DEFAULTS, settings, saved, plainURL, text, ids, protectDirectory, protectionFailureDetail};

@@ -66,3 +66,64 @@ test('missing bundled models fail closed in a real worker without creating an ex
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-no-model-'));const search=new ImageSearch({modelDirectory:directory,cacheDirectory:path.join(directory,'cache'),items:()=>[],readImage:()=>null});
  try{assert.equal(await search.ready,false);assert.deepEqual(await search.search('query',[]),{ids:[],scores:[],available:false,indexing:false});}finally{await search.stop();fs.rmSync(directory,{recursive:true,force:true});}
 });
+
+
+test('shared image fingerprint is indexed when its original queued owner disappears',async()=>{
+ const f=service();await f.search.ready;
+ f.records.push({id:id2,kind:'image',imageFile:key+'.png'});
+ let firstHas=true;
+ f.worker.response=message=>{
+  if(message.action==='has'&&firstHas){firstHas=false;return '__hold__';}
+  return true;
+ };
+ f.search.refresh();for(let i=0;i<4;i++)await tick();
+ const held=f.worker.messages.find(message=>message.action==='has');
+ assert.ok(held,'the original image indexing request must be in flight');
+ f.records.shift();f.search.refresh();
+ f.worker.emit('message',{id:held.id,result:true});
+ for(let i=0;i<12;i++)await tick();
+ assert.equal(f.search.known.has(key),true,'the surviving duplicate still needs an indexed fingerprint');
+ assert.equal(f.search.state.indexing,false);
+ assert.equal(f.worker.messages.filter(message=>message.action==='has').length,2);
+ await f.search.stop();
+});
+
+
+test('worker failure during a shared-image job leaves no orphaned replacement queued',async()=>{
+ const f=service();await f.search.ready;
+ f.records.push({id:id2,kind:'image',imageFile:key+'.png'});
+ f.worker.response=message=>message.action==='has'?'__hold__':true;
+ f.search.refresh();for(let i=0;i<4;i++)await tick();
+ assert.equal(f.search.state.pending,1);
+ f.records.shift();f.search.refresh();
+ f.worker.emit('error',new Error('Synthetic model failure'));
+ for(let i=0;i<6;i++)await tick();
+ assert.equal(f.search.state.available,false);
+ assert.equal(f.search.state.pending,0);
+ assert.equal(f.search.state.indexing,false);
+ assert.equal(f.search.queue.length,0);
+ await f.search.stop();
+});
+
+test('shared image cache miss reassigns indexing to the surviving duplicate record',async()=>{
+ const f=service();await f.search.ready;
+ f.records.push({id:id2,kind:'image',imageFile:key+'.png'});
+ let firstHas=true;
+ f.worker.response=message=>{
+  if(message.action==='has'&&firstHas){firstHas=false;return '__hold__';}
+  if(message.action==='has')return false;
+  return true;
+ };
+ f.search.refresh();for(let i=0;i<4;i++)await tick();
+ const held=f.worker.messages.find(message=>message.action==='has');
+ assert.ok(held);
+ f.records.shift();f.search.refresh();
+ f.worker.emit('message',{id:held.id,result:false});
+ for(let i=0;i<12;i++)await tick();
+ assert.equal(f.worker.messages.filter(m=>m.action==='has').length,2);
+ assert.equal(f.worker.messages.filter(m=>m.action==='index').length,1);
+ assert.equal(f.reads,1);
+ assert.equal(f.search.known.has(key),true);
+ assert.equal(f.search.state.indexing,false);
+ await f.search.stop();
+});

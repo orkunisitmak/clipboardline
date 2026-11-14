@@ -99,7 +99,7 @@ try{
   $stage='Runtime'
   Initialize-MediaRuntime
   $stage='Input'
-  $inputText=[Console]::In.ReadToEnd();if($inputText.Length -gt 20000){throw 'Invalid video request.'}
+  $inputText=(New-Object IO.StreamReader([Console]::OpenStandardInput(),[Text.Encoding]::UTF8)).ReadToEnd();if($inputText.Length -gt 20000){throw 'Invalid video request.'}
   $request=$inputText | ConvertFrom-Json
   $source=[IO.Path]::GetFullPath([string]$request.source)
   $directory=[IO.Path]::GetFullPath([string]$request.outputDirectory)
@@ -132,7 +132,9 @@ try{
     $profile.Video.Width=$video.Width;$profile.Video.Height=$video.Height
     $profile.Video.FrameRate.Numerator=$video.FrameRate.Numerator;$profile.Video.FrameRate.Denominator=$video.FrameRate.Denominator
     $profile.Video.PixelAspectRatio.Numerator=1;$profile.Video.PixelAspectRatio.Denominator=1
-    if($video.Bitrate -gt 0){$profile.Video.Bitrate=$video.Bitrate}
+    # Near-static screen recordings average a few kbps; the H.264 encoder
+    # rejects such targets (MF_E_TRANSFORM_TYPE_NOT_SET), so keep a 1 Mbps floor.
+    if($video.Bitrate -gt 0){$profile.Video.Bitrate=[Math]::Max([uint32]$video.Bitrate,[uint32]1000000)}
     $stage='TrimRender'
     $failure=Await-Operation ($composition.RenderToFileAsync($output,[Windows.Media.Editing.MediaTrimmingPreference]::Precise,$profile)) ([Windows.Media.Transcoding.TranscodeFailureReason]) ([double])
     if($failure -ne [Windows.Media.Transcoding.TranscodeFailureReason]::None){throw ('Windows could not encode this recording: '+$failure)}

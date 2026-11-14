@@ -25,6 +25,15 @@ import XCTest
     private func key(_ code: UInt16, _ character: String = "", _ flags: NSEvent.ModifierFlags = []) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil, characters: character, charactersIgnoringModifiers: character, isARepeat: false, keyCode: code)!
     }
+    func testTagAndFolderNamesThatDifferByAKanaDevanagariOrThaiMarkStayDistinctLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let record = try XCTUnwrap(store.captureText("marks")); try store.retain([record.id])
+        for (plain, marked) in [("は", "ば"), ("क", "कि"), ("ก", "กิ")] {
+            try store.addTag(plain, to: [record.id]); try store.addTag(marked, to: [record.id])
+            try store.createCollection(plain); let folder = try store.createCollection(marked + "x"); try store.renameCollection(folder, name: marked)
+        }
+        XCTAssertEqual(try store.tags().count, 6); XCTAssertEqual(try store.collections().count, 6)
+    }
     func testPagedTagSummariesRefreshAfterRenameAndRemovalWithoutChangingSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let plain = try XCTUnwrap(store.captureText("plain note")), tagged = try XCTUnwrap(store.captureText("tagged note İstanbul 中文"))
@@ -46,6 +55,39 @@ import XCTest
         XCTAssertEqual(model.cardSummary(tagged.id)?.tagLabel, "#İstanbul · #中文")
         XCTAssertEqual(model.selectedIDs, [tagged.id])
         XCTAssertEqual(try store.item(tagged.id)?.text, tagged.text)
+    }
+    func testPinningAMixedLibrarySelectionPinsEveryItemAndOnlyAFullyPinnedSelectionUnpins() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let ids = try (0..<3).map { index -> UUID in let record = try XCTUnwrap(store.captureText("pin note \(index)")); try store.retain([record.id]); return record.id }
+        try store.toggleFavorite([ids[0]])
+        let retainedAt = try store.records(ids).map(\.retainedAt)
+        f.date = f.date.addingTimeInterval(1)
+        let model = LibraryModel(store: store)
+        wait { model.ids.count == 3 && !model.loading }
+        model.selectAll(); model.favorite()
+        XCTAssertEqual(try store.records(ids).map(\.favorite), [true, true, true])
+        XCTAssertEqual(try store.records(ids).map(\.retainedAt), retainedAt)
+        f.date = f.date.addingTimeInterval(1)
+        model.favorite()
+        XCTAssertEqual(try store.records(ids).map(\.favorite), [false, false, false])
+        XCTAssertEqual(try store.records(ids).map(\.retainedAt), retainedAt)
+    }
+    func testRemovingATagAlsoDropsItsLibraryFilterSoItemsStayVisible() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let note = try XCTUnwrap(store.captureText("tagged note")); try store.retain([note.id]); try store.addTag("Work", to: [note.id])
+        let tag = try XCTUnwrap(store.tags().first)
+        let model = LibraryModel(store: store)
+        wait { model.ids == [note.id] && !model.loading }
+        model.toggleTagFilter(tag.id); wait { model.query.tagIDs == [tag.id] && !model.loading }
+        XCTAssertEqual(model.ids, [note.id])
+        try store.removeTag(tag.id)
+        wait { model.query.tagIDs.isEmpty && !model.loading }
+        XCTAssertEqual(model.ids, [note.id])
+    }
+    func testTextCopiedWithWindowsLineEndingsIsTitledByItsFirstLine() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let note = try XCTUnwrap(store.captureText("Shopping list\r\nmilk\r\nbread"))
+        XCTAssertEqual(note.displayTitle, "Shopping list")
     }
     func testNativeSearchEscapeRoutesImmediateSelectAllToCollectionAndLeavesOtherEditorsAlone() throws {
         _ = NSApplication.shared
@@ -167,6 +209,65 @@ import XCTest
         _ = model.select(record.id); model.trash(); wait { model.ids.isEmpty && !model.loading }
         XCTAssertNil(model.inspected); XCTAssertTrue(model.selectedIDs.isEmpty)
     }
+    func testSubfolderTitleIncludesItsParentLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let parent = try store.createCollection("Parent"), middle = try store.createCollection("Middle", parent: parent)
+        let child = UUID()  // createCollection allows two levels only, so insert the third level (e.g. from imported data) directly
+        try LibraryDatabase(url: store.databaseURL).execute("INSERT INTO collections VALUES(?,?,?,?)", [.text(child.uuidString), .text("Child"), .text(middle.uuidString), .text("Child".libraryFolded)])
+        let model = LibraryModel(store: store)
+        wait { model.collections.count == 3 && !model.loading }
+        model.changeScope(.collection(parent)); wait { model.query.scope == .collection(parent) && !model.loading }
+        XCTAssertEqual(model.title, "Parent")
+        model.changeScope(.collection(child)); wait { model.query.scope == .collection(child) && !model.loading }
+        XCTAssertEqual(model.title, "Parent / Middle / Child")
+        model.changeScope(.collection(middle)); wait { model.query.scope == .collection(middle) && !model.loading }
+        XCTAssertEqual(model.title, "Parent / Middle")
+    }
+    func testUnnamedItemTitlesAreTheTrimmedFirstLineAndLinkHostLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let indented = try XCTUnwrap(store.captureText("\t  Indented first line \nsecond line")), long = try XCTUnwrap(store.captureText(String(repeating: "x", count: 130)))
+        let link = try store.captureLink(URL(string: "https://www.example.com/a/very/long/path?utm_source=news")!)
+        XCTAssertEqual(indented.displayTitle, "Indented first line"); XCTAssertEqual(long.displayTitle, String(repeating: "x", count: 120)); XCTAssertEqual(link.displayTitle, "www.example.com")
+        let blankFirst = try XCTUnwrap(store.captureText("\n \t\nSecond line\nthird"))
+        XCTAssertEqual(blankFirst.displayTitle, "Second line")
+        let blank = try XCTUnwrap(store.captureText(" \t")); XCTAssertEqual(blank.displayTitle, L("Untitled note"))
+        try store.update(link.id) { $0.originalURL = "http://[bad" }; XCTAssertEqual(try XCTUnwrap(store.item(link.id)).displayTitle, L("Link"))
+    }
+    func testRemovingAnotherFolderKeepsTheOpenViewLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let keep = try store.createCollection("Keep"), other = try store.createCollection("Other")
+        let parent = try store.createCollection("Parent"), child = try store.createCollection("Child", parent: parent)
+        let first = try XCTUnwrap(store.captureText("first kept note")), second = try XCTUnwrap(store.captureText("second kept note")); try store.assign([first.id, second.id], to: keep)
+        let model = LibraryModel(store: store)
+        wait { model.collections.count == 4 && !model.loading }
+        model.changeScope(.collection(keep)); wait { model.query.scope == .collection(keep) && model.ids.count == 2 && !model.loading }
+        let chosen = model.ids[1]; _ = model.select(chosen)
+        model.removeFolder(other); wait { model.collections.count == 3 && !model.loading }
+        XCTAssertEqual(model.query.scope, .collection(keep))
+        XCTAssertEqual(model.selectedIDs, [chosen]); XCTAssertEqual(model.focusedID, chosen)
+        model.changeScope(.collection(child)); wait { model.query.scope == .collection(child) && !model.loading }
+        model.removeFolder(parent); wait { model.collections.count == 1 && model.query.scope == .saved && !model.loading }
+        model.changeScope(.collection(keep)); wait { model.query.scope == .collection(keep) && !model.loading }
+        model.removeFolder(keep); wait { model.collections.isEmpty && model.query.scope == .saved && !model.loading }
+    }
+    func testRestoringFromTrashSelectsTheFirstRemainingItemLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let records = try ["first trashed note", "second trashed note", "third trashed note"].map { try XCTUnwrap(store.captureText($0)) }
+        try store.trash(records.map(\.id))
+        let model = LibraryModel(store: store); model.changeScope(.trash)
+        wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        _ = model.select(order[1]); model.restore()
+        wait { model.ids.count == 2 && !model.loading }
+        XCTAssertEqual(model.ids, [order[0], order[2]])
+        XCTAssertEqual(model.focusedID, order[0]); XCTAssertEqual(model.selectedIDs, [order[0]]); XCTAssertEqual(model.inspected?.id, order[0])
+        model.restore()
+        wait { model.ids.count == 1 && !model.loading }
+        XCTAssertEqual(model.focusedID, order[2]); XCTAssertEqual(model.selectedIDs, [order[2]])
+        model.restore()
+        wait { model.ids.isEmpty && !model.loading }
+        XCTAssertNil(model.focusedID); XCTAssertNil(model.inspected); XCTAssertTrue(model.selectedIDs.isEmpty)
+    }
     func testInspectorEditsPersistAndFailedSaveKeepsDraftAndSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let a = try XCTUnwrap(store.captureText("first")), b = try XCTUnwrap(store.captureText("second")); try store.retain([a.id,b.id])
@@ -184,6 +285,15 @@ import XCTest
         XCTAssertEqual(model.query, query); XCTAssertEqual(model.focusedID, a.id); XCTAssertEqual(model.selectedIDs, [a.id])
         XCTAssertEqual(try store.collections(for: a.id).map(\.id), [folder]); XCTAssertEqual(try store.tags(for: a.id).map(\.id), [tag.id])
         XCTAssertEqual(try store.item(a.id)?.text, "edited 👋"); model.draftText = "fixed"; XCTAssertTrue(model.flushEdits()); XCTAssertTrue(model.select(b.id))
+    }
+    func testInspectorTitleOverTwoHundredCharactersSavesUntilOneMiBOfUTF8() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let a = try XCTUnwrap(store.captureText("first")); try store.retain([a.id])
+        let model = LibraryModel(store: store); wait { model.ids.count == 1 }; _ = model.select(a.id)
+        let long = String(repeating: "t", count: 249)
+        model.draftTitle = long; XCTAssertTrue(model.flushEdits()); XCTAssertEqual(try store.item(a.id)?.title, long)
+        model.draftTitle = String(repeating: "x", count: TextClipboardWatcher.maximumDataBytes + 1)
+        XCTAssertFalse(model.flushEdits()); XCTAssertEqual(try store.item(a.id)?.title, long)
     }
     func testMixedTransferExportAndDragPreserveRepresentationsOrderAndOriginals() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
@@ -209,6 +319,12 @@ import XCTest
         let parsed = try LinkMetadataService.youtubeMetadata(data); XCTAssertEqual(parsed.0.title, "Synthetic title"); XCTAssertEqual(parsed.0.author, "Synthetic channel"); XCTAssertEqual(parsed.1?.host, "i.ytimg.com")
         let untrusted = try LinkMetadataService.youtubeMetadata(Data(#"{"thumbnail_url":"http://127.0.0.1/private"}"#.utf8)); XCTAssertNil(untrusted.1)
         var failed = false; do { _ = try LinkMetadataService.youtubeMetadata(Data("not json".utf8)) } catch { failed = true }; XCTAssertTrue(failed)
+    }
+    func testYouTubeWhitespaceOnlyTitleAndAuthorAreDroppedLikeWindows() throws {
+        let blank = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"   ","author_name":" \n "}"#.utf8))
+        XCTAssertNil(blank.0.title); XCTAssertNil(blank.0.author)
+        let padded = try LinkMetadataService.youtubeMetadata(Data(#"{"title":"  Synthetic title ","author_name":"  Synthetic channel "}"#.utf8))
+        XCTAssertEqual(padded.0.title, "Synthetic title"); XCTAssertEqual(padded.0.author, "Synthetic channel")
     }
     func testMetadataConcurrencyBackoffPrivateLinksAndUserTitle() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)

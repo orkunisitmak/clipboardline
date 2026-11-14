@@ -8,7 +8,7 @@
   cancel(){if(!this.pending)return;const pending=this.pending;this.pending=null;this.cancelTimer(pending.timer);pending.resolve({completed:false});}
   request(phase,details={}){
    this.cancel();const token=++this.serial;
-   return new Promise(resolve=>{const pending={token,phase,resolve,timer:null};this.pending=pending;pending.timer=this.schedule(()=>{if(this.pending!==pending)return;this.pending=null;resolve({completed:true,timedOut:true});},(phase==='open'?OPEN_MS:phase==='close'?CLOSE_MS:0)+1000);this.send({token,phase,...details});});
+   return new Promise(resolve=>{const pending={token,phase,resolve,timer:null};this.pending=pending;pending.timer=this.schedule(()=>{if(this.pending!==pending)return;this.pending=null;resolve({completed:true,timedOut:true});},(phase==='open'?OPEN_MS:phase==='close'?CLOSE_MS:0)+1000);try{this.send({token,phase,...details});}catch{this.cancel();}});
   }
   acknowledge(value){if(!value||!this.pending||value.token!==this.pending.token||value.phase!==this.pending.phase||typeof value.completed!=='boolean')return false;const pending=this.pending;this.pending=null;this.cancelTimer(pending.timer);pending.resolve({completed:value.completed});return true;}
  }
