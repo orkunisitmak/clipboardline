@@ -119,9 +119,16 @@ import XCTest
             moveToTrash: fixtureTrash(f.folder), copyImage: { copied.append($0) }, copyText: { _ in })
         line.copiesNewCaptures = true
         line.onFlushPreview = { false } // an open edit that cannot be saved
+        var reported = 0
+        line.onCaptureNotCopied = { reported += 1 }
         XCTAssertNotNil(line.hangCapture(try f.image()), "The capture still hangs")
         XCTAssertTrue(copied.isEmpty)
         XCTAssertEqual(line.notice, L("The new screenshot was not copied"))
+        XCTAssertEqual(reported, 1, "The app is told so it can bring the notice into view")
+        line.onFlushPreview = { true }
+        XCTAssertNotNil(line.hangCapture(try f.image()))
+        XCTAssertEqual(copied.count, 1)
+        XCTAssertEqual(reported, 1, "A successful copy does not report a failure")
     }
 
     func testSettingSurvivesRestart() throws {

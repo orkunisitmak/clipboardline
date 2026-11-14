@@ -12,6 +12,6 @@ function copiesNewCapture(settings,item,items,pasting=false){
 async function copyNewCapture({settings,item,items,write,pasting=false,warn=console.warn,failed=()=>{}}){
   if(!copiesNewCapture(settings,item,items,pasting))return false;
   try{await write([item]);return true;}
-  catch(error){warn('New capture copy error:',error?.message||error);failed('The new screenshot was not copied');return false;}
+  catch(error){warn('New capture copy error:',error?.message||error);await failed('The new screenshot was not copied');return false;}
 }
 module.exports={copiesNewCapture,copyNewCapture,PASTE_SETTLE_MS};

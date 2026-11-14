@@ -48,7 +48,7 @@ test('a failed copy is reported to the user and does not stop the capture from h
   s.modify('setSettings',{patch:{copyNewCaptures:true}});
   const image=s.insert('image',png),warnings=[];
   const notices=[];
-  const copied=await copyNewCapture({settings:s.data.settings,item:image,items:s.data.items,write:async()=>{throw new Error('Clipboard busy');},warn:(...args)=>warnings.push(args.join(' ')),failed:text=>notices.push(text)});
+  const copied=await copyNewCapture({settings:s.data.settings,item:image,items:s.data.items,write:async()=>{throw new Error('Clipboard busy');},warn:(...args)=>warnings.push(args.join(' ')),failed:async text=>{await Promise.resolve();notices.push(text);}});
   assert.equal(copied,false);
   assert.deepEqual(warnings,['New capture copy error: Clipboard busy']);
   assert.deepEqual(notices,['The new screenshot was not copied'],'The user hears that the capture did not reach the clipboard');

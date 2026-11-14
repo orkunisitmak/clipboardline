@@ -233,6 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         line.onExportRequested = { [weak self] in self?.exportSelection() }
         line.onTrashRequested = { [weak self] in self?.trashSelection() }
         line.onImageTrashRequested = { [weak self] in self?.trashImages($0) }
+        line.onCaptureNotCopied = { [weak self] in self?.showCaptureNotCopied() }
         line.onTextPreviewRequested = { [weak self] in self?.showTextPreview($0) }
         line.onTextTrashRequested = { [weak self] in self?.trashText($0) }
         line.onLinkPreviewRequested = { [weak self] in self?.showLinkPreview($0) }
@@ -519,6 +520,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             presentCapture(url, copies: copies)
         }
+    }
+
+    /// A capture that did not reach the clipboard must not fail unseen, or
+    /// the old clipboard gets pasted by mistake. The notice also goes to an
+    /// open preview or Library, and a tucked-away line comes down and stays
+    /// until the pointer has visited it, even with the image shelf hidden.
+    private func showCaptureNotCopied() {
+        reportActionStatus(L("The new screenshot was not copied"))
+        guard !isRevealed else { return }
+        keepOpen = true; wanted = true; panel.placeOnScreen(); updateCapacity(); refresh(); reveal(pinned: true)
     }
 
     /// Tests deliver a screenshot or poll the real clipboard image watcher

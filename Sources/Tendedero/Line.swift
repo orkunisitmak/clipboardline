@@ -915,6 +915,10 @@ final class Line: ObservableObject {
         return item.id
     }
 
+    /// Runs after `notice` says a new capture was not copied, so the app can
+    /// make sure the notice is seen.
+    var onCaptureNotCopied: () -> Void = {}
+
     /// Hangs a capture that just arrived from the screenshot or a watched
     /// folder. With copiesNewCaptures on, a still image is copied as well;
     /// recordings only hang. `copies` is false while another app may still
@@ -922,7 +926,7 @@ final class Line: ObservableObject {
     /// happen, such as when an open edit cannot be saved first, says so.
     @discardableResult func hangCapture(_ url: URL, flying: Bool = false, copies: Bool = true) -> UUID? {
         guard let id = hang(url, flying: flying) else { return nil }
-        if copies, copiesNewCaptures, !isRecordingFile(url), !copy(id) { notice = L("The new screenshot was not copied") }
+        if copies, copiesNewCaptures, !isRecordingFile(url), !copy(id) { notice = L("The new screenshot was not copied"); onCaptureNotCopied() }
         return id
     }
 

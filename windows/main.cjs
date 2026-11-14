@@ -224,7 +224,9 @@ async function writeClipboard(selected) {
   await clipboard.write([new ClipboardItem(data)]);
   ownFingerprint=(await clipboardContent())?.fingerprint||'';store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));
 }
-function copyCapture(item){return copyNewCapture({settings:store.data.settings,item,items:store.data.items,write:writeClipboard,pasting:pastePromise!==null||Date.now()<pasteSettlesAt,failed:notify});}
+// A failed copy must not go unseen, or the old clipboard gets pasted by mistake: open the shelves first.
+async function captureNotCopied(text){if(!desiredVisible)await show('shelves');notify(text);}
+function copyCapture(item){return copyNewCapture({settings:store.data.settings,item,items:store.data.items,write:writeClipboard,pasting:pastePromise!==null||Date.now()<pasteSettlesAt,failed:captureNotCopied});}
 async function copy(payload,paste=false) {
   if(pastePromise)return pastePromise;
   const selected=store.selected(ids(payload.ids));
@@ -273,7 +275,7 @@ async function capture() {
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
     const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw new Error('Screen capture is unavailable');
-    const item=store.insert('image',source.thumbnail.toPNG());queueOCR(item.id);refreshImageSearch();await copyCapture(item);await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});return{id:item.id};
+    const item=store.insert('image',source.thumbnail.toPNG());queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});await copyCapture(item);return{id:item.id};
   }catch(error){if(wasVisible)await show(view);throw error;}
 }
 async function ocr(id,quiet=false){if(ocrJobs.has(id))return ocrJobs.get(id);const promise=recognize(id,quiet);ocrJobs.set(id,promise);try{return await promise;}finally{ocrJobs.delete(id);}}
