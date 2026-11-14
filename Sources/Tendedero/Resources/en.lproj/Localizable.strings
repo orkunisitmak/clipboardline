@@ -63,6 +63,9 @@
 "Folders" = "Folders";
 "General" = "General";
 "Handle screenshots" = "Handle screenshots";
+"Copy new screenshots to the clipboard" = "Copy new screenshots to the clipboard";
+"The new screenshot was not copied" = "The new screenshot was not copied";
+"With Copy new screenshots to the clipboard on, new images here are copied too." = "With Copy new screenshots to the clipboard on, new images here are copied too.";
 "Hang copied images" = "Hang copied images";
 "Hang copied text" = "Hang copied text";
 "Hide line" = "Hide line";

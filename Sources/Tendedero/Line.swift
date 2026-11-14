@@ -846,6 +846,14 @@ final class Line: ObservableObject {
         set { defaults.set(!newValue, forKey: "soundOff") }
     }
 
+    /// A new screenshot, or a new image in a watched folder, also goes to the
+    /// clipboard so it pastes right after the capture. Off out of the box,
+    /// because it replaces what the clipboard held.
+    var copiesNewCaptures: Bool {
+        get { defaults.bool(forKey: "copyNewCaptures") }
+        set { defaults.set(newValue, forKey: "copyNewCaptures") }
+    }
+
     var liveCount: Int { items.filter { !$0.falling }.count }
 
     init(defaults: UserDefaults = .standard, inbox: URL = Inbox.folder,
@@ -905,6 +913,21 @@ final class Line: ObservableObject {
         setScrollOffset(0)
         if !quietly { play("Tink", volume: 0.35) }
         return item.id
+    }
+
+    /// Runs after `notice` says a new capture was not copied, so the app can
+    /// make sure the notice is seen.
+    var onCaptureNotCopied: () -> Void = {}
+
+    /// Hangs a capture that just arrived from the screenshot or a watched
+    /// folder. With copiesNewCaptures on, a still image is copied as well;
+    /// recordings only hang. `copies` is false while another app may still
+    /// be reading the clipboard for a direct paste. A copy that does not
+    /// happen, such as when an open edit cannot be saved first, says so.
+    @discardableResult func hangCapture(_ url: URL, flying: Bool = false, copies: Bool = true) -> UUID? {
+        guard let id = hang(url, flying: flying) else { return nil }
+        if copies, copiesNewCaptures, !isRecordingFile(url), !copy(id) { notice = L("The new screenshot was not copied"); onCaptureNotCopied() }
+        return id
     }
 
     /// The capture has reached the line: the real card takes over.

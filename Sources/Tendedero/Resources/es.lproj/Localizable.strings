@@ -63,6 +63,9 @@
 "Folders" = "Folders";
 "General" = "General";
 "Handle screenshots" = "Encargarse de las capturas";
+"Copy new screenshots to the clipboard" = "Copiar las capturas nuevas al portapapeles";
+"The new screenshot was not copied" = "La captura nueva no se copió";
+"With Copy new screenshots to the clipboard on, new images here are copied too." = "Si Copiar las capturas nuevas al portapapeles está activado, las imágenes nuevas de aquí también se copian.";
 "Hang copied images" = "Colgar imágenes copiadas";
 "Hang copied text" = "Colgar texto copiado";
 "Hide line" = "Ocultar tendedero";

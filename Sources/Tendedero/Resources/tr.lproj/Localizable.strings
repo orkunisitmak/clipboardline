@@ -63,6 +63,9 @@
 "Folders" = "Klasörler";
 "General" = "Genel";
 "Handle screenshots" = "Ekran görüntülerini yönet";
+"Copy new screenshots to the clipboard" = "Yeni ekran görüntülerini panoya kopyala";
+"The new screenshot was not copied" = "Yeni ekran görüntüsü panoya kopyalanamadı";
+"With Copy new screenshots to the clipboard on, new images here are copied too." = "Yeni ekran görüntülerini panoya kopyala açıksa buradaki yeni görseller de kopyalanır.";
 "Hang copied images" = "Kopyalanan görselleri as";
 "Hang copied text" = "Kopyalanan metinleri as";
 "Hide line" = "İpi gizle";
