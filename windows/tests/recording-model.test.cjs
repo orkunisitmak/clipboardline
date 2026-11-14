@@ -35,6 +35,12 @@ test('trim transaction preserves original video and organization and rejects sta
  await assert.rejects(store.commitRecordingTrim({id:item.id,sourceFingerprint:hash,...imported(rendered)}),/changed/);
  const active=fingerprint(store,item.id);store.modify('trash',{ids:[item.id]});await assert.rejects(store.commitRecordingTrim({id:item.id,sourceFingerprint:active,...imported(source)}),/changed/);
 }));
+test('importing the original of a trimmed recording again adds the full recording like macOS',()=>fixture(async(store,directory)=>{
+ const item=await store.insertRecording(imported(source)),rendered=path.join(directory,'rendered.mp4');fs.writeFileSync(rendered,Buffer.concat([fs.readFileSync(source),Buffer.from([0,0,0,8,102,114,101,101])]));
+ await store.commitRecordingTrim({id:item.id,sourceFingerprint:fingerprint(store,item.id),...imported(rendered),durationMs:2000});
+ const again=await store.insertRecording(imported(source));assert.notEqual(again.id,item.id);assert.equal(again.durationMs,6000);assert.equal(store.item(item.id).durationMs,2000);assert.equal(store.data.items.length,2);
+ assert.equal((await store.insertRecording(imported(source))).id,again.id);assert.equal(store.data.items.length,2);
+}));
 test('failed trim commit preserves the previous record and both referenced media versions',()=>fixture(async(store,directory)=>{
  const item=await store.insertRecording(imported(source)),before=structuredClone(store.item(item.id)),hash=fingerprint(store,item.id),persist=store.persist;
  store.persist=()=>{throw new Error('Synthetic recording commit failure');};await assert.rejects(store.commitRecordingTrim({id:item.id,sourceFingerprint:hash,...imported(source),durationMs:2000}),/Synthetic/);store.persist=persist;
