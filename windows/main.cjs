@@ -224,7 +224,7 @@ async function writeClipboard(selected) {
   await clipboard.write([new ClipboardItem(data)]);
   ownFingerprint=(await clipboardContent())?.fingerprint||'';store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));
 }
-function copyCapture(item){return copyNewCapture({settings:store.data.settings,item,items:store.data.items,write:writeClipboard,pasting:pastePromise!==null||Date.now()<pasteSettlesAt});}
+function copyCapture(item){return copyNewCapture({settings:store.data.settings,item,items:store.data.items,write:writeClipboard,pasting:pastePromise!==null||Date.now()<pasteSettlesAt,failed:notify});}
 async function copy(payload,paste=false) {
   if(pastePromise)return pastePromise;
   const selected=store.selected(ids(payload.ids));

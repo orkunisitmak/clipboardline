@@ -918,10 +918,11 @@ final class Line: ObservableObject {
     /// Hangs a capture that just arrived from the screenshot or a watched
     /// folder. With copiesNewCaptures on, a still image is copied as well;
     /// recordings only hang. `copies` is false while another app may still
-    /// be reading the clipboard for a direct paste.
+    /// be reading the clipboard for a direct paste. A copy that does not
+    /// happen, such as when an open edit cannot be saved first, says so.
     @discardableResult func hangCapture(_ url: URL, flying: Bool = false, copies: Bool = true) -> UUID? {
         guard let id = hang(url, flying: flying) else { return nil }
-        if copies, copiesNewCaptures, !isRecordingFile(url) { copy(id) }
+        if copies, copiesNewCaptures, !isRecordingFile(url), !copy(id) { notice = L("The new screenshot was not copied") }
         return id
     }
 

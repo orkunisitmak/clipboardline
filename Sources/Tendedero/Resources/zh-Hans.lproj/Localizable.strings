@@ -64,6 +64,7 @@
 "General" = "General";
 "Handle screenshots" = "接管截图";
 "Copy new screenshots to the clipboard" = "将新截图拷贝到剪贴板";
+"The new screenshot was not copied" = "未能拷贝新截图";
 "With Copy new screenshots to the clipboard on, new images here are copied too." = "开启“将新截图拷贝到剪贴板”后，这里的新图片也会被拷贝。";
 "Hang copied images" = "挂上复制的图片";
 "Hang copied text" = "挂起复制的文本";

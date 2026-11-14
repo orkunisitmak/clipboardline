@@ -640,6 +640,7 @@ enum HistoryTestRunner {
             ("testNewCaptureCopiesOnlyWhenEnabled", captureCopy.testNewCaptureCopiesOnlyWhenEnabled),
             ("testImageCopiedFromAnotherAppIsNotCopiedBackButAScreenshotIs", captureCopy.testImageCopiedFromAnotherAppIsNotCopiedBackButAScreenshotIs),
             ("testCaptureDuringDirectPasteKeepsOffTheClipboard", captureCopy.testCaptureDuringDirectPasteKeepsOffTheClipboard),
+            ("testCaptureThatCannotBeCopiedSaysSo", captureCopy.testCaptureThatCannotBeCopiedSaysSo),
             ("testSettingSurvivesRestart", captureCopy.testSettingSurvivesRestart),
             ("testPinnedClipboardSurvivesExpiryAndRestart", favorites.testPinnedClipboardSurvivesExpiryAndRestart),
             ("testExternalPinCreatesPrivateCopyAndPreservesOriginal", favorites.testExternalPinCreatesPrivateCopyAndPreservesOriginal),

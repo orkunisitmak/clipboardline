@@ -64,6 +64,7 @@
 "General" = "General";
 "Handle screenshots" = "Ekran şəkillərini idarə et";
 "Copy new screenshots to the clipboard" = "Yeni ekran görüntülərini panoya kopyala";
+"The new screenshot was not copied" = "Yeni ekran görüntüsü panoya kopyalanmadı";
 "With Copy new screenshots to the clipboard on, new images here are copied too." = "Yeni ekran görüntülərini panoya kopyala açıqdırsa, buradakı yeni şəkillər də kopyalanır.";
 "Hang copied images" = "Kopyalanmış şəkilləri as";
 "Hang copied text" = "Hang copied text";

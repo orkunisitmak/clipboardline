@@ -112,6 +112,18 @@ import XCTest
         XCTAssertTrue(copied.isEmpty, "The target app may still be reading the clipboard right after the paste")
     }
 
+    func testCaptureThatCannotBeCopiedSaysSo() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        var copied: [URL] = []
+        let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false,
+            moveToTrash: fixtureTrash(f.folder), copyImage: { copied.append($0) }, copyText: { _ in })
+        line.copiesNewCaptures = true
+        line.onFlushPreview = { false } // an open edit that cannot be saved
+        XCTAssertNotNil(line.hangCapture(try f.image()), "The capture still hangs")
+        XCTAssertTrue(copied.isEmpty)
+        XCTAssertEqual(line.notice, L("The new screenshot was not copied"))
+    }
+
     func testSettingSurvivesRestart() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let line = f.line()

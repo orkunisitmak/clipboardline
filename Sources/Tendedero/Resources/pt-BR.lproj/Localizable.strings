@@ -64,6 +64,7 @@
 "General" = "General";
 "Handle screenshots" = "Cuidar das capturas de tela";
 "Copy new screenshots to the clipboard" = "Copiar novas capturas para a área de transferência";
+"The new screenshot was not copied" = "A nova captura não foi copiada";
 "With Copy new screenshots to the clipboard on, new images here are copied too." = "Com Copiar novas capturas para a área de transferência ativado, as novas imagens daqui também são copiadas.";
 "Hang copied images" = "Pendurar imagens copiadas";
 "Hang copied text" = "Hang copied text";
