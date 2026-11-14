@@ -18,7 +18,7 @@
 "Both shelves" = "İki askı birlikte";
 "Bring the line down" = "İpi indir";
 "Cancel" = "İptal";
-"Capture copied links" = "Kopyalanan linkleri kaydet";
+"Capture copied links" = "Kopyalanan bağlantıları kaydet";
 "Change Shortcut" = "Kısayolu değiştir";
 "Change Shortcut…" = "Kısayolu değiştir…";
 "Changes could not be saved; keep this draft open" = "Değişiklikler kaydedilemedi; taslağı açık tutun";
@@ -55,7 +55,7 @@
 "Favorite an item, or add a folder or tag to keep it here." = "Burada tutmak için bir öğeyi sabitle, klasöre ekle veya etiketle.";
 "Favorites" = "Sabitlenenler";
 "Favorites, folders and tags keep items permanently. Other copies follow your history setting." = "Sabitlenen, klasöre eklenen veya etiketlenen içerikler kalıcı kalır. Diğer kopyalar kendi saklama süresine tabidir.";
-"Fetch link titles and thumbnails" = "Link başlıklarını ve küçük görsellerini al";
+"Fetch link titles and thumbnails" = "Bağlantı başlıklarını ve küçük görsellerini al";
 "File could not be read or safely saved" = "Dosya okunamadı veya güvenli biçimde kaydedilemedi";
 "Filtered view" = "Filtrelenmiş görünüm";
 "Filters" = "Filtreler";
@@ -83,12 +83,12 @@
 "Library could not be opened. Existing history is kept; capture is paused." = "Kütüphane açılamadı. Mevcut geçmiş korundu; yakalama duraklatıldı.";
 "Library could not be saved or opened" = "Kütüphane kaydedilemedi veya açılamadı";
 "Library…" = "Kütüphane…";
-"Link" = "Link";
+"Link" = "Bağlantı";
 "Link copied" = "Link kopyalandı";
 "Link preview" = "Link önizlemesi";
 "Link preview could not be saved; the link is kept" = "Link önizlemesi kaydedilemedi; link korundu";
 "Link previews" = "Link önizlemeleri";
-"Links" = "Linkler";
+"Links" = "Bağlantılar";
 "Loading" = "Yükleniyor";
 "Loading…" = "Yükleniyor…";
 "Markup" = "İşaretle";

@@ -1,0 +1,291 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const catalogs = require('../locales.js');
+const { languageCode, translated, translatedKnown } = require('../lib/status-summary.cjs');
+
+const renderer = fs.readFileSync(path.join(__dirname, '../renderer.js'), 'utf8');
+const windowsMain = fs.readFileSync(path.join(__dirname, '../main.cjs'), 'utf8');
+const rendererTranslationKeys = [...renderer.matchAll(/\bt\(\s*(['"])((?:\\.|(?!\1)[^\\])*?)\1\s*\)/g)].map(match => {
+  const value = match[1] === "'" ? match[2].replace(/\\'/g, "'") : match[2];
+  return JSON.parse(`"${value.replace(/"/g, '\\"')}"`);
+});
+const swiftDirectory = path.join(__dirname, '../../Sources/Tendedero');
+const swiftFiles = fs.readdirSync(swiftDirectory).filter(file => file.endsWith('.swift'));
+const swiftTranslationKeys = new Set(swiftFiles.flatMap(file => {
+  const source = fs.readFileSync(path.join(swiftDirectory, file), 'utf8');
+  return [...source.matchAll(/\bL\(\s*"((?:\\.|[^"\\])*)"/g)].map(match => match[1]);
+}));
+const windowsRuntimeErrorKeys = [...new Set([
+  windowsMain,
+  ...fs.readdirSync(path.join(__dirname, '../lib'))
+    .filter(file => file.endsWith('.cjs'))
+    .map(file => fs.readFileSync(path.join(__dirname, '../lib', file), 'utf8'))
+].flatMap(source => [...source.matchAll(/new Error\('([^']*)'\)/g)].map(match => match[1])))];
+const locales = ['az', 'en', 'es', 'fr', 'ja', 'ko', 'pt-BR', 'tr', 'zh-Hans'];
+
+const settingsText = [
+  'Settings',
+  'General',
+  'Sources',
+  'History',
+  'Keyboard shortcuts',
+  'Updates',
+  'About',
+  'Language',
+  'System language',
+  'Colors',
+  'Soft colors',
+  'Neutral glass',
+  'Card size',
+  'Small',
+  'Medium',
+  'Large',
+  'Open after screenshot',
+  'Focus the captured image immediately so Enter and Space work.',
+  'Sounds',
+  'Launch at login',
+  'Images',
+  'Texts',
+  'Links',
+  'Capture copied images',
+  'Capture copied text',
+  'Text copies never open the shelves automatically.',
+  'Capture copied links',
+  'A standalone URL becomes a link; paragraphs remain text.',
+  'Fetch link titles and thumbnails',
+  'Optional network access to the linked public website or YouTube.',
+  'Recognize text in new images',
+  'On-device OCR indexes new images for search.',
+  'Watch image folders',
+  'Add folder',
+  'External originals stay in place.',
+  'Private clipboard markers are ignored. YouTube/site metadata may contact the public linked website; OCR runs locally.'
+];
+
+const actionPaletteCopy = [
+  'Search this Library view',
+  'Select an item first.',
+  'Restore this item first.',
+  'Select a still image first.',
+  'Select an image first.',
+  'Select a text item first.',
+  'Select a link first.',
+  'Start editing text first.',
+  'Nothing to undo.',
+  'Available in Library.',
+  'Available on the shelves.',
+  'Browse selected items',
+  'Open Library first.',
+  'Select an item in Trash first.',
+  'Select one item first.',
+  'Select an annotation first.',
+  'No annotations to clear.',
+  'Start image markup first.',
+  'No update available.',
+  'Nothing to redo.'
+];
+
+const windowsRuntimeMessages = [
+  'Image unavailable',
+  'Select an editable field in another application, then reopen the shelves.',
+  'Paste canceled by another browsing action.',
+  'Select a regular file.',
+  'Recording exceeds the 2 GB import limit.',
+  'The recording changed while importing.',
+  'File exceeds import limit',
+  'Text file exceeds import limit',
+  'Unsupported image file',
+  'Screen capture is unavailable',
+  'OCR requires a still image',
+  'Recognizing image text locally…',
+  'Image changed during recognition',
+  'Focus the shortcut recorder before recording.',
+  'Select an available recording.',
+  'The recording changed. Reopen its preview before trimming.',
+  'Choose a nonempty interval within this recording.',
+  'Video operation canceled.',
+  'Link unavailable',
+  'Image text ready',
+  'Images, recordings and text',
+  'ClipBoardLine update available',
+  'ClipBoardLine %@ is ready. Click to review and install.',
+  'ClipBoardLine could not start',
+  'Imported %d · failed %d. %@: %@',
+  'Shortcuts %@ are unavailable. %@',
+  'Shortcut %@ is unavailable. %@',
+  'Could not restore: %@.',
+  'Working previous shortcuts are kept.',
+  'Choose another combination in Settings.',
+  'The image could not be opened.',
+  'Enable link metadata in Sources before refreshing link previews.',
+  'Offline image search is unavailable.',
+  'No text found in this image.',
+  'Recognized text copied',
+  'Choose watched folders with the folder picker.',
+  'Updates use a public, cryptographically signed Windows channel.',
+  'ClipBoardLine %@ is available.',
+  'Update check failed: %@',
+  'Downloading verified update…',
+  'Verified update is ready to install.',
+  'Update download failed: %@',
+  'Check for a signed update first',
+  'Installing update and reopening ClipBoardLine…',
+  'Update installation failed: %@',
+  'Development builds use a separate library. Install an official release to use its signed update channel.',
+  'Development builds cannot install official updates.',
+  'Windows installer can run only on Windows.',
+  'Installer integrity check failed',
+  'Permanent deletion is incomplete. %@ Retry cleanup in Settings.',
+  'Clipboard capture: %@',
+  'Link preview could not be refreshed: %@',
+  '%@ Falling back to bounded clipboard polling.'
+];
+
+const translatedLabels = [
+  'Settings', 'General', 'Sources', 'History', 'Keyboard shortcuts', 'Updates',
+  'About', 'Language', 'System language', 'Colors', 'Soft colors',
+  'Neutral glass', 'Card size', 'Open after screenshot', 'Launch at login',
+  'Images', 'Texts', 'Links', 'Capture copied images', 'Capture copied text',
+  'Capture copied links', 'Fetch link titles and thumbnails',
+  'Recognize text in new images', 'Watch image folders', 'Add folder'
+];
+
+const validSameSpelling = {
+  az: new Set(['Tendedero · MIT', 'Tesseract OCR', 'Video']),
+  es: new Set(['General', 'Tendedero · MIT', 'Tesseract OCR']),
+  fr: new Set(['Actions', 'Application', 'Sources', 'Image', 'Images', 'Tendedero · MIT', 'Tesseract OCR', 'Type']),
+  ja: new Set(['Tendedero · MIT', 'Tesseract OCR']),
+  ko: new Set(['Tendedero · MIT', 'Tesseract OCR']),
+  'pt-BR': new Set(['Links', 'Tendedero · MIT', 'Tesseract OCR']),
+  tr: new Set(['Tendedero · MIT', 'Tesseract OCR', 'Video']),
+  'zh-Hans': new Set(['Tendedero · MIT', 'Tesseract OCR'])
+};
+
+test('General and Sources copy exists in all nine locale catalogs', () => {
+  assert.deepEqual(Object.keys(catalogs).sort(), locales);
+  for (const locale of locales) {
+    for (const key of settingsText) {
+      assert.equal(typeof catalogs[locale][key], 'string', `${locale} is missing: ${key}`);
+      assert.notEqual(catalogs[locale][key].trim(), '', `${locale} is blank: ${key}`);
+    }
+  }
+});
+
+test('all locale catalogs contain the same complete key set', () => {
+  const sourceKeys = Object.keys(catalogs.en);
+  for (const locale of locales) {
+    assert.deepEqual(Object.keys(catalogs[locale]), sourceKeys, `${locale} catalog keys differ from English`);
+  }
+});
+
+test('settings labels use a translated value in every non-English locale', () => {
+  for (const locale of locales.filter(value => value !== 'en')) {
+    for (const key of translatedLabels) {
+      if (validSameSpelling[locale]?.has(key)) continue;
+      assert.notEqual(catalogs[locale][key], key, `${locale} leaves this label in English: ${key}`);
+    }
+  }
+});
+
+test('every app string is localized in each non-English catalog', () => {
+  for (const locale of locales.filter(value => value !== 'en')) {
+    for (const [key, source] of Object.entries(catalogs.en)) {
+      const value = catalogs[locale][key];
+      assert.equal(typeof value, 'string', `${locale} is missing: ${key}`);
+      assert.notEqual(value.trim(), '', `${locale} is blank: ${key}`);
+      if (validSameSpelling[locale]?.has(key)) continue;
+      assert.notEqual(value, source, `${locale} still uses the English value: ${key}`);
+    }
+  }
+});
+
+test('literal Windows and macOS translation keys exist in every locale', () => {
+  for (const locale of locales) {
+    for (const key of rendererTranslationKeys) {
+      assert.equal(typeof catalogs[locale][key], 'string', `${locale} is missing Windows key: ${key}`);
+    }
+    for (const key of swiftTranslationKeys) {
+      assert.equal(typeof catalogs[locale][key], 'string', `${locale} is missing macOS key: ${key}`);
+    }
+  }
+});
+
+test('localized app strings preserve their printf placeholders', () => {
+  const placeholders = value => value.match(/%(?:\d+\$)?[@dfis]/g) || [];
+  for (const locale of locales.filter(value => value !== 'en')) {
+    for (const [key, source] of Object.entries(catalogs.en)) {
+      const expected = placeholders(source), actual = placeholders(catalogs[locale][key]);
+      const positional = expected.some(value => /\d+\$/.test(value));
+      assert.deepEqual(positional ? actual.sort() : actual, positional ? expected.sort() : expected, `${locale} changed placeholders for: ${key}`);
+    }
+  }
+});
+
+
+
+test('Windows action palette copy exists in every locale', () => {
+  for (const locale of locales) {
+    for (const key of actionPaletteCopy) {
+      assert.equal(typeof catalogs[locale][key], 'string', `${locale} is missing action palette copy: ${key}`);
+      assert.notEqual(catalogs[locale][key].trim(), '', `${locale} has blank action palette copy: ${key}`);
+    }
+  }
+});
+
+test('Windows runtime notices and recoverable errors exist in every locale', () => {
+  for (const locale of locales) {
+    for (const key of windowsRuntimeMessages) {
+      assert.equal(typeof catalogs[locale][key], 'string', `${locale} is missing Windows runtime copy: ${key}`);
+      assert.notEqual(catalogs[locale][key].trim(), '', `${locale} has blank Windows runtime copy: ${key}`);
+    }
+  }
+});
+
+test('all fixed Windows runtime errors are translated in every locale', () => {
+  for (const locale of locales) {
+    for (const key of windowsRuntimeErrorKeys) {
+      assert.equal(typeof catalogs[locale][key], 'string', `${locale} is missing runtime error: ${key}`);
+      assert.notEqual(catalogs[locale][key].trim(), '', `${locale} has a blank runtime error: ${key}`);
+      if (locale !== 'en') assert.notEqual(catalogs[locale][key], key, `${locale} leaves runtime error in English: ${key}`);
+    }
+  }
+});
+
+test('native Windows notification and dialog templates exist in every locale catalog', () => {
+  for (const locale of locales) {
+    for (const key of [
+      'ClipBoardLine update available', 'ClipBoardLine %@ is ready. Click to review and install.',
+      'Images, recordings and text', 'ClipBoardLine could not start',
+      'Imported %d · failed %d. %@: %@', 'Installer integrity check failed'
+    ]) {
+      assert.equal(typeof catalogs[locale][key], 'string', locale+': missing '+key);
+    }
+  }
+});
+
+test('main-process localization formats imported counts, names, errors, and update versions', () => {
+  for (const locale of locales) {
+    const language = languageCode(locale, 'en');
+    const localizedError = translated(language, 'Installer integrity check failed');
+    const imported = translated(language, 'Imported %d · failed %d. %@: %@', 2, 1, 'broken.txt', localizedError);
+    const expectedImported = catalogs[locale]['Imported %d · failed %d. %@: %@']
+      .replace('%d', '2').replace('%d', '1').replace('%@', 'broken.txt').replace('%@', localizedError);
+    assert.equal(imported, expectedImported, `${locale} did not format the native import failure`);
+    assert.equal(translated(language, 'ClipBoardLine %@ is ready. Click to review and install.', '9.8.7'), catalogs[locale]['ClipBoardLine %@ is ready. Click to review and install.'].replace('%@', '9.8.7'), `${locale} did not format the desktop notification version`);
+  }
+});
+
+test('main-process localization preserves arbitrary error filenames with printf tokens', () => {
+  for (const locale of locales) {
+    assert.equal(translatedKnown(locale, 'D:\\archive\\file%d%@.txt cannot be read'), 'D:\\archive\\file%d%@.txt cannot be read');
+    assert.equal(translatedKnown(locale, 'Installer integrity check failed'), catalogs[locale]['Installer integrity check failed']);
+    const values = ['2', '1', 'file%@.txt', 'Error%d'];
+    let index = 0;
+    const expected = catalogs[locale]['Imported %d · failed %d. %@: %@'].replace(/%[@d]/g, () => values[index++]);
+    assert.equal(translatedKnown(locale, 'Imported %d · failed %d. %@: %@', 2, 1, 'file%@.txt', 'Error%d'), expected);
+  }
+});
