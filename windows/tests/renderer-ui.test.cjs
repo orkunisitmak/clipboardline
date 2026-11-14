@@ -756,6 +756,12 @@ test('export and shortcut-conflict notices follow the selected language',async()
  }finally{fs.rmSync(directory,{recursive:true,force:true});}
 });
 
+test('after unpinning the focused card in pinned-only mode, the next arrow selects the first remaining card like macOS',async()=>{
+ const f=fixture();await f.ready();const values=navigationItems(f,{image:4,text:0,link:0}).image.map(value=>({...value,pinned:true}));f.api.emit({items:values});await f.ready();
+ await f.key('KeyF');assert.equal(focusedCard(f),values[0].id);
+ await f.key('KeyP');assert.equal(f.state.items.find(value=>value.id===values[0].id).pinned,false);
+ await f.key('ArrowRight');assert.equal(focusedCard(f),values[1].id);
+});
 test('Tab onto an empty shelf leaves copy, take down, pin and preview with nothing to act on',async()=>{
  const f=fixture();await f.ready();f.api.emit({items:f.state.items.filter(value=>value.kind!=='text')});await f.ready();
  await f.key('Tab');assert.equal(activeKind(f),'text');const commands=f.commands.length;
