@@ -101,13 +101,51 @@ function decodeHTML(bytes, type = '') {
 // Bidirectional marks, embeddings, overrides and isolates can reorder a title to spoof another one; joiners stay.
 // As on macOS, drop control characters except whitespace (U+0085 counts as whitespace).
 const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
-function meta(html, name) {
-  for (const match of html.matchAll(/<meta\b([^>]{0,4096})>/gi)) {
-    const attributes = {};
-    for (const attr of match[1].matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) attributes[attr[1].toLowerCase()] = attr[2] ?? attr[3] ?? attr[4];
-    if ([attributes.property, attributes.name].some(key => String(key).toLowerCase() === name)) return entities(attributes.content || '');
+// Scans a start tag's attributes, honoring quoted values, until its closing '>'.
+// An unquoted '<' or 4096 characters without '>' ends the attempt, so a page of
+// unclosed tags costs linear work instead of a backtracking regex scan. A failed
+// scan reports where it stopped, so callers can resume there instead of rescanning.
+function tagAttributes(html, start) {
+  let quote = '', index = start;
+  for (const end = Math.min(html.length, start + 4096); index < end; index++) {
+    const ch = html[index];
+    if (quote) { if (ch === quote) quote = ''; }
+    else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '>') return {ok: true, text: html.slice(start, index), end: index + 1};
+    else if (ch === '<') break;
   }
-  return '';
+  return {ok: false, end: index};
+}
+// Visits start tags in document order, skipping comments, script and style
+// bodies and every tag's quoted attributes, so text inside them is never taken
+// as a tag. An XHTML self-closing <script/> or <style/> has no body. Every
+// cursor only moves forward, so the work stays linear. A value returned by
+// visit ends the walk.
+function walkTags(html, xhtml, visit) {
+  const tokens = /<!--|<([a-z][\w:-]*)/gi; let match;
+  while ((match = tokens.exec(html))) {
+    if (match[0] === '<!--') { const end = html.indexOf('-->', tokens.lastIndex); if (end < 0) return; tokens.lastIndex = end + 3; continue; }
+    const name = match[1].toLowerCase(), tag = tagAttributes(html, tokens.lastIndex); tokens.lastIndex = tag.end; if (!tag.ok) continue;
+    if ((name === 'script' || name === 'style') && !(xhtml && tag.text.endsWith('/'))) { const end = new RegExp('</' + name + '\\s*>', 'gi'); end.lastIndex = tag.end; if (!end.exec(html)) return; tokens.lastIndex = end.lastIndex; continue; }
+    const result = visit(name, tag); if (result !== undefined) return result;
+  }
+}
+// Uses the first title whose closing tag follows within 2000 characters.
+function documentTitle(html, xhtml) {
+  const closing = /<\/title\s*>/gi; let close = null;
+  return walkTags(html, xhtml, (name, tag) => {
+    if (name !== 'title') return;
+    if (!close || close.index < tag.end) { closing.lastIndex = tag.end; close = closing.exec(html); if (!close) return ''; }
+    if (close.index - tag.end <= 2000) return html.slice(tag.end, close.index);
+  }) || '';
+}
+function meta(html, name, xhtml) {
+  return walkTags(html, xhtml, (tagName, tag) => {
+    if (tagName !== 'meta') return;
+    const attributes = {};
+    for (const attr of tag.text.matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) attributes[attr[1].toLowerCase()] = attr[2] ?? attr[3] ?? attr[4];
+    if ([attributes.property, attributes.name].some(key => String(key).toLowerCase() === name)) return entities(attributes.content || '');
+  }) || '';
 }
 async function linkMetadata(input, fetcher = metadataFetch) {
   metadataGuard(new URL(input));
@@ -121,13 +159,13 @@ async function linkMetadata(input, fetcher = metadataFetch) {
     return {title: prefix(String(data.title || '').trim(), 500)||url.hostname, author: prefix(String(data.author_name || '').trim(), 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
   }
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
-  const html = decodeHTML(response.bytes, response.type);
+  const html = decodeHTML(response.bytes, response.type), xhtml = /application\/xhtml/i.test(response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
-  const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
+  const title = collapse(meta(html, 'og:title', xhtml)) || collapse(meta(html, 'twitter:title', xhtml)) || collapse(entities(documentTitle(html, xhtml).replace(/<[^>]*>/g, ''))) || url.hostname;
   // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
   let thumbnail = '';
   for (const name of ['og:image:secure_url', 'og:image', 'twitter:image']) {
-    const value = meta(html, name); if (!value.trim()) continue;
+    const value = meta(html, name, xhtml); if (!value.trim()) continue;
     try { const image = new URL(value, response.url); metadataGuard(image); literalDestination(image); thumbnail = image.href; break; } catch {}
   }
   return {title: prefix(title, 500), thumbnail};
