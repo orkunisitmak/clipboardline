@@ -298,7 +298,8 @@ class Store {
   async insertRecording(value){
     const assets=await this.recordingAssets(value);
     try{
-      const matching=this.data.items.filter(item=>item.recording&&!item.trashedAt&&item.videoFile===assets.videoFile),prior=matching.sort((a,b)=>b.createdAt-a.createdAt)[0];
+      // Like macOS identicalImage, a trimmed recording no longer matches its original.
+      const matching=this.data.items.filter(item=>item.recording&&!item.trashedAt&&!item.renderedVideoFile&&item.videoFile===assets.videoFile),prior=matching.sort((a,b)=>b.createdAt-a.createdAt)[0];
       if(value.signal?.aborted)fail('Video operation canceled');
       if(!prior&&this.data.items.length>=20000){
         this.releaseInFlightMedia(assets.inFlightMediaFiles);assets.inFlightMediaFiles=[];
