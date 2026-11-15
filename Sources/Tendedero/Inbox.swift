@@ -24,6 +24,12 @@ enum InboxSettings {
         Set(keys.filter { !isManagedValue(current[$0], for: $0, folder: folder) })
     }
 
+    /// A fresh snapshot must not preserve values previously set by Inbox itself.
+    /// Omitted keys restore to the system defaults when Inbox is disabled.
+    static func initialSnapshot(current: [String: Any], folder: URL) -> [String: Any] {
+        current.filter { !isManagedValue($0.value, for: $0.key, folder: folder) }
+    }
+
     private static func isManagedValue(_ value: Any?, for key: String, folder: URL) -> Bool {
         switch key {
         case "location", "locationScreenshot", "locationRecording":
@@ -115,8 +121,9 @@ enum Inbox {
         let current = currentSettings()
         var saved = UserDefaults.standard.dictionary(forKey: savedKey) ?? [:]
         if saved.isEmpty {
-            // Start a new snapshot before taking over any system settings.
-            saved = current
+            // A previous Inbox session can outlive a preferences reset or reinstall.
+            // Do not mistake Inbox's own settings for the user's old defaults.
+            saved = InboxSettings.initialSnapshot(current: current, folder: folder)
         } else {
             // Older snapshots did not contain recording or target preferences.
             // Capture those before filling them with Inbox's values.
