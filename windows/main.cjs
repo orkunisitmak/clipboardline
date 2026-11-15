@@ -31,7 +31,7 @@ const {Updates,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
 const {GlobalShortcuts}=require('./lib/global-shortcuts.cjs');
 const {ImageSearch,modelPaths}=require('./lib/image-search.cjs');
 const {createOcrQueue}=require('./lib/ocr-queue.cjs');
-const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
+const {StatusTray,trayIcon,translated,translatedKnown,languageCode}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
 const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
@@ -93,6 +93,7 @@ function broadcast({surfaceOnly=false}={}) {
   if(window&&!window.isDestroyed()){window.webContents.send('clipboardline:changed',packet);if(!packet.surfaceOnly)lastBroadcastLibraryRevision=store.revision;}
   return packet;
 }
+function mainText(key,...values){return translatedKnown(languageCode(store?.data.settings.language,app.getLocale()),key,...values);}
 function notify(text) { message=text;broadcast(); }
 function openUpdates(){return show('settings',{settingsTab:'updates'});}
 function refreshTray(){
@@ -112,7 +113,7 @@ function createTray(){
 
 function updateAvailable(manifest){
   refreshTray();if(testMode||!store.data.settings.autoCheckUpdates||!Notification.isSupported())return;
-  const notice=new Notification({title:'ClipBoardLine update available',body:`ClipBoardLine ${manifest.version} is ready. Click to review and install.`,silent:true});notice.on('click',()=>void openUpdates());notice.show();
+  const notice=new Notification({title:mainText('ClipBoardLine update available'),body:mainText('ClipBoardLine %@ is ready. Click to review and install.',manifest.version),silent:true});notice.on('click',()=>void openUpdates());notice.show();
 }
 async function launchInstaller(file,args){const child=spawn(file,args,{detached:true,stdio:'ignore',windowsHide:true});await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});child.unref();}
 function trusted(event) {
@@ -293,7 +294,7 @@ async function recognize(id,quiet=false) {
     if(!verifiedOcrModels.has(destination)){if(!validFile(destination,expected)){if(!validFile(source,expected))throw new Error(`OCR source model invalid for ${language}`);fs.copyFileSync(source,destination);if(!validFile(destination,expected))throw new Error(`OCR model integrity verification failed for ${language}`);}verifiedOcrModels.add(destination);}
   }
   const worker=await createWorker(['eng','tur'],1,{langPath:languageDirectory,cachePath:languageDirectory,cacheMethod:'none',gzip:true});
-  try{let image=nativeImage.createFromPath(file);const size=image.getSize(),scale=Math.min(1,2400/Math.max(size.width,size.height));if(scale<1)image=image.resize({width:Math.round(size.width*scale),height:Math.round(size.height*scale)});const result=await worker.recognize(image.toPNG());if(!store.data.items.includes(item)||(item.renderedFile||item.imageFile)!==fingerprint)throw new Error('Image changed during recognition');item.ocrText=String(result.data.text||'').slice(0,1024*1024);store.persist();if(!quiet)notify(item.ocrText?'Image text ready':'No text found');else broadcast();return{text:item.ocrText,id};}
+  try{let image=nativeImage.createFromPath(file);const size=image.getSize(),scale=Math.min(1,2400/Math.max(size.width,size.height));if(scale<1)image=image.resize({width:Math.round(size.width*scale),height:Math.round(size.height*scale)});const result=await worker.recognize(image.toPNG());if(!store.data.items.includes(item)||(item.renderedFile||item.imageFile)!==fingerprint)throw new Error('Image changed during recognition');item.ocrText=String(result.data.text||'').slice(0,1024*1024);store.persist();if(!quiet)notify(item.ocrText?'Image text ready':'No text found in this image.');else broadcast();return{text:item.ocrText,id};}
   finally{await worker.terminate();}
 }
 function configureWatchers() {
@@ -324,7 +325,7 @@ function configureShortcuts(previousPreferences=null) {
   if(rejected.length){
     if(previousPreferences)store.modify('setSettings',{patch:{shortcuts:Object.fromEntries(rejected.map(value=>[value.action,previousPreferences[value.action]||'']))}});
     const unrestored=rejected.filter(value=>value.restorationFailed).map(value=>value.action);
-    message='Shortcut '+rejected.map(value=>value.shortcut).join(', ')+' is unavailable. '+(unrestored.length?'Could not restore: '+unrestored.join(', ')+'.':rejected.some(value=>value.previous)?'Working previous shortcuts are kept.':'Choose another combination in Settings.');
+    message=(rejected.length===1?`Shortcut ${rejected[0].shortcut} is unavailable. `:`Shortcuts ${rejected.map(value=>value.shortcut).join(', ')} are unavailable. `)+(unrestored.length?'Could not restore: '+unrestored.join(', ')+'.':rejected.some(value=>value.previous)?'Working previous shortcuts are kept.':'Choose another combination in Settings.');
   }
   return rejected;
 }
@@ -372,7 +373,7 @@ async function command(action,payload={}) {
   }
   else if(action==='capture')result=await capture();
   else if(action==='newNote'){result={id:store.createNote(payload).id};}
-  else if(action==='import'){const response=await dialog.showOpenDialog(window,{properties:['openFile','multiSelections'],filters:[{name:'Images, recordings and text',extensions:['png','jpg','jpeg','webp','bmp','mov','mp4','txt','md']}]});const imported=[],failures=[];for(const file of response.filePaths){try{const item=await importFile(file);imported.push(item.id);if(item.kind==='link')void enrich(item.id);}catch(error){failures.push(path.basename(file)+': '+error.message);}}result={ids:imported,failed:failures.length};if(failures.length)message=(imported.length?`Imported ${imported.length} · failed ${failures.length}. `:'')+failures[0];}
+  else if(action==='import'){const response=await dialog.showOpenDialog(window,{properties:['openFile','multiSelections'],filters:[{name:mainText('Images, recordings and text'),extensions:['png','jpg','jpeg','webp','bmp','mov','mp4','txt','md']}]});const imported=[],failures=[];for(const file of response.filePaths){try{const item=await importFile(file);imported.push(item.id);if(item.kind==='link')void enrich(item.id);}catch(error){failures.push({filename:path.basename(file),error:error.message});}}result={ids:imported,failed:failures.length};if(failures.length){const [first,...others]=failures;const localizedError=mainText(first.error);const summary=imported.length?mainText('Imported %d · failed %d. %@: %@',imported.length,failures.length,first.filename,localizedError):`${first.filename}: ${localizedError}`;message=[summary,...others.map(failure=>`${failure.filename}: ${mainText(failure.error)}`)].join('; ');}}
   else if(action==='searchImages'){if(!imageSearch)throw new Error('Offline image search is unavailable.');result=await imageSearch.search(payload.query,payload.eligibleIds);}
   else if(action==='ocr')result=await ocr(payload.id);
   else if(action==='copyOCR'){const recognized=await ocr(payload.id);if(!recognized.text.trim())throw new Error('No text found in this image.');await writeClipboard([{kind:'text',text:recognized.text}]);result=recognized;notify('Recognized text copied');}
@@ -481,7 +482,7 @@ else app.whenReady().then(async()=>{
   await show('shelves');
   // Test hooks are main-process only and require an explicit isolated data path.
   if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
-}).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
+}).catch(error=>{dialog.showErrorBox(mainText('ClipBoardLine could not start'),mainText(error.message));app.exit(1);});
 app.on('second-instance',()=>{if(window)void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});
 app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});

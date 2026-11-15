@@ -239,9 +239,9 @@ test('Title sort does not fold ligatures or circled digits, like the Mac',async(
 test('disabled undo rows name the surface before saying there is nothing to undo',async()=>{
  const f=fixture();await f.ready();
  const detail=id=>f.overlay.match(new RegExp('<button[^>]*data-command="'+id+'"[^>]*>[\\s\\S]*?</button>'))[0].match(/<small>([^<]*)<\/small>/)[1];
- await f.key('KeyK',{ctrl:true});assert.equal(detail('undoTrash'),'Available in Library');assert.equal(detail('undo'),'Nothing to undo.');
+ await f.key('KeyK',{ctrl:true});assert.equal(detail('undoTrash'),'Available in Library.');assert.equal(detail('undo'),'Nothing to undo.');
  await f.key('Escape');await savedLibrary(f);await f.key('KeyK',{ctrl:true});
- assert.equal(detail('undo'),'Available on the shelves');assert.equal(detail('undoTrash'),'Nothing to undo.');
+ assert.equal(detail('undo'),'Available on the shelves.');assert.equal(detail('undoTrash'),'Nothing to undo.');
 });
 test('restoring from Trash moves focus and selection to the first remaining item',async()=>{
  const f=fixture();await f.ready();for(const value of f.state.items.slice(0,3))value.trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);
@@ -425,13 +425,20 @@ test('a background state push keeps keyboard focus on the focused dialog button 
  const cancels=buttons.filter(button=>button.dataset.action==='close-modal');assert.equal(cancels.length,2,'header close and footer Cancel');
  cancels[1].focus();assert.equal(f.document.activeElement,cancels[1]);
  f.api.emit({});await f.ready();
+ const retained=buttons.filter(button=>button.dataset.action==='close-modal');
+ assert.equal(retained[1],cancels[1],'unchanged dialog content must preserve the original Cancel element');
+ assert.equal(f.document.activeElement,cancels[1],'focus stays on the same Cancel button');
+ // A real dialog content change still regenerates the overlay and transfers focus.
+ await f.input('simple-input','Changed dialog text');f.api.emit({});await f.ready();
  const rebuilt=buttons.filter(button=>button.dataset.action==='close-modal');
- assert.notEqual(rebuilt[1],cancels[1],'the overlay was rebuilt');assert.equal(f.document.activeElement,rebuilt[1],'focus returns to the same (footer) Cancel button');
+ assert.notEqual(rebuilt[1],cancels[1],'changed dialog content must rebuild the overlay');
+ assert.equal(f.document.activeElement,rebuilt[1],'focus returns to the same (footer) Cancel button');
  // A different dialog, or no focused button, must not steal focus.
  f.document.activeElement=f.document.body;f.api.emit({});await f.ready();assert.equal(f.document.activeElement,f.document.body);
  // An unmatchable selector (for example a stored tag with a control character) must not stop the refresh.
  const again=buttons.filter(button=>button.dataset.action==='close-modal');again[1].focus();overlay.querySelectorAll=()=>{throw new SyntaxError('invalid selector');};
- f.api.emit({});await f.ready();assert.ok(overlay.innerHTML.includes('close-modal'),'the overlay is still rebuilt');
+ await f.input('simple-input','Changed again');f.api.emit({});await f.ready();
+ assert.ok(overlay.innerHTML.includes('Changed again'),'invalid focus selectors must not block a required overlay update');
 });
 test('Space on a focused dialog button activates it on keydown, so a background refresh between keydown and keyup cannot drop the click',async()=>{
  const f=fixture();await f.ready();await f.key('KeyF');
