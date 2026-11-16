@@ -822,3 +822,24 @@ test('shelf markup does not consume M in native editors or open text and link it
  await f.key('Escape');await f.key('Escape');f.api.emit({settings:{...f.state.settings,localShortcuts:{markup:''}}});await f.ready();
  await f.key('KeyM');await f.key('KeyX');assert.equal(f.overlay,'');
  });
+test('Take down of a ctrl-selected pair continues right of the removed focus like macOS',async()=>{
+ const f=fixture();await f.ready();const values=navigationItems(f,{image:6,text:0,link:0}).image;f.api.emit({items:values});await f.ready();
+ await f.cardClick(values[2].id,{ctrl:true});assert.deepEqual(selectedCards(f),[values[0].id,values[2].id]);assert.equal(focusedCard(f),values[2].id);
+ await f.key('KeyS');assert.equal(focusedCard(f),values[3].id);assert.deepEqual(selectedCards(f),[values[3].id]);
+});
+test('the corner cross on another card keeps the focused card like macOS',async()=>{
+ const f=fixture();await f.ready();const values=navigationItems(f,{image:6,text:0,link:0}).image;f.api.emit({items:values});await f.ready();
+ await f.key('ArrowRight');assert.equal(focusedCard(f),values[1].id);
+ await f.click('card-remove',{id:values[0].id});assert.ok(f.state.items.find(value=>value.id===values[0].id).trashedAt||f.state.items.find(value=>value.id===values[0].id).hiddenFromShelf);
+ assert.equal(focusedCard(f),values[1].id);assert.deepEqual(selectedCards(f),[values[1].id]);
+});
+test('Take down shows the page of the card it focuses next',async()=>{
+ const f=fixture();await f.ready();const values=navigationItems(f,{image:25,text:0,link:0}).image;f.api.emit({items:values});await f.ready();
+ for(let index=0;index<9;index++)await f.key('ArrowRight',{shift:true});assert.equal(focusedCard(f),values[9].id);
+ await f.key('KeyS');assert.equal(focusedCard(f),values[10].id);assert.deepEqual(selectedCards(f),[values[10].id]);
+});
+test('the corner cross keeps an unselected focus selected',async()=>{
+ const f=fixture();await f.ready();const values=navigationItems(f,{image:6,text:0,link:0}).image;f.api.emit({items:values});await f.ready();
+ await f.cardClick(values[1].id,{ctrl:true});await f.cardClick(values[1].id,{ctrl:true});assert.equal(focusedCard(f),values[1].id);assert.deepEqual(selectedCards(f),[values[0].id]);
+ await f.click('card-remove',{id:values[0].id});assert.equal(focusedCard(f),values[1].id);assert.deepEqual(selectedCards(f),[values[1].id]);
+});
