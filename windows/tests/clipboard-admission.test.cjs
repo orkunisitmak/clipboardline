@@ -7,7 +7,7 @@ const marker=Buffer.from('synthetic-own-marker');
 const {plainURL}=require('../lib/model.cjs');
 function board(values,options={}){
  let reads=0,formatReads=0,sequence=10;const requests=[];
- const entries=values.map(value=>({types:Object.keys(value),getType:async type=>{reads++;requests.push(type);if(options.duringRead)await options.duringRead(type,api);return new Blob([value[type]]);}}));
+ const entries=values.map(value=>({types:Object.keys(value),getType:async type=>{reads++;requests.push(type);if(options.duringRead)await options.duringRead(type,api);const payload=value[type];return type==='electron application/bookmark'?payload:new Blob([payload]);}}));
  const api={get reads(){return reads;},get formatReads(){return formatReads;},requests,advance(){sequence++;},sequence:async()=>sequence,
  clipboard:{read:async()=>{formatReads++;options.duringFormats?.(api);return entries;},readText:async()=>{throw new Error('A second live text read is forbidden.');}}};return api;
 }
@@ -75,6 +75,57 @@ test('oversized native metadata is rejected before allocating its buffer',async(
   assert.equal(await readClipboardContent({clipboard,sequence:async()=>1,marker,plainURL}),null);assert.equal(buffers,0);
  }
 });
+test('rich linked copies prefer the Electron bookmark URL when link capture is enabled',async()=>{
+ const api=board([{'text/plain':'OpenAI docs','electron application/bookmark':{title:'OpenAI docs',url:'https://platform.openai.com/docs'}}]);
+ const result=await read(api);
+ assert.deepEqual([result.kind,result.value],['link','https://platform.openai.com/docs']);
+ assert.deepEqual(api.requests,['electron application/bookmark']);
+});
+test('bookmark copies are not read when link capture is disabled',async()=>{
+ const api=board([{'text/plain':'OpenAI docs','electron application/bookmark':{title:'OpenAI docs',url:'https://platform.openai.com/docs'}}]);
+ const result=await readClipboardContent({...api,marker,plainURL,captureLinks:false});
+ assert.deepEqual([result.kind,result.value],['text','OpenAI docs']);
+ assert.deepEqual(api.requests,['text/plain']);
+});
+test('invalid bookmark URLs fall back to the text label',async()=>{
+ const api=board([{'text/plain':'OpenAI docs','electron application/bookmark':{title:'OpenAI docs',url:'file:///private/report.pdf'}}]);
+ const result=await read(api);
+ assert.deepEqual([result.kind,result.value],['text','OpenAI docs']);
+ assert.deepEqual(api.requests,['electron application/bookmark','text/plain']);
+});
+test('shared linked URL representations admit a safe destination before the display label',async()=>{
+ for(const row of contract.linkedRepresentationCases){
+  const api=board([row.formats]);
+  const result=await read(api);
+  assert.deepEqual([result?.kind,result?.value],['link',row.url],row.name);
+  assert.equal(result.fingerprint,'link:'+require('node:crypto').createHash('sha256').update(row.url).digest('hex'),row.name);
+ }
+});
+test('HTML and URI representations never override disabled links or private items',async()=>{
+ for(const row of contract.linkedRepresentationCases.filter(item=>item.formats['text/plain'])){
+  const disabled=await readClipboardContent({...board([row.formats]),marker,plainURL,captureLinks:false});
+  assert.deepEqual([disabled?.kind,disabled?.value],['text','Read docs'],row.name);
+  const privateBoard=board([row.formats,{'com.agilebits.onepassword':''}]);
+  assert.equal(await read(privateBoard),null);
+  assert.equal(privateBoard.reads,0);
+ }
+});
+test('malformed, unsafe or ambiguous linked representations fall back to the original text',async()=>{
+ for(const formats of [
+  {'text/plain':'Read docs','text/html':'<a href="javascript:alert(1)">Read docs</a>'},
+  {'text/plain':'Read docs','text/uri-list':'file:///private/document.txt'},
+  {'text/plain':'Read docs','text/html':'<a href="https://example.com/a">A</a><a href="https://example.com/b">B</a>'},
+  {'text/plain':'Read docs','text/uri-list':'https://example.com/a\nhttps://example.com/b'}
+ ]){
+  const result=await read(board([formats]));
+  assert.deepEqual([result?.kind,result?.value],['text','Read docs']);
+ }
+});
+test('replaced clipboard generations never admit a linked URL',async()=>{
+ const api=board([{'text/plain':'Read docs','text/uri-list':'https://example.com/late'}],{duringRead:(type,value)=>{if(type==='text/uri-list')value.advance();}});
+ assert.deepEqual(await read(api),{raced:true});
+});
+
 test('a standalone URL is ordinary exact text while link capture is off, as on macOS',async()=>{
  const url=' https://example.com/a?b=1\r\n';
  const on=await read(board([{'text/plain':url}]));assert.deepEqual([on.kind,on.value],['link','https://example.com/a?b=1']);
