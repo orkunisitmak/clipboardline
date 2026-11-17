@@ -191,6 +191,22 @@ import XCTest
         let html = "<meta property='og:image:secure_url' content='http://public.example.org/secure.png'><meta property='og:image' content='/a.png'>"
         XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(html.utf8), url: url).thumbnailURL?.absoluteString, "https://public.example.org/a.png")
     }
+
+    func testTextareaContentIsNotThePreviewTitle() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let parsed = try PublicLinkHTMLMetadata(data: Data("<title>gerçek</title><textarea><meta property='og:title' content='Sahte'></textarea>".utf8), url: url)
+        XCTAssertEqual(parsed.title, "gerçek")
+        let closedFirst = try PublicLinkHTMLMetadata(data: Data("<textarea><meta property='og:title' content='fake'></textarea><title>Real</title>".utf8), url: url)
+        XCTAssertEqual(closedFirst.title, "Real")
+    }
+
+    func testUnclosedTextareaHidesTheRestOfThePageAndStaysFast() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let unclosed = try PublicLinkHTMLMetadata(data: Data("<textarea><meta property='og:title' content='x'><title>T</title>".utf8), url: url)
+        XCTAssertNil(unclosed.title)
+        let repeated = try PublicLinkHTMLMetadata(data: Data(String(repeating: "<textarea>", count: 50_000).utf8), url: url)
+        XCTAssertNil(repeated.title)
+    }
 }
 
 #if !STANDALONE_TESTS
