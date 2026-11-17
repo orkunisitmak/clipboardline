@@ -737,7 +737,7 @@ default:
  else if(/^select[1-9]$/.test(action)){const index=Number(action.slice(6))-1,value=rowItems(ui.active)[(ui.pages[ui.active]||0)*shelfPageSize()+index];if(index<shelfPageSize()&&value){select(value);render();}}
  else if(action.startsWith('scope-')){if(!await flushPreview())break;ui.preview=null;ui.editor=null;ui.editingText=false;ui.scope=action.slice(6);ui.search='';await command('library');focusFirst();render();}
  else if(action.startsWith('settings-')){ui.settingsTab=action.slice(9);await perform('settings');}
- else if(action.startsWith('sort-')){ui.sort=action.slice(5);reconcileLibraryFocus();render();}
+ else if(action.startsWith('sort-')){if(!await flushPreview())break;ui.sort=action.slice(5);reconcileLibraryFocus();render();revealFocused();}
  else if(action.startsWith('days-')){ui.days=Number(action.slice(5));focusFirst();render();}
  else if(action.startsWith('folder.rename.'))openFolderAction('rename-folder',action.slice(14));
  else if(action.startsWith('folder.new.'))openFolderAction('new-subfolder',action.slice(11));
@@ -850,7 +850,7 @@ document.addEventListener('keyup',event=>{if(event.code==='Space'){ui.spacePan=f
 async function clickAction(target){const action=target.dataset.action;
  if(action==='video-trim-save'){await saveVideoTrim();return;}if(action==='video-trim-cancel'){await cancelVideoTrim();return;}
 
- if(action==='sort-column'){if(!await flushInspectorDrafts())return;const column=target.dataset.column;if(column==='title')ui.sort=ui.sort==='title'?'titleDescending':'title';else if(column==='created')ui.sort=ui.sort==='newest'?'oldest':'newest';else return;reconcileLibraryFocus();render();document.querySelector('[data-action="sort-column"][data-column="'+column+'"]')?.focus();return;}
+ if(action==='sort-column'){if(!await flushPreview())return;const column=target.dataset.column;if(column==='title')ui.sort=ui.sort==='title'?'titleDescending':'title';else if(column==='created')ui.sort=ui.sort==='newest'?'oldest':'newest';else return;reconcileLibraryFocus();render();revealFocused();document.querySelector('[data-action="sort-column"][data-column="'+column+'"]')?.focus();return;}
  if(action==='clear-history'){await perform('clear-history');return;}
  if(action==='close-modal'){closeModal();return;}if(action==='confirm-modal'){await confirmModal();return;}
  if(action==='execute-command'){const chosen=actionCommands().find(value=>value.id===target.dataset.command);if(chosen&&!chosen.disabled){const ids=ui.modal?.contextIds,focus=ui.modal?.contextFocus;closeModal();await perform(chosen.id,ids,focus);}return;}
@@ -918,7 +918,7 @@ else if(target.dataset.retention)void command('setSettings',{patch:{retentionDay
 else if(target.dataset.filterTag){ui.filterTags=target.checked?[...new Set([...ui.filterTags,target.dataset.filterTag])]:ui.filterTags.filter(tag=>tag!==target.dataset.filterTag);focusFirst();render();}
 else if(target.id==='type-filter'){ui.type=target.value;focusFirst();render();}
 else if(target.id==='search-mode-filter'){ui.searchMode=target.value;focusFirst();render();}
-else if(target.id==='sort-filter'){ui.sort=target.value;reconcileLibraryFocus();render();}
+else if(target.id==='sort-filter'){if(!await flushPreview()){render();return;}ui.sort=target.value;reconcileLibraryFocus();render();revealFocused();}
 else if(target.id==='date-filter'){ui.days=Number(target.value);focusFirst();render();}
 else if(target.id==='ink-fill'&&ui.editor){ui.editor.fill=target.checked;if(ui.editor.selected!=null){checkpoint();ui.editor.annotations[ui.editor.selected].fill=target.checked;ui.editor.dirty=true;drawEditor();}}else if(target.id==='text-size'&&ui.editor){ui.editor.fontSize=Number(target.value);if(ui.editor.selected!=null&&ui.editor.annotations[ui.editor.selected].type==='text'){checkpoint();ui.editor.annotations[ui.editor.selected].fontSize=Number(target.value);ui.editor.dirty=true;drawEditor();}}else if(target.id==='ink-width'&&ui.editor){ui.editor.width=Number(target.value);if(ui.editor.selected!=null){checkpoint();ui.editor.annotations[ui.editor.selected].widthPx=Number(target.value);ui.editor.dirty=true;drawEditor();}}
 });
