@@ -48,7 +48,7 @@ let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboard
 let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
-let visibilityGeneration=0,desiredVisible=false;
+let visibilityGeneration=0,desiredVisible=false,pendingPeekGeneration=0,pendingPeekEvent=null;
 const shelfMotion=new MotionBridge(value=>{if(window&&!window.isDestroyed())window.webContents.send('clipboardline:shelf-motion',value);});
 const peek=new PeekController({onExpire:generation=>{if(closing||generation!==visibilityGeneration||!desiredVisible||window?.isFocused?.())return;void hide(false);}});
 const windowBounds=new WindowBounds();
@@ -125,7 +125,7 @@ function fitNormalBounds(area){const width=Math.min(area.width,normalBounds?.wid
 async function show(next='shelves',event=null,{focus=true,peekMs=0}={}) {
   cancelRecordingTrims();peek.cancel();
   if(pastePromise){pasteGeneration++;cancelNativePaste();}
-  const generation=++visibilityGeneration,wasClosing=!desiredVisible&&window.isVisible();desiredVisible=true;shelfMotion.cancel();showing++;
+  const generation=++visibilityGeneration,wasClosing=!desiredVisible&&window.isVisible(),peeking=next==='shelves'&&!focus&&peekMs>0;desiredVisible=true;pendingPeekGeneration=peeking?generation:0;pendingPeekEvent=peeking?event:null;shelfMotion.cancel();showing++;
   try {
     // A hidden window can still be restoring its previous native field.
     // Complete that operation before a rapid reopen captures and takes focus.
@@ -136,7 +136,8 @@ async function show(next='shelves',event=null,{focus=true,peekMs=0}={}) {
       if(generation!==visibilityGeneration)return;
       previous=pasteTargets.capture(target);
     }
-    rememberNormalBounds();view=next;viewEvent=event?{...event,serial:crypto.randomUUID()}:null;message='';
+    const initialEvent=peeking&&pendingPeekEvent?pendingPeekEvent:event;
+    rememberNormalBounds();view=next;viewEvent=initialEvent?{...initialEvent,serial:crypto.randomUUID()}:null;message='';
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     applyingBounds=true;
     try{
@@ -147,18 +148,17 @@ async function show(next='shelves',event=null,{focus=true,peekMs=0}={}) {
     const animate=next==='shelves'&&(!window.isVisible()||wasClosing);
     if(animate)await shelfMotion.request('prepare',{hidden:!window.isVisible()});else await shelfMotion.request('reset');
     if(generation!==visibilityGeneration)return;
-    const peeking=next==='shelves'&&!focus&&peekMs>0;
     if(!focus&&typeof window.showInactive==='function')window.showInactive();
     else{window.show();if(focus)window.focus();}
-    if(peeking)peek.start(generation,peekMs);
+    if(peeking){peek.start(generation,peekMs);pendingPeekGeneration=0;pendingPeekEvent=null;}
     windowBounds.shown(window);broadcast({surfaceOnly:true});
     // Commands can await the settled pixels, but the window and keyboard are
     // available immediately. A concurrent toggle can cancel this animation.
     if(animate)await shelfMotion.request('open');
-  }finally{showing--;}
+  }finally{if(pendingPeekGeneration===generation){pendingPeekGeneration=0;pendingPeekEvent=null;}showing--;}
 }
 async function hide(restore=true) {
-  cancelRecordingTrims();peek.cancel();
+  cancelRecordingTrims();peek.cancel();pendingPeekGeneration=0;pendingPeekEvent=null;
   if(restore&&pastePromise){pasteGeneration++;cancelNativePaste();}
   // A reopen can cancel an older close while its promise is still unwinding.
   // A subsequent close must supersede that reopen rather than reuse the
@@ -185,6 +185,7 @@ async function revealCapturedImage(item) {
   if(!item||!store.data.settings.openAfterScreenshot)return;
   const event={selectId:item.id,kind:'image'};
   if(!desiredVisible){await show('shelves',event,{focus:false,peekMs:PEEK_DURATION_MS});return;}
+  if(pendingPeekGeneration===visibilityGeneration){pendingPeekEvent=event;viewEvent={...event,serial:crypto.randomUUID()};return;}
   if(view==='shelves'&&peek.active){viewEvent={...event,serial:crypto.randomUUID()};peek.start(visibilityGeneration,PEEK_DURATION_MS);broadcast({surfaceOnly:true});}
 }
 async function readClipboard() {
@@ -276,7 +277,7 @@ async function importFile(file) {
   const image=nativeImage.createFromPath(file);if(image.isEmpty())throw new Error('Unsupported image file');const item=store.insert('image',image.toPNG());queueOCR(item.id);refreshImageSearch();return item;
 }
 async function capture() {
-  const wasVisible=window.isVisible();peek.cancel();visibilityGeneration++;desiredVisible=false;shelfMotion.cancel();if(wasVisible)window.hide();viewEvent=null;broadcast({surfaceOnly:true});await shelfMotion.request('reset');
+  const wasVisible=window.isVisible();peek.cancel();pendingPeekGeneration=0;pendingPeekEvent=null;visibilityGeneration++;desiredVisible=false;shelfMotion.cancel();if(wasVisible)window.hide();viewEvent=null;broadcast({surfaceOnly:true});await shelfMotion.request('reset');
   try{
     // Capture only after the shelf window has left the compositor.
     await new Promise(resolve=>setTimeout(resolve,150));
