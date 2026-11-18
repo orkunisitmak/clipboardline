@@ -101,6 +101,82 @@ function decodeHTML(bytes, type = '') {
 // Bidirectional marks, embeddings, overrides and isolates can reorder a title to spoof another one; joiners stay.
 // As on macOS, drop control characters except whitespace (U+0085 counts as whitespace).
 const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
+function isHTMLWhitespace(character) {
+  return character === ' ' || character === '\t' || character === '\n' || character === '\r' || character === '\f';
+}
+function boundedTag(html, opening, from = 0) {
+  const lower = html.slice(from).toLowerCase();
+  const found = lower.indexOf(opening);
+  if (found < 0) return null;
+  const start = from + found;
+  const afterName = start + opening.length;
+  if (html[afterName] && !isHTMLWhitespace(html[afterName]) && html[afterName] !== '/' && html[afterName] !== '>') return boundedTag(html, opening, afterName + 1);
+  const limit = Math.min(html.length, afterName + 8192);
+  const end = html.indexOf('>', afterName);
+  if (end < 0 || end > limit) return null;
+  return {start: afterName, end};
+}
+function strippedTags(value, limit = 8192) {
+  let output = '', at = 0;
+  while (at < value.length && output.length < limit) {
+    const next = value.indexOf('<', at);
+    if (next < 0) { output += value.slice(at, at + limit - output.length); break; }
+    output += value.slice(at, Math.min(next, at + limit - output.length));
+    if (output.length >= limit) break;
+    const end = value.indexOf('>', next + 1);
+    if (end < 0) break;
+    at = end + 1;
+  }
+  return output;
+}
+function titleTag(html) {
+  let at = 0;
+  while (at < html.length) {
+    const opening = boundedTag(html, '<title', at);
+    if (!opening) return '';
+    const lower = html.toLowerCase();
+    const closing = lower.indexOf('</title', opening.end + 1);
+    if (closing < 0 || closing > opening.end + 8192) return '';
+    const closeEnd = html.indexOf('>', closing + 1);
+    if (closeEnd < 0 || closeEnd > opening.end + 8192) return '';
+    return strippedTags(html.slice(opening.end + 1, closing), 8192);
+  }
+  return '';
+}
+function sanitizeHTML(html) {
+  let output = '', at = 0;
+  while (at < html.length) {
+    const opening = html.indexOf('<', at);
+    if (opening < 0) { output += html.slice(at); break; }
+    output += html.slice(at, opening);
+    if (html.startsWith('<!--', opening)) {
+      const end = html.indexOf('-->', opening + 4);
+      if (end < 0) break;
+      at = end + 3; continue;
+    }
+    const end = html.indexOf('>', opening + 1);
+    if (end < 0) break;
+    const tag = /^<(\/?)(script|style)\b/i.exec(html.slice(opening, end + 1));
+    if (!tag) { output += html.slice(opening, end + 1); at = end + 1; continue; }
+    if (!tag[1]) {
+      const name = tag[2].toLowerCase();
+      const lower = html.toLowerCase();
+      let closing = lower.indexOf('</' + name, end + 1);
+      while (closing >= 0) {
+        const afterName = closing + name.length + 2;
+        if (!html[afterName] || isHTMLWhitespace(html[afterName]) || html[afterName] === '/' || html[afterName] === '>') {
+          const closeEnd = html.indexOf('>', afterName);
+          if (closeEnd >= 0) { at = closeEnd + 1; break; }
+        }
+        closing = lower.indexOf('</' + name, closing + 1);
+      }
+      if (closing < 0) break;
+      continue;
+    }
+    output += html.slice(opening, end + 1); at = end + 1;
+  }
+  return output;
+}
 // Yields [start, end] of each `opening…>` tag body of at most `limit` characters. Every tag shares the
 // next '>' instead of rescanning for it, so a page of unclosed tags costs one pass, not one per tag (#39).
 function* tags(html, opening, limit) {
@@ -123,7 +199,7 @@ function titleText(html) {
   return '';
 }
 function meta(html, name) {
-  for (const [start, close] of tags(html, '<meta\\b', 4096)) {
+  for (const [start, close] of tags(html, '<meta\\b', 16384)) {
     const attributes = {};
     // A name without a value still consumes its whole run, so a long run is not retried from every character.
     for (const attr of html.slice(start, close).matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
@@ -142,7 +218,7 @@ function strippedTags(value, limit = 8192) {
     if (output.length >= limit) break;
     const end = value.indexOf('>', next + 1);
     if (end < 0) {
-      output += value.slice(next, next + 1 + limit - output.length);
+      output += value.slice(next, next + limit - output.length);
       break;
     }
     at = end + 1;
@@ -167,11 +243,22 @@ function titleTag(html) {
     const endOffset = openingHead.indexOf('>');
     if (endOffset < 0) return '';
     const end = afterName + endOffset;
-    const closing = lower.indexOf('</title', end + 1);
-    if (closing < 0 || closing > end + titleLimit) return '';
-    const closeEnd = html.indexOf('>', closing + 1);
-    if (closeEnd < 0 || closeEnd > end + titleLimit) return '';
-    return strippedTags(html.slice(end + 1, closing), titleLimit);
+    let closing = lower.indexOf('</title', end + 1);
+    let foundClosing = false;
+    while (closing >= 0) {
+      foundClosing = true;
+      if (closing <= end + titleLimit) {
+        const afterClosingName = closing + '</title'.length;
+        if (!html[afterClosingName] || /[\s/>]/.test(html[afterClosingName])) {
+          const closeEnd = html.indexOf('>', afterClosingName);
+          if (closeEnd >= 0 && closeEnd <= end + titleLimit) {
+            return strippedTags(html.slice(end + 1, closing), titleLimit);
+          }
+        }
+      }
+      closing = lower.indexOf('</title', closing + 1);
+    }
+    return foundClosing ? strippedTags(html.slice(end + 1, end + 1 + titleLimit), titleLimit) : '';
   }
   return '';
 }
@@ -187,7 +274,7 @@ async function linkMetadata(input, fetcher = metadataFetch) {
     return {title: prefix(String(data.title || '').trim(), 500)||url.hostname, author: prefix(String(data.author_name || '').trim(), 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
   }
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
-  const html = decodeHTML(response.bytes, response.type);
+  const html = sanitizeHTML(decodeHTML(response.bytes, response.type));
   // Collapse layout whitespace only in display text; og:image stays a URL.
   const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities(titleTag(html))) || url.hostname;
   // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
