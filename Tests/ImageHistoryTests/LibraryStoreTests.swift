@@ -24,6 +24,19 @@ import XCTest
         XCTAssertEqual(try store(f).query(LibraryQuery()).map(\.id), values.map(\.id))
         XCTAssertTrue(FileManager.default.fileExists(atPath: library.root.appendingPathComponent("Backups").path))
     }
+    func testRemovingTagFromItsLastItemDropsTheTagButKeepsItWhileAnotherItemHasIt() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let first = try XCTUnwrap(library.captureText("one")), second = try XCTUnwrap(library.captureText("two"))
+        try library.addTag("draft", to: [first.id, second.id])
+        let tag = try XCTUnwrap(library.tags().first)
+        try library.removeTag(tag.id, from: first.id)
+        XCTAssertEqual(try library.tags().map(\.name), ["draft"])
+        try library.removeTag(tag.id, from: second.id)
+        XCTAssertTrue(try library.tags().isEmpty)
+        try library.addTag("draft", to: [first.id])
+        XCTAssertEqual(try library.tags(for: first.id).map(\.name), ["draft"])
+    }
     func testCorruptSourceBlocksMigrationAndDoesNotOverwriteArchive() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let texts = f.texts(); texts.add("original"); let bad = Data("broken".utf8); try bad.write(to: texts.archive)
@@ -42,6 +55,21 @@ import XCTest
         XCTAssertEqual(Set(try library.query(LibraryQuery()).map(\.id)), Set([first.id,second.id,third.id]))
         XCTAssertTrue(try library.item(temporary.id)?.deletedAt != nil)
         XCTAssertEqual(try library.query(LibraryQuery(scope: .unorganized)).count, 3)
+    }
+    func testAllPinnedNeedsEveryIdPinnedAndExisting() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try XCTUnwrap(library.captureText("first")), second = try XCTUnwrap(library.captureText("second"))
+        XCTAssertFalse(try library.allPinned([]))
+        XCTAssertFalse(try library.allPinned([first.id, second.id]))
+        try library.toggleFavorite([first.id])
+        XCTAssertFalse(try library.allPinned([first.id, second.id]))
+        try library.toggleFavorite([second.id])
+        XCTAssertTrue(try library.allPinned([first.id, second.id, first.id]))
+        XCTAssertFalse(try library.allPinned([first.id, UUID()]))
+        let many = try (0..<501).map { try XCTUnwrap(library.captureText("note \($0)")).id }
+        try library.toggleFavorite(many)
+        XCTAssertTrue(try library.allPinned(many + [many[0]]))
+        XCTAssertFalse(try library.allPinned(many + [UUID()] + [many[0]]))
     }
     func testCollectionsAreManyToManyNestedAndRemovalDoesNotDeleteContent() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
@@ -187,6 +215,13 @@ import XCTest
         XCTAssertEqual(try library.shelfItems(.link).first?.id, first.id)
         try library.prune(); XCTAssertNil(try library.item(first.id)?.deletedAt); XCTAssertTrue(try library.item(second.id)?.deletedAt != nil)
         f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(first.id)?.deletedAt != nil)
+    }
+    func testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let item = try library.captureLink(URL(string: "https://example.com/old")!)
+        f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(item.id)?.deletedAt != nil)
+        try library.restore([item.id]); try library.prune(); XCTAssertNil(try library.item(item.id)?.deletedAt)
+        f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(item.id)?.deletedAt != nil)
     }
     func testRestoringOldCopyAfterRecapturePreservesBothRecordsAndPinsExactImageID() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)

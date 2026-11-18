@@ -452,7 +452,7 @@ extension String {
     func imageSearchChanged() { searchRevision += 1 }
     @discardableResult func createNote() throws -> LibraryRecord {
         let date = now(); var record = LibraryRecord(id: UUID(), kind: .text, createdAt: date, updatedAt: date)
-        record.text = ""; record.retainedAt = date; record.title = L("Untitled note")
+        record.text = ""; record.retainedAt = date
         try db.transaction { try put(record) }; changed(); return record
     }
     @discardableResult func captureImage(_ url: URL, capturedAt: Date? = nil) throws -> LibraryRecord {
@@ -780,6 +780,18 @@ extension String {
     }
     /// A mixed selection pins every item, as on Windows and as the action bar's
     /// Unpin title assumes; only a selection that is already fully pinned unpins.
+    /// True when every id exists and is pinned; reads only the favorite column, in chunks under SQLite's variable limit.
+    func allPinned(_ ids: [UUID]) throws -> Bool {
+        var seen = Set<UUID>(); let unique = ids.filter { seen.insert($0).inserted }
+        guard !unique.isEmpty else { return false }
+        var pinned = 0
+        for start in stride(from: 0, to: unique.count, by: 500) {
+            let chunk = unique[start..<min(start + 500, unique.count)]
+            let rows = try db.rows("SELECT COUNT(*) AS n FROM items WHERE favorite=1 AND id IN (" + chunk.map { _ in "?" }.joined(separator: ",") + ")", chunk.map { .text($0.uuidString) })
+            if case .integer(let count)? = rows.first?["n"] { pinned += Int(count) }
+        }
+        return pinned == unique.count
+    }
     func toggleFavorite(_ ids: [UUID]) throws {
         let pin = try records(ids).contains { !$0.favorite }
         try mutate(ids) { $0.favorite = pin; if pin && $0.retainedAt == nil { $0.retainedAt = self.now() } }
@@ -940,7 +952,7 @@ extension String {
         invalidateShelfUndo(eligible); invalidateTrashUndo(eligible); changed(eligible)
         return eligible
     }
-    func restore(_ ids: [UUID]) throws { try mutate(ids, owning: false) { $0.deletedAt = nil; $0.onShelf = true; $0.trashRevision = nil }; invalidateShelfUndo(ids) }
+    func restore(_ ids: [UUID]) throws { try mutate(ids, owning: false) { $0.deletedAt = nil; $0.onShelf = true; $0.trashRevision = nil; $0.lastCapturedAt = self.now() }; invalidateShelfUndo(ids) }
     func markCopied(_ ids: [UUID]) throws { try mutate(ids) { $0.lastCopiedAt = self.now(); $0.captureRevision = UUID() } }
     func prune() throws {
         var expired = [LibraryRecord]()
@@ -1029,7 +1041,10 @@ extension String {
     func removeTag(_ tag: UUID, from itemID: UUID? = nil) throws {
         let affected = try db.rows("SELECT item FROM item_tags WHERE tag=?", [.text(tag.uuidString)]).compactMap { $0["item"]?.string.flatMap(UUID.init(uuidString:)) }
         try db.transaction {
-            if let itemID { try db.execute("DELETE FROM item_tags WHERE tag=? AND item=?", [.text(tag.uuidString), .text(itemID.uuidString)]) }
+            if let itemID {
+                try db.execute("DELETE FROM item_tags WHERE tag=? AND item=?", [.text(tag.uuidString), .text(itemID.uuidString)])
+                try db.execute("DELETE FROM tags WHERE id=? AND NOT EXISTS(SELECT 1 FROM item_tags WHERE tag=?)", [.text(tag.uuidString), .text(tag.uuidString)])
+            }
             else { try db.execute("DELETE FROM item_tags WHERE tag=?", [.text(tag.uuidString)]); try db.execute("DELETE FROM tags WHERE id=?", [.text(tag.uuidString)]) }
             for id in affected { if let value = try item(id) { try put(value) } }
         }; changed()

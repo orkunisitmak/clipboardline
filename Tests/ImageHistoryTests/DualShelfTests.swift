@@ -40,6 +40,23 @@ final class DualShelfTests: HistoryTestCase {
             _ = keyboard.handle(key(123, flags: .shift)); XCTAssertEqual(line.selectedItems.count, 2)
         }
     }
+    @MainActor func testLinkMenuMoveToTrashActsOnTheWholeSelectionLikeTheTextShelf() throws {
+        try fixture { f in
+            let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox)
+            let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, copyImage: { _ in }, copyText: { _ in }, library: store)
+            for name in ["a", "b", "c"] { _ = line.links.add(try XCTUnwrap(URL(string: "https://example.com/\(name)"))) }
+            line.setPresentation(.links, requestFocus: false)
+            let shown = line.links.displayEntries.map(\.id)
+            line.links.select(shown[0], width: line.viewportWidth); line.links.select(shown[1], toggle: true, width: line.viewportWidth)
+            var trashed: [UUID] = []
+            line.onTrashRequested = { trashed = line.links.selectedEntries.map(\.id) }
+            let entry = line.links.displayEntries[1], view = GrabView()
+            LinkGrabArea(entry: entry, line: line, links: line.links).configure(view)
+            let item = try XCTUnwrap(view.menuProvider().items.first { $0.title == L("Move to Trash…") })
+            _ = item.target?.perform(item.action, with: item)
+            XCTAssertEqual(Set(trashed), Set(shown[0...1]), "only the two selected links, not the third")
+        }
+    }
     @MainActor func testTextRangeEnterCommandAAndDeleteAreSymmetric() throws {
         try fixture { f in
             var copied = ""; var trashed: [UUID] = []
@@ -262,5 +279,38 @@ final class DualShelfTests: HistoryTestCase {
         let screen = try XCTUnwrap(LinePanel.screenUnderPointer()); panel.placeOnScreen(screen)
         XCTAssertEqual(panel.frame.height, Layout.panelHeight * 2)
         XCTAssertEqual(panel.frame.maxY, screen.visibleFrame.maxY)
+    }
+    @MainActor func testMenuPinOnSelectedCardPinsWholeSelectionOnTextAndImageShelves() throws {
+        try fixture { f in
+            let line = f.line()
+            for _ in 0..<3 { line.hang(try f.image(), quietly: true) }
+            for i in 0..<3 { line.texts.add("Synthetic \(i)") }
+            line.selectAll(); line.texts.selectAll()
+            let textID = try XCTUnwrap(line.texts.selectedEntries.first?.id), imageID = try XCTUnwrap(line.selectedItems.first?.id)
+            XCTAssertFalse(line.menuPinIsUnpin(textID, shelf: .texts))
+            line.texts.togglePin(textID)
+            XCTAssertTrue(line.texts.entries.first { $0.id == textID }?.pinned ?? false)
+            XCTAssertFalse(line.menuPinIsUnpin(textID, shelf: .texts))
+            line.texts.togglePin(textID)
+            line.pinFromMenu(textID, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).count, 3)
+            XCTAssertTrue(line.menuPinIsUnpin(textID, shelf: .texts))
+            line.pinFromMenu(imageID, shelf: .images)
+            XCTAssertEqual(line.items.filter(\.pinned).count, 3)
+            line.pinFromMenu(textID, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).count, 0)
+            line.texts.select(textID, width: line.viewportWidth)
+            let other = try XCTUnwrap(line.texts.entries.first { $0.id != textID }?.id)
+            line.pinFromMenu(other, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).map(\.id), [other])
+            line.texts.select(textID, width: line.viewportWidth)
+            line.texts.select(other, toggle: true, width: line.viewportWidth)
+            let outside = try XCTUnwrap(line.texts.entries.first { $0.id != textID && $0.id != other }?.id)
+            let selection = line.texts.selectedIDs
+            XCTAssertEqual(selection.count, 2); XCTAssertFalse(selection.contains(outside))
+            line.pinFromMenu(outside, shelf: .texts)
+            XCTAssertEqual(Set(line.texts.entries.filter(\.pinned).map(\.id)), Set([other, outside]))
+            XCTAssertEqual(line.texts.selectedIDs, selection)
+        }
     }
 }

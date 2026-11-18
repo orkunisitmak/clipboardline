@@ -513,6 +513,37 @@ final class Line: ObservableObject {
         }
     }
 
+    private func menuPinTargets(_ id: UUID, shelf: Shelf) -> Set<UUID> {
+        let selected: Set<UUID>
+        switch shelf {
+        case .texts: selected = texts.selectedIDs
+        case .links: selected = links.selectedIDs
+        case .images: selected = selectedIDs
+        }
+        return selected.count > 1 && selected.contains(id) ? selected : [id]
+    }
+
+    /// The menu says Unpin only when every card it will act on is pinned.
+    func menuPinIsUnpin(_ id: UUID, shelf: Shelf) -> Bool {
+        let pinned: Set<UUID>
+        switch shelf {
+        case .texts: pinned = Set(texts.entries.filter(\.pinned).map(\.id))
+        case .links: pinned = Set(links.entries.filter(\.favorite).map(\.id))
+        case .images: pinned = Set(items.filter(\.pinned).map(\.id))
+        }
+        return menuPinTargets(id, shelf: shelf).allSatisfy(pinned.contains)
+    }
+
+    /// Right-click Pin favorite on a card inside a multi-selection acts on the whole selection, like the P key.
+    func pinFromMenu(_ id: UUID, shelf: Shelf) {
+        if menuPinTargets(id, shelf: shelf).count > 1 { focusShelf(shelf); pinActiveSelection(); return }
+        switch shelf {
+        case .texts: texts.togglePin(id)
+        case .links: links.togglePin(id)
+        case .images: pinFromUI(id)
+        }
+    }
+
     /// A mixed selection pins every item, as on Windows; only a fully pinned selection unpins.
     func pinActiveSelection() {
         func apply(_ ids: Set<UUID>, pinned: (UUID) -> Bool, toggle: (UUID) -> Void) {
@@ -1043,13 +1074,14 @@ final class Line: ObservableObject {
     /// of that folder. If the Trash refuses it, it still leaves the line.
     /// Moves along a line that holds more than fit, from a scroll gesture.
     /// Inbox mode: keep a screenshot by moving it to the Desktop.
-    func saveToDesktop(_ id: UUID) {
+    func saveToDesktop(_ id: UUID, desktop: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")) {
         guard onFlushPreview() else { return }
         guard let item = items.first(where: { $0.id == id }) else { return }
-        let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
         let target = uniqueURL(in: desktop, for: item.url.lastPathComponent)
         do {
-            try FileManager.default.moveItem(at: item.url, to: target)
+            // With the Library the record keeps pointing at the app's file, so it is copied, not moved.
+            if library != nil { try FileManager.default.copyItem(at: item.url, to: target) }
+            else { try FileManager.default.moveItem(at: item.url, to: target) }
             drop(id, quietly: true)
         } catch {
             log.error("Could not save to Desktop: \(error.localizedDescription, privacy: .public)")

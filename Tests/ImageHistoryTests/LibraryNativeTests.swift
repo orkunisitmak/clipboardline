@@ -31,6 +31,27 @@ import XCTest
         wait { preview.controls.pinButton.accessibilityLabel() == L("Unpin") && !model.loading }
         XCTAssertEqual(publications, 0); XCTAssertEqual(controller.currentID, record.id)
     }
+    func testListMenuNamesTheActionByPinState() throws {
+        _ = NSApplication.shared
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox)
+        let note = try XCTUnwrap(store.captureText("Quarterly plan")); try store.toggleFavorite([note.id])
+        let model = LibraryModel(store: store), controller = LibraryTableController(model: model)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentViewController = controller; defer { window.contentViewController = nil }
+        wait { model.ids == [note.id] && !model.loading && controller.table.numberOfRows == 1 }
+        controller.table.layoutSubtreeIfNeeded()
+        func pinTitle() throws -> String {
+            let rect = controller.table.rect(ofRow: 0), point = controller.table.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+            let event = try XCTUnwrap(NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            let menu = try XCTUnwrap(controller.table.menu(for: event))
+            return try XCTUnwrap(menu.items.first { $0.title == L("Pin favorite") || $0.title == L("Unpin") }).title
+        }
+        XCTAssertEqual(try pinTitle(), L("Unpin"))
+        try store.toggleFavorite([note.id]); model.reload()
+        wait { !model.loading && !model.actionsArePinned }
+        XCTAssertEqual(try pinTitle(), L("Pin favorite"))
+    }
     func testClosedLibraryDefersCaptureQueriesAndRefreshesOnceOnReopen() throws {
         _ = NSApplication.shared
         let f = try SyntheticFixture(); defer { f.cleanup() }

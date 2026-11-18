@@ -395,7 +395,7 @@ final class LibraryNativeWindow: NSWindow {
         if model.selectedIDs.count > 1 {
             VStack(alignment: .leading, spacing: 18) {
                 Text(String(format: L("%d selected"), model.selectedIDs.count)).font(.title3.weight(.semibold))
-                HStack { Button(L("Copy")) { model.copy() }; Button(L("Pin favorite")) { model.favorite() } }
+                HStack { Button(L("Copy")) { model.copy() }; Button(model.actionsArePinned ? L("Unpin") : L("Pin favorite")) { model.favorite() } }
                 Divider()
                 Menu(L("Add to folder")) { ForEach(model.collections) { folder in Button(folder.name) { model.assign(folder.id) } } }.disabled(model.collections.isEmpty)
                 Button(L("Add tag…")) { actions?.promptTag() }

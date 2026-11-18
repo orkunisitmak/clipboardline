@@ -30,6 +30,12 @@
     ],
     "sharedBehaviors": [
       {
+        "id": "shortcut-recorder-focus-return",
+        "behavior": "Closing a shortcut recorder ends its modal state and restores owned global registrations without keeping focus trapped; the precise return target follows the native window model documented in contracts/shortcut-recording.json.",
+        "macos": "ShortcutRecorder presents a separate nonactivating NSPanel and ends its key-window lifecycle on cancel, save, close or loss of focus; AppKit chooses the returning key native window.",
+        "windows": "Shortcut recorder overlay resolves the newly rendered Settings Record button by stable ID; renderer-ui.test.cjs verifies Escape returns focus to a connected new button instead of a detached element."
+      },
+      {
         "id": "localized-notices",
         "behavior": "Main-process notices (copy, export, import and error results) and the browsing-shortcut conflict message are shown in the language selected in Settings, using the shared catalog keys, including the \"Exported %d · failed %d\" and \"This shortcut is already used for %@\" templates with their real counts and action names.",
         "macos": "Notices and the shortcut conflict use L(...) and String(format:) with the shared Localizable.strings catalog.",
@@ -76,6 +82,12 @@
         "behavior": "Copying the same image again keeps one Library item: the existing item moves to the front and keeps its pin, name, tags and folders. A different image is a new item.",
         "macos": "LibraryStore.captureImage finds a live image with identical original bytes (file size first, then SHA-256), moves it to the front and removes the duplicate clipboard PNG; LibraryStoreTests.testRecopiedIdenticalImageMovesTheExistingItemToTheFrontAndKeepsItsOrganization covers it.",
         "windows": "Store.insert matches a live image by its managed PNG hash and moves it to the front; model.test.cjs 'exact image recopy moves the image in front of another image and preserves saved organization' covers it."
+      },
+      {
+        "id": "link-tracking-parameters",
+        "behavior": "Copying a link again that differs only by tracking query parameters (names starting with utm_, fbclid or gclid, in any letter case) is the same item: it is refreshed and keeps its first stored address, and links whose other parameters or fragment differ stay separate.",
+        "macos": "LinkIdentity.normalized drops those parameters before LibraryStore.captureLink matches an existing item; CrossPlatformBehaviorContractTests runs the tracking-parameter-links scenario through LibraryStore.captureLink, and LibraryStoreTests.testLinkIdentityPreservesMeaningfulParametersAndDeduplicatesVideoForms covers it.",
+        "windows": "linkIdentity in lib/model.cjs applies the same rule when Store.insert matches an existing link, and merges older duplicates whose name and note do not clash into the kept item, which takes the oldest stored address; renderer-ui.test.cjs runs the tracking-parameter-links scenario through Store.insert, and model.test.cjs covers it."
       },
       {
         "id": "mixed-selection-pin",
@@ -150,6 +162,12 @@
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
       },
       {
+        "id": "item-name-validation",
+        "behavior": "Name and pin trims the name and accepts 1 to 160 characters (grapheme clusters), at most 1024 UTF-8 bytes, with no control, line-separator or paragraph-separator characters. Any other name, including an empty one, is rejected with the shared \"Enter a name (1–160 characters)\" message and the item is left unchanged.",
+        "macos": "LibraryStore.nameAndPin validates the trimmed name with these limits and throws the localized \"Enter a name (1–160 characters)\" error.",
+        "windows": "The Store 'name' action validates through itemName with the same limits and error; model.test.cjs checks accepted names at the limits and rejects empty, oversized, multi-line, control-character, NUL and non-string names with the exact message."
+      },
+      {
         "id": "unavailable-watched-folder",
         "behavior": "A watched folder that is unavailable (for example on an unmounted volume) is skipped while watching but stays in the saved list, so adding or removing another watched folder does not forget it.",
         "macos": "AppDelegate.extraFolders returns every saved folder and existingExtraFolders is the subset that is watched, re-evaluated when a volume mounts; SettingsTests.testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable covers it.",
@@ -160,6 +178,12 @@
         "behavior": "A disabled undo row first says where it is available: Undo trash on the shelves reads \"Available in Library\" and Undo take down in the Library reads \"Available on the shelves\"; \"Nothing to undo\" is shown only on the surface where the undo exists.",
         "macos": "ActionBarMenuAction.undoRemoveFromLine and .undoTrash pick the surface reason before \"Nothing to undo\"; ActionBarCatalogTests.testDisabledRowsNameTheSurfaceOrSelectionThatIsMissing covers it.",
         "windows": "actionCommands() in renderer.js runs the surface check before the \"Nothing to undo.\" branch; library-ui.test.cjs checks both rows on the shelves and in the Library."
+      },
+      {
+        "id": "restored-item-retention",
+        "behavior": "Restoring an item from Trash gives it a full retention period from the restore, and capturing it again from the clipboard later renews that period for text, images, links and recordings. Copying an item from inside the app records the copy but does not change retention.",
+        "macos": "LibraryStore.restore sets lastCapturedAt, every capture path renews it, markCopied leaves it alone and prune reads it first; LibraryStoreTests.testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain covers the restore.",
+        "windows": "Store 'restore', Store.insert and Store.insertRecording set lastCapturedAt on an existing item, markCopied leaves it alone and expire reads it first; model.test.cjs and recording-model.test.cjs cover restore, copy again and expiry for every kind."
       },
       {
         "id": "shelf-image-markup-shortcut",
@@ -1961,6 +1985,88 @@
             ],
             "searchEditing": false,
             "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "tracking-parameter-links",
+      "itemSet": "empty",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7&utm_source=news",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?fbclid=x&id=7&GCLID=y&UTM_Campaign=z",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=8",
+          "expect": {
+            "link": {
+              "item": "link-2",
+              "address": "https://example.com/a?id=8"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7&ref=x",
+          "expect": {
+            "link": {
+              "item": "link-3",
+              "address": "https://example.com/a?id=7&ref=x"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7#top",
+          "expect": {
+            "link": {
+              "item": "link-4",
+              "address": "https://example.com/a?id=7#top"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?utm_medium=mail&id=7",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
           }
         }
       ]

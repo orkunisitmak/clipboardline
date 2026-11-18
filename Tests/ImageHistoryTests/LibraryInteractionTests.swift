@@ -34,6 +34,15 @@ import XCTest
         }
         XCTAssertEqual(try store.tags().count, 6); XCTAssertEqual(try store.collections().count, 6)
     }
+    func testNewNoteIsTitledByItsFirstLineLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let model = LibraryModel(store: store)
+        model.newNote(); wait { !model.loading && model.ids.count == 1 }
+        let id = try XCTUnwrap(model.ids.first)
+        XCTAssertEqual(try store.item(id)?.title, ""); XCTAssertEqual(model.draftTitle, "")
+        model.draftText = "Groceries\nmilk, eggs"; XCTAssertTrue(model.flushEdits())
+        XCTAssertEqual(try store.item(id)?.displayTitle, "Groceries")
+    }
     func testPagedTagSummariesRefreshAfterRenameAndRemovalWithoutChangingSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let plain = try XCTUnwrap(store.captureText("plain note")), tagged = try XCTUnwrap(store.captureText("tagged note İstanbul 中文"))
@@ -257,6 +266,7 @@ import XCTest
         let model = LibraryModel(store: store); model.changeScope(.trash)
         wait { model.ids.count == 3 && !model.loading }
         let order = model.ids
+        guard order.count == 3 else { return XCTFail("expected three trashed items, got \(order.count)") }
         _ = model.select(order[1]); model.restore()
         wait { model.ids.count == 2 && !model.loading }
         XCTAssertEqual(model.ids, [order[0], order[2]])
@@ -267,6 +277,60 @@ import XCTest
         model.restore()
         wait { model.ids.isEmpty && !model.loading }
         XCTAssertNil(model.focusedID); XCTAssertNil(model.inspected); XCTAssertTrue(model.selectedIDs.isEmpty)
+    }
+    func testPickingAnItemWhileRestoreReloadsKeepsThatPick() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let records = try ["first trashed note", "second trashed note", "third trashed note"].map { try XCTUnwrap(store.captureText($0)) }
+        try store.trash(records.map(\.id))
+        let model = LibraryModel(store: store); model.changeScope(.trash)
+        wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        guard order.count == 3 else { return XCTFail("expected three trashed items, got \(order.count)") }
+        _ = model.select(order[1]); model.restore()
+        XCTAssertTrue(model.select(order[2]))
+        wait { model.ids.count == 2 && !model.loading }
+        XCTAssertEqual(model.focusedID, order[2]); XCTAssertEqual(model.selectedIDs, [order[2]]); XCTAssertEqual(model.inspected?.id, order[2])
+    }
+    func testReselectingTheRestoredItemWhileRestoreReloadsStillSelectsTheFirstRemaining() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let records = try ["first trashed note", "second trashed note", "third trashed note"].map { try XCTUnwrap(store.captureText($0)) }
+        try store.trash(records.map(\.id))
+        let model = LibraryModel(store: store); model.changeScope(.trash)
+        wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        guard order.count == 3 else { return XCTFail("expected three trashed items, got \(order.count)") }
+        _ = model.select(order[1]); model.restore()
+        XCTAssertTrue(model.select(order[1]))
+        wait { model.ids.count == 2 && !model.loading }
+        XCTAssertEqual(model.focusedID, order[0]); XCTAssertEqual(model.selectedIDs, [order[0]])
+    }
+    func testSecondRestoreBeforeTheReloadKeepsTheFirstRestoredItemLeavingTrash() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let records = try ["first trashed note", "second trashed note", "third trashed note"].map { try XCTUnwrap(store.captureText($0)) }
+        try store.trash(records.map(\.id))
+        let model = LibraryModel(store: store); model.changeScope(.trash)
+        wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        guard order.count == 3 else { return XCTFail("expected three trashed items, got \(order.count)") }
+        _ = model.select(order[1]); model.restore()
+        model.restore([order[2]])
+        XCTAssertTrue(model.select(order[1]))
+        wait { model.ids.count == 1 && !model.loading }
+        XCTAssertEqual(model.focusedID, order[0]); XCTAssertEqual(model.selectedIDs, [order[0]])
+    }
+    func testFailedRestoreKeepsThePickMadeAfterAnEarlierRestore() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let records = try ["first trashed note", "second trashed note", "third trashed note"].map { try XCTUnwrap(store.captureText($0)) }
+        try store.trash(records.map(\.id))
+        let model = LibraryModel(store: store); model.changeScope(.trash)
+        wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        guard order.count == 3 else { return XCTFail("expected three trashed items, got \(order.count)") }
+        _ = model.select(order[1]); model.restore()
+        XCTAssertTrue(model.select(order[2]))
+        model.restore([UUID()])
+        wait { model.ids.count == 2 && !model.loading }
+        XCTAssertEqual(model.focusedID, order[2]); XCTAssertEqual(model.selectedIDs, [order[2]])
     }
     func testInspectorEditsPersistAndFailedSaveKeepsDraftAndSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
