@@ -464,3 +464,9 @@ test('the multi-selection inspector says Unpin when every selected item is pinne
  await f.key('KeyA',{ctrl:true});assert.equal(pinLabel(),'Pin');
  f.state.items[2].pinned=true;f.api.emit({items:f.state.items});await f.ready();assert.equal(pinLabel(),'Unpin');
 });
+test('changing the Library sort keeps the selected item like macOS setSort',async()=>{
+ const f=fixture();await f.ready();await recent(f);
+ await f.key('ArrowRight');assert.equal(focusedCard(f),f.text1);
+ await f.change('sort-filter','oldest');assert.deepEqual(cards(f),[f.link,f.text2,f.text1,f.image]);assert.equal(focusedCard(f),f.text1);
+ await f.click('view-mode');await f.click('sort-column',{column:'title'});assert.equal(focusedCard(f),f.text1);
+});
