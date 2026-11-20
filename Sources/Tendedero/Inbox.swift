@@ -24,10 +24,11 @@ enum InboxSettings {
         Set(keys.filter { !isManagedValue(current[$0], for: $0, folder: folder) })
     }
 
-    /// A fresh snapshot must not preserve values previously set by Inbox itself.
-    /// Omitted keys restore to the system defaults when Inbox is disabled.
+    /// Only omit Inbox-owned settings when Inbox was already active before
+    /// this snapshot. An independent user setting can equal Inbox's value.
     static func initialSnapshot(current: [String: Any], folder: URL) -> [String: Any] {
-        current.filter { !isManagedValue($0.value, for: $0.key, folder: folder) }
+        guard isApplied(current: current, folder: folder) else { return current }
+        return current.filter { !isManagedValue($0.value, for: $0.key, folder: folder) }
     }
 
     private static func isManagedValue(_ value: Any?, for key: String, folder: URL) -> Bool {
