@@ -120,6 +120,12 @@
         "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
       },
       {
+        "id": "recopy-last-copied",
+        "behavior": "Copying a stored text, link or image again records the copy, so it leads Library Last copied.",
+        "macos": "LibraryStore.captureText, captureLink and captureImage set lastCopiedAt when they match a stored item; LibraryStoreTests.testCopyingAStoredImageAgainRecordsTheCopyLikeText covers the image.",
+        "windows": "Store.insert sets lastCopiedAt and lastCapturedAt for any kind that matches a stored item; model.test.cjs covers text and image."
+      },
+      {
         "id": "pin-recent-selection",
         "behavior": "Pinning the selected item in Recent copies saves it and removes it from the list; focus and selection move to a remaining item and the details panel keeps showing an item.",
         "macos": "LibraryModel.favorite() queues the neighbouring item as the keyboard selection, like Move to Trash; LibraryInteractionTests.testPinningInRecentCopiesSelectsARemainingItemLikeWindows covers it.",
