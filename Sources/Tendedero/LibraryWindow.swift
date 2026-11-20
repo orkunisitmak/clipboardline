@@ -216,7 +216,7 @@ final class LibraryNativeWindow: NSWindow {
         alert.addButton(withTitle: L("Remove tag")); alert.addButton(withTitle: L("Cancel"))
         presentAlert(alert) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            self.model.perform { try self.model.store.removeTag(tag.id) }; self.model.changeScope(.saved)
+            self.model.deleteTag(tag.id)
         }
     }
     func reportActionStatus(_ message: String) {

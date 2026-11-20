@@ -328,8 +328,8 @@ import Combine
     @discardableResult func select(_ id: UUID, toggle: Bool = false, extending: Bool = false, preservingSelection: Bool = false) -> Bool {
         guard let target = indices[id], id == focusedID || flushEdits() else { return false }
         pendingDetailsSelection = nil
-        // Picking an item that stays after Restore replaces the pending pick; one that is leaving Trash keeps it, so focus lands on the first item left.
-        if !restoringIDs.contains(id) { pendingKeyboardSelection = nil }
+        // A different pick replaces the pending one. Picking the focused item again keeps it, and so does picking one that is leaving Trash, so focus lands on an item that stays.
+        if !restoringIDs.contains(id), id != focusedID || toggle || extending { pendingKeyboardSelection = nil }
         if extending, let anchor, let start = indices[anchor] { selectedIDs = Set(ids[min(start,target)...max(start,target)]) }
         else if toggle { if !selectedIDs.insert(id).inserted { selectedIDs.remove(id) }; anchor = id }
         else if !preservingSelection || !selectedIDs.contains(id) { selectedIDs = [id]; anchor = id }
@@ -388,17 +388,25 @@ import Combine
     }
     /// True when favorite() would unpin: every acted-on item is already pinned.
     var actionsArePinned: Bool { (try? store.allPinned(actionIDs)) ?? false }
-    func favorite() { guard flushEdits() else { return }; perform { try store.toggleFavorite(actionIDs) } }
+    func favorite() {
+        guard flushEdits() else { return }
+        let targets = actionIDs, pinning = !((try? store.allPinned(targets)) ?? true)
+        // Pinning saves a recent copy and unpinning leaves Pinned, so the selection would vanish: move it to the neighbour, as Move to Trash does.
+        let leaves = (query.scope == .recent && pinning) || (query.scope == .favorites && !pinning)
+        if leaves, !targets.isEmpty { pendingKeyboardSelection = (neighbour(excluding: Set(targets)), query) }
+        do { try store.toggleFavorite(targets) } catch { pendingKeyboardSelection = nil; notice = error.localizedDescription }
+    }
+    private func neighbour(excluding removed: Set<UUID>) -> UUID? {
+        let pivot = focusedID.flatMap { indices[$0] } ?? 0
+        return ids.dropFirst(pivot).first { !removed.contains($0) } ?? ids.prefix(pivot).reversed().first { !removed.contains($0) }
+    }
     func retain() { guard flushEdits() else { return }; perform { try store.retain(actionIDs) } }
     func trash() { trashSelection() }
     func trashSelection(_ explicitIDs: [UUID]? = nil) {
         guard query.scope != .trash, flushEdits() else { return }
         let targets = explicitIDs ?? actionIDs, removed = Set(targets)
         guard !targets.isEmpty else { return }
-        let pivot = focusedID.flatMap { indices[$0] } ?? 0
-        let next = ids.dropFirst(pivot).first { !removed.contains($0) }
-            ?? ids.prefix(pivot).reversed().first { !removed.contains($0) }
-        pendingKeyboardSelection = (next, query)
+        pendingKeyboardSelection = (neighbour(excluding: removed), query)
         do { try store.trashUndoably(targets) }
         catch { pendingKeyboardSelection = nil; report(error.localizedDescription) }
     }
@@ -439,6 +447,13 @@ import Combine
         var done = false
         perform { try store.removeCollection(id); done = true }
         if done, case let .collection(current) = query.scope, removed.contains(current) { changeScope(.saved) }
+    }
+    /// Delete a tag everywhere. Only the view of that tag falls back to My library, as removing a folder does.
+    func deleteTag(_ id: UUID) {
+        guard flushEdits() else { return }
+        var done = false
+        perform { try store.removeTag(id); done = true }
+        if done, case let .tag(current) = query.scope, current == id { changeScope(.saved) }
     }
     func unassign(_ folder: UUID) { guard flushEdits(), let id = inspected?.id else { return }; perform { try store.unassign(id, from: folder) } }
     func removeTag(_ tag: UUID) { guard flushEdits(), let id = inspected?.id else { return }; perform { try store.removeTag(tag, from: id) } }
