@@ -64,4 +64,7 @@ test('renaming a tag to a hashtag stores the name without the hash and later add
  store.modify('renameTag',{tag:'draft',name:'#urgent'});assert.deepEqual(store.item(first.id).tags,['urgent']);
  store.modify('tag',{id:second.id,tags:['#urgent']});assert.deepEqual(store.item(second.id).tags,['urgent']);
  assert.throws(()=>store.modify('renameTag',{tag:'urgent',name:'##'}),/Invalid tag name/);
+ assert.throws(()=>store.modify('renameTag',{tag:'urgent',name:' ## '}),/Invalid tag name/);
+ const revision=store.revision;assert.deepEqual(store.modify('renameTag',{tag:'urgent',name:' #urgent '}),{name:'urgent'});assert.equal(store.revision,revision);assert.deepEqual(store.item(first.id).tags,['urgent']);
+ assert.deepEqual(store.modify('renameTag',{tag:'urgent',name:' #Later# '}),{name:'Later'});assert.deepEqual(store.item(second.id).tags,['Later']);
 }));

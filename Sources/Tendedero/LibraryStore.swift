@@ -1050,7 +1050,7 @@ extension String {
         }; changed()
     }
     func renameTag(_ id: UUID, name: String) throws {
-        let name = try cleanedName(name.trimmingCharacters(in: CharacterSet(charactersIn: "#")))
+        let name = try cleanedName(name.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "#")))
         let existing = try tags()
         guard existing.contains(where: { $0.id == id }), !existing.contains(where: { $0.id != id && $0.name.libraryFolded == name.libraryFolded }) else { throw HistoryFiles.Failure.invalidDestination }
         if existing.first(where: { $0.id == id })?.name == name { return }
