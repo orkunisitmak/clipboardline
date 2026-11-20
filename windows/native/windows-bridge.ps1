@@ -1,3 +1,16 @@
+<#
+.SYNOPSIS
+Native Windows bridge for ClipBoardLine: focus capture/restore, guarded paste,
+clipboard monitoring and image clipboard export.
+.DESCRIPTION
+Restore, PreparePaste, ValidatePaste and Paste read the captured target from
+stdin and reactivate it only when it is still the same window and process.
+SW_RESTORE is sent only to a minimized or hidden target, so a visible
+maximized window keeps its maximized state.
+.PARAMETER Mode
+Operation to run: Capture, CaptureDiagnostics, FocusPolicySelfTest, Restore,
+PreparePaste, ValidatePaste, Paste, Monitor, CopyImages or ClipboardSequence.
+#>
 param([ValidateSet('Capture','CaptureDiagnostics','FocusPolicySelfTest','Restore','PreparePaste','ValidatePaste','Paste','Monitor','CopyImages','ClipboardSequence')][string]$Mode)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
@@ -286,6 +299,8 @@ public static class ClipBoardLineNative {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
   [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
@@ -413,7 +428,7 @@ try {
     if ($Mode -in @('Paste','ValidatePaste') -and $expected.prepared) {
       if ([ClipBoardLineNative]::GetForegroundWindow() -ne $window) { throw 'Focus changed before paste. No keys were sent.' }
     } else {
-      [void][ClipBoardLineNative]::ShowWindow($window,9)
+      if ([ClipBoardLineNative]::IsIconic($window) -or -not [ClipBoardLineNative]::IsWindowVisible($window)) { [void][ClipBoardLineNative]::ShowWindow($window,9) }
       [void][ClipBoardLineNative]::SetForegroundWindow($window)
     }
     $phase.activationRequested=[DateTime]::UtcNow.ToString('o')
