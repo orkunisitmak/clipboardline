@@ -502,3 +502,9 @@ test('changing the Library sort keeps the selected item like macOS setSort',asyn
  await f.change('sort-filter','oldest');assert.deepEqual(cards(f),[f.link,f.text2,f.text1,f.image]);assert.equal(focusedCard(f),f.text1);
  await f.click('view-mode');await f.click('sort-column',{column:'title'});assert.equal(focusedCard(f),f.text1);
 });
+test('copying several Library items says how many were copied',async()=>{
+ const f=fixture();await f.ready();await recent(f);
+ await f.key('ArrowRight');await f.key('KeyC',{ctrl:true});assert.equal(f.nodes.get('toast').textContent,'Copied');
+ await f.key('ArrowRight',{shift:true});await f.key('ArrowRight',{shift:true});await f.key('KeyC',{ctrl:true});
+ assert.equal(f.commands.findLast(command=>command.action==='copy').payload.ids.length,3);assert.equal(f.nodes.get('toast').textContent,'3 items copied');
+});
