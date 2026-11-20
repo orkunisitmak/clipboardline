@@ -30,6 +30,12 @@
     ],
     "sharedBehaviors": [
       {
+        "id": "shortcut-recorder-focus-return",
+        "behavior": "Closing a shortcut recorder ends its modal state and restores owned global registrations without keeping focus trapped; the precise return target follows the native window model documented in contracts/shortcut-recording.json.",
+        "macos": "ShortcutRecorder presents a separate nonactivating NSPanel and ends its key-window lifecycle on cancel, save, close or loss of focus; AppKit chooses the returning key native window.",
+        "windows": "Shortcut recorder overlay resolves the newly rendered Settings Record button by stable ID; renderer-ui.test.cjs verifies Escape returns focus to a connected new button instead of a detached element."
+      },
+      {
         "id": "localized-notices",
         "behavior": "Main-process notices (copy, export, import and error results) and the browsing-shortcut conflict message are shown in the language selected in Settings, using the shared catalog keys, including the \"Exported %d · failed %d\" and \"This shortcut is already used for %@\" templates with their real counts and action names.",
         "macos": "Notices and the shortcut conflict use L(...) and String(format:) with the shared Localizable.strings catalog.",
@@ -78,6 +84,12 @@
         "windows": "Store.insert matches a live image by its managed PNG hash and moves it to the front; model.test.cjs 'exact image recopy moves the image in front of another image and preserves saved organization' covers it."
       },
       {
+        "id": "link-tracking-parameters",
+        "behavior": "Copying a link again that differs only by tracking query parameters (names starting with utm_, fbclid or gclid, in any letter case) is the same item: it is refreshed and keeps its first stored address, and links whose other parameters or fragment differ stay separate.",
+        "macos": "LinkIdentity.normalized drops those parameters before LibraryStore.captureLink matches an existing item; CrossPlatformBehaviorContractTests runs the tracking-parameter-links scenario through LibraryStore.captureLink, and LibraryStoreTests.testLinkIdentityPreservesMeaningfulParametersAndDeduplicatesVideoForms covers it.",
+        "windows": "linkIdentity in lib/model.cjs applies the same rule when Store.insert matches an existing link, and merges older duplicates whose name and note do not clash into the kept item, which takes the oldest stored address; renderer-ui.test.cjs runs the tracking-parameter-links scenario through Store.insert, and model.test.cjs covers it."
+      },
+      {
         "id": "mixed-selection-pin",
         "behavior": "Pin on a selection that contains both pinned and unpinned items pins every item; only a selection that is already fully pinned unpins.",
         "macos": "LibraryStore.toggleFavorite and Line.pinActiveSelection compute one target for the whole selection, matching the action bar, which offers Unpin only when every selected item is pinned; LibraryKeyboardContractTests runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json.",
@@ -106,6 +118,12 @@
         "behavior": "An item in Library Trash can be copied: the Copy action stays enabled in the action list for a selection in Trash, matching the copy shortcut, while paste, preview, pin and the other editing actions stay disabled until the item is restored.",
         "macos": "ActionBarCatalog.keyboardAvailability enables .copy for any selection, as LibraryModel.perform(.copy) already copied it; ActionBarCatalogTests.testCopyStaysAvailableForTrashedItemsWhileEditingActionsDoNot covers it.",
         "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
+      },
+      {
+        "id": "pin-recent-selection",
+        "behavior": "Pinning the selected item in Recent copies saves it and removes it from the list; focus and selection move to a remaining item and the details panel keeps showing an item.",
+        "macos": "LibraryModel.favorite() queues the neighbouring item as the keyboard selection, like Move to Trash; LibraryInteractionTests.testPinningInRecentCopiesSelectsARemainingItemLikeWindows covers it.",
+        "windows": "reconcileLibraryFocus() in renderer.js focuses a remaining item after the pin."
       },
       {
         "id": "item-name-trimming",
@@ -1979,6 +1997,88 @@
             ],
             "searchEditing": false,
             "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "tracking-parameter-links",
+      "itemSet": "empty",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7&utm_source=news",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?fbclid=x&id=7&GCLID=y&UTM_Campaign=z",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=8",
+          "expect": {
+            "link": {
+              "item": "link-2",
+              "address": "https://example.com/a?id=8"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7&ref=x",
+          "expect": {
+            "link": {
+              "item": "link-3",
+              "address": "https://example.com/a?id=7&ref=x"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7#top",
+          "expect": {
+            "link": {
+              "item": "link-4",
+              "address": "https://example.com/a?id=7#top"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?utm_medium=mail&id=7",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
           }
         }
       ]
