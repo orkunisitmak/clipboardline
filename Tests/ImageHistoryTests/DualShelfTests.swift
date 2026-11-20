@@ -72,6 +72,18 @@ final class DualShelfTests: HistoryTestCase {
             XCTAssertEqual(records.count, 3); XCTAssertTrue(records.allSatisfy { $0.deletedAt == nil })
         }
     }
+    @MainActor func testUndoTakeDownBringsBackEverythingTakenDownToTheRight() throws {
+        try fixture { f in
+            let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+            let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, copyImage: { _ in }, library: store)
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            let shown = line.displayItems.map(\.id)
+            line.takeDown(shown[0], toTheLeft: false)
+            XCTAssertEqual(line.displayItems.map(\.id), [shown[0]])
+            line.undoShelfRemoval()
+            XCTAssertEqual(line.displayItems.map(\.id), shown, "one undo restores the whole side removal, unpinned images included")
+        }
+    }
     @MainActor func testImageMultiDiscardStopsWhenThePreviewCannotBeSaved() throws {
         try fixture { f in
             let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
