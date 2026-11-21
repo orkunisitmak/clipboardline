@@ -23,6 +23,16 @@ import AppKit
             let png: Data
             if url.pathExtension.lowercased() == "png" { png = try Data(contentsOf: url) }
             else {
+                // Other formats are decoded to make the PNG, so their header dimensions are bounded first.
+                guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+                      CGImageSourceGetCount(source) > 0 else { throw Failure.unreadableImage }
+                for frame in 0..<CGImageSourceGetCount(source) {
+                    guard let properties = CGImageSourceCopyPropertiesAtIndex(source, frame, nil) as? [CFString: Any],
+                          let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+                          let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+                          width > 0, height > 0 else { throw Failure.unreadableImage }
+                    guard width <= ImageMarkupRenderer.maximumPixelCount / height else { throw Failure.tooLarge }
+                }
                 guard let image = NSImage(contentsOf: url), let tiff = image.tiffRepresentation,
                       let bitmap = NSBitmapImageRep(data: tiff), let data = bitmap.representation(using: .png, properties: [:]) else {
                     throw Failure.unreadableImage

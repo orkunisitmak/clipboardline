@@ -33,4 +33,33 @@ import XCTest
         let image = try XCTUnwrap(NSBitmapImageRep(data: copied))
         XCTAssertEqual(image.pixelsWide, 1); XCTAssertEqual(image.pixelsHigh, 1)
     }
+
+    /// A valid uncompressed 1-bit TIFF, so even a huge canvas is a small file of zeros.
+    private func tiff(width: Int, height: Int) -> Data {
+        func short(_ value: Int) -> Data { Data([UInt8(value & 0xFF), UInt8(value >> 8)]) }
+        func long(_ value: Int) -> Data { short(value & 0xFFFF) + short(value >> 16) }
+        let pixels = (width + 7) / 8 * height, entries: [(tag: Int, type: Int, value: Int)] = [
+            (256, 4, width), (257, 4, height), (258, 3, 1), (259, 3, 1), (262, 3, 1),
+            (273, 4, 8 + 2 + 9 * 12 + 4), (277, 3, 1), (278, 4, height), (279, 4, pixels)]
+        var data = Data("II".utf8) + short(42) + long(8) + short(entries.count)
+        for entry in entries { data += short(entry.tag) + short(entry.type) + long(1) + (entry.type == 3 ? short(entry.value) + short(0) : long(entry.value)) }
+        return data + long(0) + Data(count: pixels)
+    }
+
+    func testImageOverThePixelLimitIsRefusedBeforeItIsDecoded() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let huge = f.folder.appendingPathComponent("Huge.tiff")
+        try tiff(width: 10_000, height: ImageMarkupRenderer.maximumPixelCount / 10_000 + 1).write(to: huge)
+        XCTAssertThrowsError(try ClipboardTransfer.imageItems([huge])) { XCTAssertEqual($0 as? ClipboardTransfer.Failure, .tooLarge) }
+    }
+
+    func testImageWithinThePixelLimitIsCopiedAsPNG() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let small = f.folder.appendingPathComponent("Small.tiff")
+        try tiff(width: 64, height: 48).write(to: small)
+        let board = NSPasteboard(name: .init("copy-tiff-\(UUID())")); defer { board.releaseGlobally() }
+        XCTAssertTrue(ClipboardTransfer.write(try ClipboardTransfer.imageItems([small]), to: board))
+        let image = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(board.pasteboardItems?.first?.data(forType: .png))))
+        XCTAssertEqual(image.pixelsWide, 64); XCTAssertEqual(image.pixelsHigh, 48)
+    }
 }
