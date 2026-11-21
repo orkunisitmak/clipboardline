@@ -23,6 +23,7 @@ const {MediaJobs,MAXIMUM_VIDEO_BYTES}=require('./lib/media.cjs');
 const {copyFiles,cancelFileCopies}=require('./lib/native-files.cjs');
 const {exportCopies}=require('./lib/export-copies.cjs');
 const {decodeTextFile}=require('./lib/text-file.cjs');
+const {copyNewCapture,PASTE_SETTLE_MS}=require('./lib/capture-copy.cjs');
 const native = require('./lib/native.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
@@ -45,7 +46,7 @@ app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
 let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
-let pastePromise=null,hidePromise=null,pasteGeneration=0;
+let pastePromise=null,hidePromise=null,pasteGeneration=0,pasteSettlesAt=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
 const shelfMotion=new MotionBridge(value=>{if(window&&!window.isDestroyed())window.webContents.send('clipboardline:shelf-motion',value);});
@@ -223,6 +224,9 @@ async function writeClipboard(selected) {
   await clipboard.write([new ClipboardItem(data)]);
   ownFingerprint=(await clipboardContent())?.fingerprint||'';store.markCopied(selected.filter(item=>store.data.items.includes(item)).map(item=>item.id));
 }
+// A failed copy must not go unseen, or the old clipboard gets pasted by mistake: open the shelves first.
+async function captureNotCopied(text){if(!desiredVisible)await show('shelves');notify(text);}
+function copyCapture(item){return copyNewCapture({settings:store.data.settings,item,items:store.data.items,write:writeClipboard,pasting:pastePromise!==null||Date.now()<pasteSettlesAt,failed:captureNotCopied});}
 async function copy(payload,paste=false) {
   if(pastePromise)return pastePromise;
   const selected=store.selected(ids(payload.ids));
@@ -241,7 +245,7 @@ async function copy(payload,paste=false) {
       await native.validatePaste(target);current();await writeClipboard(selected);current();
       await native.paste({...target,prepared:true});current();if(store.data.settings.sounds)shell.beep();
     }catch(error){if(generation===pasteGeneration)await show(view);throw error;}})();
-    pastePromise=operation;try{return await operation;}finally{if(pastePromise===operation)pastePromise=null;}
+    pastePromise=operation;try{return await operation;}finally{pasteSettlesAt=Date.now()+PASTE_SETTLE_MS;if(pastePromise===operation)pastePromise=null;}
   }
   await writeClipboard(selected);
   if(store.data.settings.sounds)shell.beep();
@@ -271,7 +275,7 @@ async function capture() {
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
     const source=sources.find(s=>s.display_id===String(display.id))||sources[0];if(!source||source.thumbnail.isEmpty())throw new Error('Screen capture is unavailable');
-    const item=store.insert('image',source.thumbnail.toPNG());queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});return{id:item.id};
+    const item=store.insert('image',source.thumbnail.toPNG());queueOCR(item.id);refreshImageSearch();await show('shelves',{selectId:item.id,kind:'image',preview:true,crop:true});await copyCapture(item);return{id:item.id};
   }catch(error){if(wasVisible)await show(view);throw error;}
 }
 async function ocr(id,quiet=false){if(ocrJobs.has(id))return ocrJobs.get(id);const promise=recognize(id,quiet);ocrJobs.set(id,promise);try{return await promise;}finally{ocrJobs.delete(id);}}
@@ -298,7 +302,7 @@ async function recognize(id,quiet=false) {
 }
 function configureWatchers() {
   for(const watcher of watchers)watcher.close();watchers=[];
-  for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(err=>{console.warn('Watch folder import error:',err?.message||err);});}catch(err){console.warn('Watch folder item error:',err?.message||err);}},700));});watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});watchers.push(watcher);}catch(err){console.warn('Watch folder configure error:',err?.message||err);}}
+  for(const folder of store.data.settings.watchFolders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(async record=>{broadcast();if(store.data.settings.openAfterScreenshot)await show('shelves',{selectId:record.id,kind:'image'});await copyCapture(record);}).catch(err=>{console.warn('Watch folder import error:',err?.message||err);});}catch(err){console.warn('Watch folder item error:',err?.message||err);}},700));});watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});watchers.push(watcher);}catch(err){console.warn('Watch folder configure error:',err?.message||err);}}
 }
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){

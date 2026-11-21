@@ -63,6 +63,9 @@
 "Folders" = "Folders";
 "General" = "General";
 "Handle screenshots" = "スクリーンショットを任せる";
+"Copy new screenshots to the clipboard" = "新しいスクリーンショットをクリップボードにコピー";
+"The new screenshot was not copied" = "新しいスクリーンショットをコピーできませんでした";
+"With Copy new screenshots to the clipboard on, new images here are copied too." = "「新しいスクリーンショットをクリップボードにコピー」がオンのとき、ここに追加された新しい画像もコピーされます。";
 "Hang copied images" = "コピーした画像を吊るす";
 "Hang copied text" = "Hang copied text";
 "Hide line" = "ロープを非表示";
