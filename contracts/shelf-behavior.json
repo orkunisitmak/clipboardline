@@ -24,7 +24,7 @@
       {
         "id": "native-text-file-drag",
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
-        "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
+        "windows": "Shelf text drag inserts text, shows a notice to start the drag again while holding Alt for a file drop on the Desktop or a folder, and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
       }
     ],
