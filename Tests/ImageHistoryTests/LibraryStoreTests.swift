@@ -8,6 +8,63 @@ import XCTest
     private func store(_ f: SyntheticFixture) throws -> LibraryStore {
         try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date }, moveToTrash: fixtureTrash(f.folder))
     }
+    func testPruneDropsAnUnsavedScreenshotWhoseFileWasDeleted() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let deletedFile = try f.image(owned: false), keptFile = try f.image(owned: false)
+        let deleted = try library.captureImage(deletedFile)
+        f.date.addTimeInterval(1)
+        let kept = try library.captureImage(keptFile)
+        try FileManager.default.removeItem(at: deletedFile)
+        try library.prune()
+        XCTAssertNotNil(try library.item(deleted.id)?.deletedAt)
+        XCTAssertFalse(try library.item(deleted.id)?.onShelf == true)
+        XCTAssertNil(try library.item(kept.id)?.deletedAt)
+        XCTAssertTrue(try library.item(kept.id)?.onShelf == true)
+    }
+    func testPruneKeepsASavedScreenshotWhoseFileWasDeleted() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let record = try library.captureImage(try f.image(owned: false))
+        try library.retain([record.id])
+        let saved = try XCTUnwrap(try library.item(record.id))
+        let savedPath = try XCTUnwrap(saved.path)
+        try FileManager.default.removeItem(atPath: savedPath)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: savedPath))
+        try library.prune()
+        XCTAssertNil(try library.item(record.id)?.deletedAt)
+        XCTAssertTrue(try library.item(record.id)?.onShelf == true)
+    }
+    /// A screenshot on a disk that is not mounted has no folder either; it must stay until the disk is back.
+    func testPruneKeepsAnUnsavedScreenshotWhoseFolderIsGone() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let volume = f.folder.appendingPathComponent("Volume/Shots")
+        try FileManager.default.createDirectory(at: volume, withIntermediateDirectories: true)
+        let file = volume.appendingPathComponent("Screenshot.png")
+        try FileManager.default.moveItem(at: try f.image(owned: false), to: file)
+        let record = try library.captureImage(file)
+        try FileManager.default.removeItem(at: volume.deletingLastPathComponent())
+        try library.prune()
+        XCTAssertNil(try library.item(record.id)?.deletedAt)
+        XCTAssertTrue(try library.item(record.id)?.onShelf == true)
+    }
+    func testPruneKeepsAnUnsavedScreenshotWhoseFolderCannotBeRead() throws {
+        try XCTSkipIf(geteuid() == 0, "root ignores folder permissions")
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let locked = f.folder.appendingPathComponent("Locked")
+        try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+        let file = locked.appendingPathComponent("Screenshot.png")
+        try FileManager.default.moveItem(at: try f.image(owned: false), to: file)
+        let record = try library.captureImage(file)
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: locked.path) }
+        try library.prune()
+        XCTAssertNil(try library.item(record.id)?.deletedAt)
+        XCTAssertTrue(try library.item(record.id)?.onShelf == true)
+    }
     func testMigrationPreservesTextBytesDatesFavoritesIDsAndOriginals() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let image = try f.image(owned: false), bytes = try Data(contentsOf: image)
