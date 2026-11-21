@@ -466,7 +466,7 @@ extension String {
         var moved: LibraryRecord?
         try db.transaction {
             if let match = try identicalImage(to: url), var existing = try item(match.id), existing.deletedAt == nil {
-                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.captureRevision = UUID()
+                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.lastCopiedAt = date; existing.captureRevision = UUID()
                 try put(existing); moved = existing
             } else { try put(fresh) }
         }
@@ -1069,9 +1069,10 @@ extension String {
         }; changed()
     }
     func renameTag(_ id: UUID, name: String) throws {
-        let name = try cleanedName(name)
+        let name = try cleanedName(name.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "#")))
         let existing = try tags()
         guard existing.contains(where: { $0.id == id }), !existing.contains(where: { $0.id != id && $0.name.libraryFolded == name.libraryFolded }) else { throw HistoryFiles.Failure.invalidDestination }
+        if existing.first(where: { $0.id == id })?.name == name { return }
         let affected = try db.rows("SELECT item FROM item_tags WHERE tag=?", [.text(id.uuidString)]).compactMap { $0["item"]?.string.flatMap(UUID.init(uuidString:)) }
         try db.transaction { try db.execute("UPDATE tags SET name=?,folded=? WHERE id=?", [.text(name), .text(name.libraryFolded), .text(id.uuidString)]); for id in affected { if let value = try item(id) { try put(value) } } }; changed()
     }

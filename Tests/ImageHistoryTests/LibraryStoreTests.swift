@@ -130,6 +130,23 @@ import XCTest
         XCTAssertEqual(try library.item(plan.id)?.displayTitle, "Zulu")
         XCTAssertEqual(try library.query(LibraryQuery(scope: .saved, sort: .title)).map(\.id), [other.id, plan.id])
     }
+    func testRenamingATagToAHashtagStoresTheNameWithoutTheHash() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try XCTUnwrap(library.captureText("one")), second = try XCTUnwrap(library.captureText("two"))
+        try library.addTag("draft", to: [first.id])
+        let tag = try XCTUnwrap(library.tags().first); try library.renameTag(tag.id, name: "#urgent")
+        XCTAssertEqual(try library.tags().map(\.name), ["urgent"])
+        try library.addTag("#urgent", to: [second.id])
+        XCTAssertEqual(try library.tags().map(\.name), ["urgent"])
+        XCTAssertThrowsError(try library.renameTag(tag.id, name: "##"))
+        let revision = library.revision
+        try library.renameTag(tag.id, name: "#urgent"); try library.renameTag(tag.id, name: "urgent")
+        try library.renameTag(tag.id, name: " #urgent ")
+        XCTAssertThrowsError(try library.renameTag(tag.id, name: " ## "))
+        XCTAssertEqual(try library.tags().map(\.name), ["urgent"]); XCTAssertEqual(library.revision, revision)
+        try library.renameTag(tag.id, name: "Urgent")
+        XCTAssertEqual(try library.tags().map(\.name), ["Urgent"]); XCTAssertEqual(library.revision, revision + 1)
+    }
     func testTagRenameSearchTurkishAndLiteralSQLCharacters() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let record = try XCTUnwrap(library.captureText("İLK çekim 中文 👋"))
@@ -244,6 +261,25 @@ import XCTest
         try db.execute("UPDATE items SET payload=? WHERE id=?", [.blob(try JSONEncoder().encode(legacy)), .text(edited.id.uuidString)])
         XCTAssertEqual(try library.undoShelfRemoval(), [])
         XCTAssertEqual(try library.shelfItems(.text).map(\.id), [edited.id])
+    }
+    func testCopyingAStoredImageAgainRecordsTheCopyLikeText() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try library.captureImage(try f.image(owned: false, identicalPixels: true))
+        f.date.addTimeInterval(10); try library.markCopied([first.id])
+        f.date.addTimeInterval(10); _ = try library.captureImage(try f.image(owned: false))
+        f.date.addTimeInterval(10); let again = try library.captureImage(try f.image(owned: false, identicalPixels: true))
+        XCTAssertEqual(again.id, first.id); XCTAssertEqual(try library.item(first.id)?.lastCopiedAt, f.date)
+    }
+    func testLastCopiedViewLeadsWithAnImageCopiedAgain() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try library.captureImage(try f.image(owned: false, identicalPixels: true))
+        f.date.addTimeInterval(10); let second = try library.captureImage(try f.image(owned: false))
+        f.date.addTimeInterval(10); try library.markCopied([first.id])
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, sort: .copied)).map(\.id), [first.id, second.id])
+        f.date.addTimeInterval(10); try library.markCopied([second.id])
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, sort: .copied)).map(\.id), [second.id, first.id])
+        f.date.addTimeInterval(10); _ = try library.captureImage(try f.image(owned: false, identicalPixels: true))
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, sort: .copied)).map(\.id), [first.id, second.id])
     }
     func testRestoringOldCopyAfterRecapturePreservesBothRecordsAndPinsExactImageID() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)

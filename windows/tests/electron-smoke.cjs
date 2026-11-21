@@ -343,7 +343,7 @@ async function main(){
   // The original and this PNG are different managed originals, so the FileDrop
   // batch contains two actual files, with the first raster as an app fallback.
   const batchText=await application.evaluate(()=>global.__clipboardLineTest.store.insert('text','şğü ıİ').id);
-  const batch=await page.evaluate(ids=>window.clipboardLine.command('copy',{ids,keepOpen:true}),[imageItem.id,secondImage,batchText]);assert.ok(!batch.result?.error,batch.result?.error);
+  const batch=await page.evaluate(ids=>window.clipboardLine.command('copy',{ids,keepOpen:true}),[imageItem.id,secondImage,batchText]);assert.ok(!batch.result?.error,batch.result?.error);assert.notEqual(batch.message,'Copied','a multi-item copy leaves the counted toast to the renderer');
   await until(fixtureState,s=>s.dropCount===2&&s.pngAvailable);assert.equal(await application.evaluate(async({clipboard})=>clipboard.readText()),'şğü ıİ');
   await application.evaluate(()=>global.__clipboardLineTest.readClipboard());assert.equal((await page.evaluate(()=>window.clipboardLine.state())).items.length,batch.items.length);
   await page.evaluate(ids=>window.clipboardLine.command('trash',{ids}),[batchText]);await page.evaluate(ids=>window.clipboardLine.command('delete',{ids}),[batchText]);check('multi-image copy supplies native Windows FileDrop batch and full-resolution PNG fallback without recapture');

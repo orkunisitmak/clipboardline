@@ -126,6 +126,18 @@
         "windows": "Store.modify('undo') leaves a trashed text or link in Trash when a live item of the same kind and content is on the shelf, and ignores images and copies hidden from the shelf; model.test.cjs covers it."
       },
       {
+        "id": "recopy-last-copied",
+        "behavior": "Copying a stored text, link or image again records the copy, so it leads Library Last copied.",
+        "macos": "LibraryStore.captureText, captureLink and captureImage set lastCopiedAt when they match a stored item; LibraryStoreTests.testCopyingAStoredImageAgainRecordsTheCopyLikeText covers the image.",
+        "windows": "Store.insert sets lastCopiedAt and lastCapturedAt for any kind that matches a stored item; model.test.cjs covers text and image."
+      },
+      {
+        "id": "pin-recent-selection",
+        "behavior": "Pinning the selected item in Recent copies saves it and removes it from the list; focus and selection move to a remaining item and the details panel keeps showing an item.",
+        "macos": "LibraryModel.favorite() queues the neighbouring item as the keyboard selection, like Move to Trash; LibraryInteractionTests.testPinningInRecentCopiesSelectsARemainingItemLikeWindows covers it.",
+        "windows": "reconcileLibraryFocus() in renderer.js focuses a remaining item after the pin."
+      },
+      {
         "id": "item-name-trimming",
         "behavior": "An item name is used without its surrounding whitespace, and a name that is only whitespace counts as no name, so the card, the title ordering and the search index fall back to the item's content instead of showing a blank title.",
         "macos": "LibraryRecord.displayTitle trims the stored title and ignores a blank one; LibraryStoreTests.testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows covers it.",
@@ -136,6 +148,12 @@
         "behavior": "Removing a folder returns the Library to My library only when the open view is that folder or one of its subfolders; removing any other folder leaves the current view, filters and selection as they are.",
         "macos": "LibraryModel.removeFolder(_:) collects the removed folder and its subfolders before the removal and calls changeScope(.saved) only when the open collection is among them; LibraryInteractionTests.testRemovingAnotherFolderKeepsTheOpenViewLikeWindows covers it.",
         "windows": "The confirm handler sets activeFolderRemoved from folderSubtreeContains() and resets the scope only then; library-ui.test.cjs covers an unrelated folder and the active ancestor."
+      },
+      {
+        "id": "tag-removal-view",
+        "behavior": "Removing a tag returns the Library to My library only when the open view is that tag; removing any other tag leaves the current view and selection as they are, and only drops that tag from the active filters.",
+        "macos": "LibraryModel.deleteTag(_:) calls changeScope(.saved) only after a successful removal of the tag whose view is open; LibraryInteractionTests.testRemovingAnotherTagKeepsTheOpenViewLikeFolders covers it.",
+        "windows": "The confirm handler sets activeTagRemoved from the open tag scope and resets the scope only then; library-ui.test.cjs covers removing a tag that is not open."
       },
       {
         "id": "item-display-title",
