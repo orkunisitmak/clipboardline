@@ -40,7 +40,7 @@ function migrateLoginItemSetting(appApi, enabled, { testMode = false, developmen
   const current = appApi.getLoginItemSettings({ args: [BACKGROUND_ARG] });
   if (current?.openAtLogin) return false;
   const legacy = appApi.getLoginItemSettings();
-  if (!legacy?.openAtLogin && !legacy?.executableWillLaunchAtLogin) return false;
+  if (!legacy?.openAtLogin || !legacy?.executableWillLaunchAtLogin) return false;
   appApi.setLoginItemSettings(loginItemSettings(true));
   return true;
 }

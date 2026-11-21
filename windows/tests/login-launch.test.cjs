@@ -54,7 +54,14 @@ test('migrateLoginItemSetting adds --background to active legacy Run entries and
   }, true), false);
   assert.equal(setCalls.length, 0);
 
-  // Disabled in Task Manager / not registered
+  // Disabled in Task Manager (Run value matches legacy launch, StartupApproved disabled)
+  assert.equal(migrateLoginItemSetting({
+    getLoginItemSettings: () => ({ openAtLogin: true, executableWillLaunchAtLogin: false }),
+    setLoginItemSettings: (v) => setCalls.push(v)
+  }, true), false);
+  assert.equal(setCalls.length, 0);
+
+  // Not registered
   assert.equal(migrateLoginItemSetting({
     getLoginItemSettings: () => ({ openAtLogin: false, executableWillLaunchAtLogin: false }),
     setLoginItemSettings: (v) => setCalls.push(v)
