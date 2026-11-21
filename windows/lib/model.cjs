@@ -366,7 +366,7 @@ class Store {
     const now = this.clock();
     const item = prior || {id: crypto.randomUUID(), kind, text: textValue, url, title: '', name: '', pinned: false, folderIds: [], tags: [],
       imageFile, renderedFile: '', ocrText: '', annotations: [], crop: null, note:'', retainedAt:null, lastCopiedAt:null, createdAt: now, updatedAt: now, trashedAt: null, hiddenFromShelf: false};
-    if(prior)item.lastCapturedAt=now;if(kind==='link'&&prior)item.lastCopiedAt=now;else item.createdAt=now;
+    if(prior){item.lastCopiedAt=now;item.lastCapturedAt=now;}if(!(kind==='link'&&prior))item.createdAt=now;
     item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
     if(kind==='text')item.text=textValue;
     if (extra.title) item.title = text(extra.title, 500, true);
@@ -471,16 +471,22 @@ class Store {
       if(!tag||!affected.length)fail('Tag unavailable');
       let name;
       if(action==='renameTag'){
-        name=text(payload.name,TAG_INPUT_LIMIT).trim();
+        name=text(payload.name,TAG_INPUT_LIMIT).trim().replace(/^#+|#+$/g,'').trim();
         if(!name||!validTagName(name))fail('Invalid tag name');
         if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&foldedName(value)===foldedName(name))))fail('A tag with this name already exists');
+        if(name===tag)return {name};
       }
       for(const item of affected){item.retainedAt??=now;item.tags=action==='renameTag'?[...new Set(item.tags.map(value=>value===tag?name:value))]:item.tags.filter(value=>value!==tag);}
-      this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return;
+      this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return action==='renameTag'?{name}:undefined;
     }
     if (action === 'undo') {
       const batch = this.undoStack.pop(); if (!batch) return;
-      for (const before of batch) { const item = this.data.items.find(i => i.id === before.id); if (item) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; } }
+      // Copying the same text or link again while it was off the shelf made a new card; Undo must not hang it twice.
+      // Decide for the whole batch first, like macOS, so two items of one take down never block each other.
+      const twin = item => item.trashedAt && item.kind !== 'image' && !item.createdAsNote && this.data.items.some(other => other !== item && !other.trashedAt && !other.hiddenFromShelf && !other.createdAsNote && other.kind === item.kind &&
+        (item.kind === 'text' ? this.textIdentity(other) === this.textIdentity(item) : linkIdentity(other.url) === linkIdentity(item.url)));
+      const entries = batch.map(before => ({before, item: this.data.items.find(i => i.id === before.id)})).filter(entry => entry.item && !(entry.before.trashedAt == null && twin(entry.item)));
+      for (const {before, item} of entries) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; }
       this.persist(); return;
     }
     const items = this.selected(payload.ids || (payload.id ? [payload.id] : []));
