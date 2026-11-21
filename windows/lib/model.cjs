@@ -366,7 +366,7 @@ class Store {
     const now = this.clock();
     const item = prior || {id: crypto.randomUUID(), kind, text: textValue, url, title: '', name: '', pinned: false, folderIds: [], tags: [],
       imageFile, renderedFile: '', ocrText: '', annotations: [], crop: null, note:'', retainedAt:null, lastCopiedAt:null, createdAt: now, updatedAt: now, trashedAt: null, hiddenFromShelf: false};
-    if(prior)item.lastCapturedAt=now;if(kind==='link'&&prior)item.lastCopiedAt=now;else item.createdAt=now;
+    if(prior){item.lastCopiedAt=now;item.lastCapturedAt=now;}if(!(kind==='link'&&prior))item.createdAt=now;
     item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
     if(kind==='text')item.text=textValue;
     if (extra.title) item.title = text(extra.title, 500, true);
@@ -471,12 +471,13 @@ class Store {
       if(!tag||!affected.length)fail('Tag unavailable');
       let name;
       if(action==='renameTag'){
-        name=text(payload.name,TAG_INPUT_LIMIT).trim();
+        name=text(payload.name,TAG_INPUT_LIMIT).trim().replace(/^#+|#+$/g,'').trim();
         if(!name||!validTagName(name))fail('Invalid tag name');
         if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&foldedName(value)===foldedName(name))))fail('A tag with this name already exists');
+        if(name===tag)return {name};
       }
       for(const item of affected){item.retainedAt??=now;item.tags=action==='renameTag'?[...new Set(item.tags.map(value=>value===tag?name:value))]:item.tags.filter(value=>value!==tag);}
-      this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return;
+      this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return action==='renameTag'?{name}:undefined;
     }
     if (action === 'undo') {
       const batch = this.undoStack.pop(); if (!batch) return;

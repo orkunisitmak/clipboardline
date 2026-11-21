@@ -43,6 +43,42 @@ import XCTest
         model.draftText = "Groceries\nmilk, eggs"; XCTAssertTrue(model.flushEdits())
         XCTAssertEqual(try store.item(id)?.displayTitle, "Groceries")
     }
+    func testPinningInRecentCopiesSelectsARemainingItemLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        var ids = [UUID](); for n in 1...3 { f.date += 60; ids.append(try XCTUnwrap(store.captureText("Copy \(n)")).id) }
+        let model = LibraryModel(store: store)
+        model.changeScope(.recent); wait { model.ids.count == 3 && !model.loading }
+        XCTAssertTrue(model.select(ids[1])); wait { model.inspected?.id == ids[1] }
+        model.favorite(); wait { model.ids.count == 2 && !model.loading }
+        wait { model.focusedID != nil }
+        let focused = try XCTUnwrap(model.focusedID)
+        XCTAssertTrue(model.ids.contains(focused)); XCTAssertEqual(model.selectedIDs, [focused]); wait { model.inspected?.id == focused }
+    }
+    func testPickingAnotherItemWhilePinningReloadsKeepsThatPick() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        var ids = [UUID](); for n in 1...3 { f.date += 60; ids.append(try XCTUnwrap(store.captureText("Copy \(n)")).id) }
+        let model = LibraryModel(store: store)
+        model.changeScope(.recent); wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        XCTAssertTrue(model.select(order[1])); wait { model.inspected?.id == order[1] }
+        model.favorite()
+        XCTAssertTrue(model.select(order[0]))
+        wait { model.ids.count == 2 && !model.loading }
+        XCTAssertEqual(model.focusedID, order[0]); XCTAssertEqual(model.selectedIDs, [order[0]])
+    }
+    func testPickingTheSameItemAgainWhilePinningReloadsKeepsTheQueuedNeighbour() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        var ids = [UUID](); for n in 1...3 { f.date += 60; ids.append(try XCTUnwrap(store.captureText("Copy \(n)")).id) }
+        let model = LibraryModel(store: store)
+        model.changeScope(.recent); wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        XCTAssertTrue(model.select(order[0])); wait { model.inspected?.id == order[0] }
+        model.favorite()
+        XCTAssertTrue(model.select(order[0]))
+        wait { model.ids.count == 2 && !model.loading }
+        wait { model.focusedID != nil }
+        XCTAssertEqual(model.focusedID, order[1]); XCTAssertEqual(model.selectedIDs, [order[1]])
+    }
     func testPagedTagSummariesRefreshAfterRenameAndRemovalWithoutChangingSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let plain = try XCTUnwrap(store.captureText("plain note")), tagged = try XCTUnwrap(store.captureText("tagged note İstanbul 中文"))
@@ -241,6 +277,22 @@ import XCTest
         XCTAssertEqual(blankFirst.displayTitle, "Second line")
         let blank = try XCTUnwrap(store.captureText(" \t")); XCTAssertEqual(blank.displayTitle, L("Untitled note"))
         try store.update(link.id) { $0.originalURL = "http://[bad" }; XCTAssertEqual(try XCTUnwrap(store.item(link.id)).displayTitle, L("Link"))
+    }
+    func testRemovingAnotherTagKeepsTheOpenViewLikeFolders() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let keep = try store.createCollection("Keep")
+        let first = try XCTUnwrap(store.captureText("first kept note")), second = try XCTUnwrap(store.captureText("second tagged note"))
+        try store.assign([first.id], to: keep); try store.addTag("draft", to: [second.id]); try store.addTag("open", to: [second.id])
+        let model = LibraryModel(store: store)
+        wait { model.tags.count == 2 && !model.loading }
+        let draft = try XCTUnwrap(model.tags.first { $0.name == "draft" }), open = try XCTUnwrap(model.tags.first { $0.name == "open" })
+        model.changeScope(.collection(keep)); wait { model.query.scope == .collection(keep) && model.ids == [first.id] && !model.loading }
+        model.select(first.id); wait { model.selectedIDs == [first.id] && model.focusedID == first.id }
+        model.deleteTag(draft.id); wait { model.tags.count == 1 && !model.loading }
+        XCTAssertEqual(model.query.scope, .collection(keep)); XCTAssertEqual(model.ids, [first.id])
+        XCTAssertEqual(model.selectedIDs, [first.id]); XCTAssertEqual(model.focusedID, first.id)
+        model.changeScope(.tag(open.id)); wait { model.query.scope == .tag(open.id) && !model.loading }
+        model.deleteTag(open.id); wait { model.tags.isEmpty && model.query.scope == .saved && !model.loading }
     }
     func testRemovingAnotherFolderKeepsTheOpenViewLikeWindows() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
