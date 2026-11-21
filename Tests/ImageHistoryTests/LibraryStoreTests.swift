@@ -252,6 +252,16 @@ import XCTest
         let other = try XCTUnwrap(library.captureText("Plain take down")); try library.removeFromShelf([other.id])
         XCTAssertEqual(try library.undoShelfRemoval(), [other.id])
     }
+    func testUndoTakeDownLeavesALinkOffTheShelfWhenTheCopyDiffersOnlyByTrackingParameters() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let old = try library.captureLink(URL(string: "https://example.com/a?utm_source=old")!); try library.removeFromShelf([old.id])
+        f.date.addTimeInterval(10); let fresh = try library.captureLink(URL(string: "https://example.com/a?utm_source=new")!)
+        XCTAssertNotEqual(fresh.id, old.id); XCTAssertEqual(try library.undoShelfRemoval(), [])
+        XCTAssertEqual(try library.shelfItems(.link).map(\.id), [fresh.id])
+        let other = try library.captureLink(URL(string: "https://example.com/a?page=1")!); try library.removeFromShelf([other.id])
+        f.date.addTimeInterval(10); _ = try library.captureLink(URL(string: "https://example.com/a?page=2")!)
+        XCTAssertEqual(try library.undoShelfRemoval(), [other.id])
+    }
     func testUndoTakeDownSeesATextEditedByAnOlderAppWhileOpen() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let old = try XCTUnwrap(library.captureText("Hang once")), edited = try XCTUnwrap(library.captureText("Something else"))
