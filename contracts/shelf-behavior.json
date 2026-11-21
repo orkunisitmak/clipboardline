@@ -208,6 +208,12 @@
         "behavior": "M on the focused selected still photo in the active image shelf opens its editable markup preview directly. Hover alone does not retarget keyboard actions. H selects the translucent marker; pointer drags draw editable marks. Escape saves and finishes markup (a later Escape closes preview); crop Escape cancels the crop. Saved marks survive reopening. M in search, note, annotation text and rename editors stays native text input. Empty and non-image shelves do not open markup. Remapped or disabled markup keys remain respected.",
         "macos": "LineKeyboard routes markup to Line.markup for the focused visible still image. MarkupKeyboardTests and ImageMarkupInteractionTests execute typing guards, remapping, real preview-panel sendEvent mouse delivery, hit testing, composited marker pixels, Escape/save and reopen. The nonactivating panel's canvas accepts the first mouse click while editing. CrossPlatformBehaviorContractTests executes the shared shelf M scenarios.",
         "windows": "The shipped renderer allows markup in the shelves shortcut context and opens the existing image editor for the focused still image. renderer-ui.test.cjs executes the shared shelf M scenarios plus marker pointer drawing, Escape/save, reopen and native editor guards. Native Windows acceptance remains a separate release gate."
+      },
+      {
+        "id": "domain-filter-parses-only-non-ascii",
+        "behavior": "The Library domain filter ignores case, surrounding dots and a leading www, and matches the host and its subdomains. A typed name is converted to its host form only when it has non-ASCII characters and no path, query, fragment, port, credentials, backslash or space, so bücher.de finds xn--bcher-kva.de; an ASCII entry such as 0x7f.1 is compared as typed and is not rewritten to 127.0.0.1.",
+        "macos": "LibraryStore.query builds the domain match from the typed name and calls URL(string:) only when it has a non-ASCII scalar; LibraryStoreTests.testDomainFilterMatchesATypedNumberLiterallyInsteadOfAnIPAddress and testDomainFilterMatchesAnInternationalizedNameTypedAsWritten cover it.",
+        "windows": "libraryBaseItems() in renderer.js runs new URL on the typed name only when it has a non-ASCII character; library-ui.test.cjs 'Library domain filter matches a typed number literally and does not rewrite it to an IP address' and 'Library domain filter finds an internationalized link typed as written' cover it."
       }
     ]
   },
