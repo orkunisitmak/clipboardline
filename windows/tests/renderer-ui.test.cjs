@@ -110,6 +110,12 @@ test('an initial library older than a queued lightweight revision is refreshed b
 
 test('preview arrows move across shelf kinds, S keeps preview on neighbor, Backspace restores',async()=>{const f=fixture();await f.ready();await f.key('Space');await f.key('ArrowDown');assert.match(f.overlay,/aria-label="Text one"/);await f.key('KeyS');assert.match(f.overlay,/aria-label="Text two"/);assert.ok(f.state.items.find(item=>item.id===f.text1).trashedAt);await f.key('Backspace');assert.match(f.overlay,/aria-label="Text one"/);assert.equal(f.state.items.find(item=>item.id===f.text1).trashedAt,null);});
 
+test('Undo take down that leaves a copied-again text in Trash keeps the selection and preview where they are',async()=>{
+ const f=fixture();await f.ready();await f.key('Space');await f.key('ArrowDown');await f.key('KeyS');assert.match(f.overlay,/aria-label="Text two"/);
+ const command=f.api.command;f.api.command=async(action,payload)=>action==='undo'?structuredClone(f.state):command(action,payload);
+ await f.key('Backspace');assert.ok(f.state.items.find(item=>item.id===f.text1).trashedAt);assert.match(f.overlay,/aria-label="Text two"/);assert.doesNotMatch(f.overlay,/empty-preview/);assert.deepEqual(selectedCards(f),[f.text2]);
+});
+
 test('removing the final preview item keeps an empty Undo view and Backspace restores that exact item',async()=>{
  for(const pinned of [false,true]){
   const f=fixture();await f.ready();f.api.emit({items:[{...f.state.items[0],pinned}]});await f.ready();await f.key('Space');await f.key('KeyS');

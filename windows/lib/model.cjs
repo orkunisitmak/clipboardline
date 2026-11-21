@@ -481,7 +481,12 @@ class Store {
     }
     if (action === 'undo') {
       const batch = this.undoStack.pop(); if (!batch) return;
-      for (const before of batch) { const item = this.data.items.find(i => i.id === before.id); if (item) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; } }
+      // Copying the same text or link again while it was off the shelf made a new card; Undo must not hang it twice.
+      // Decide for the whole batch first, like macOS, so two items of one take down never block each other.
+      const twin = item => item.trashedAt && item.kind !== 'image' && !item.createdAsNote && this.data.items.some(other => other !== item && !other.trashedAt && !other.hiddenFromShelf && !other.createdAsNote && other.kind === item.kind &&
+        (item.kind === 'text' ? this.textIdentity(other) === this.textIdentity(item) : linkIdentity(other.url) === linkIdentity(item.url)));
+      const entries = batch.map(before => ({before, item: this.data.items.find(i => i.id === before.id)})).filter(entry => entry.item && !(entry.before.trashedAt == null && twin(entry.item)));
+      for (const {before, item} of entries) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; }
       this.persist(); return;
     }
     const items = this.selected(payload.ids || (payload.id ? [payload.id] : []));
