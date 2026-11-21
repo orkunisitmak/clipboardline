@@ -537,3 +537,23 @@
 "This image could not be opened for markup." = "この画像をマークアップ用に開けませんでした。";
 "Markup supports images up to 80 megapixels." = "マークアップは最大8,000万画素の画像に対応しています。";
 "The marked image could not be rendered." = "マークアップした画像をレンダリングできませんでした。";
+
+/* Area capture. */
+"Adjust area" = "範囲を調整";
+"Color" = "カラー";
+"Allow screen recording to capture an area" = "範囲をキャプチャするには画面収録を許可してください";
+"Another app is using this shortcut. Quit it or record a different one." = "このショートカットはほかのアプリが使用しています。そのアプリを終了するか、別のショートカットを記録してください。";
+"Another app may be using it, for example another screenshot tool." = "ほかのアプリ（別のスクリーンショットツールなど）が使用している可能性があります。";
+"Capture an area" = "範囲をキャプチャ";
+"Capture area" = "範囲をキャプチャ";
+"Dims the screen so you can drag out an area. Return or ⌘C copies it, ⌘S saves it as a PNG file, Esc cancels. Every capture also hangs on the line." = "画面を暗くして範囲をドラッグで選択します。returnまたは⌘Cでコピー、⌘SでPNGファイルとして保存、escでキャンセルします。キャプチャはロープにも掛かります。";
+"Drag to capture an area. Esc cancels." = "ドラッグして範囲をキャプチャ。escでキャンセル。";
+"Open Screen Recording Settings" = "画面収録の設定を開く";
+"Open System Settings" = "システム設定を開く";
+"Save capture" = "キャプチャを保存";
+"Save…" = "保存…";
+"Screenshot" = "スクリーンショット";
+"The capture could not be saved" = "キャプチャを保存できませんでした";
+"Turn on %@ in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen it." = "システム設定 → プライバシーとセキュリティ → 画面とシステムオーディオの録音 で %@ をオンにしてから、終了して再度開いてください。";
+"Use ⌘9" = "⌘9を使用";
+

@@ -537,3 +537,23 @@
 "This image could not be opened for markup." = "无法打开此图像进行标记。";
 "Markup supports images up to 80 megapixels." = "标记功能支持最高 8000 万像素的图像。";
 "The marked image could not be rendered." = "无法渲染已标记的图像。";
+
+/* Area capture. */
+"Adjust area" = "调整区域";
+"Color" = "颜色";
+"Allow screen recording to capture an area" = "允许屏幕录制以截取区域";
+"Another app is using this shortcut. Quit it or record a different one." = "另一个应用正在使用此快捷键。请退出该应用或录制其他快捷键。";
+"Another app may be using it, for example another screenshot tool." = "可能有其他应用（例如另一个截图工具）正在使用它。";
+"Capture an area" = "截取区域";
+"Capture area" = "截取区域";
+"Dims the screen so you can drag out an area. Return or ⌘C copies it, ⌘S saves it as a PNG file, Esc cancels. Every capture also hangs on the line." = "调暗屏幕，让你拖出一个区域。按 Return 或 ⌘C 复制，⌘S 存储为 PNG 文件，Esc 取消。每次截取也会挂到晾衣绳上。";
+"Drag to capture an area. Esc cancels." = "拖动以截取区域。按 Esc 取消。";
+"Open Screen Recording Settings" = "打开屏幕录制设置";
+"Open System Settings" = "打开系统设置";
+"Save capture" = "存储截图";
+"Save…" = "存储…";
+"Screenshot" = "截屏";
+"The capture could not be saved" = "无法存储截图";
+"Turn on %@ in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen it." = "请在“系统设置”→“隐私与安全性”→“录屏与系统录音”中打开 %@，然后退出并重新打开它。";
+"Use ⌘9" = "使用 ⌘9";
+
