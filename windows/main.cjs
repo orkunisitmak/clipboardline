@@ -145,6 +145,7 @@ async function show(next='shelves',event=null) {
     const animate=next==='shelves'&&(!window.isVisible()||wasClosing);
     if(animate)await shelfMotion.request('prepare',{hidden:!window.isVisible()});else await shelfMotion.request('reset');
     if(generation!==visibilityGeneration)return;
+    try{window.setIgnoreMouseEvents(false);}catch{}
     window.show();window.focus();windowBounds.shown(window);broadcast({surfaceOnly:true});
     // Commands can await the settled pixels, but the window and keyboard are
     // available immediately. A concurrent toggle can cancel this animation.
@@ -386,8 +387,45 @@ async function command(action,payload={}) {
   else if(action==='startDrag'){
     const selected=store.selected(ids(payload.ids));if(!selected.length||selected.length>1000)throw new Error('Select up to 1000 items to drag.');
     dragFiles??=new DragFiles(store.directory);const batch=dragFiles.prepare(selected,id=>store.mediaPath(id));
-    const image=selected.find(item=>item.kind==='image'),icon=image?nativeImage.createFromPath(store.posterPath(image.id)).resize({width:64}):appIcon();
-    try{window.webContents.startDrag({files:batch.files,icon});}catch(error){if(batch.batch)dragFiles.remove(batch.batch);throw error;}
+    let icon;try{
+      const image=selected.find(item=>item.kind==='image');
+      if(image){
+        const raw=nativeImage.createFromPath(store.posterPath(image.id));
+        const sz=raw.getSize(),maxD=64,scale=Math.min(1,maxD/Math.max(sz.width||1,sz.height||1));
+        icon=raw.resize({width:Math.max(16,Math.round((sz.width||maxD)*scale)),height:Math.max(16,Math.round((sz.height||maxD)*scale))});
+      }else{
+        icon=appIcon().resize({width:48,height:48});
+      }
+      if(!icon||icon.isEmpty())icon=appIcon().resize({width:48,height:48});
+    }catch{
+      try{icon=appIcon().resize({width:48,height:48});}catch{}
+    }
+    try{
+      if(window&&view==='shelves'){
+        try{window.setIgnoreMouseEvents(true);}catch{}
+      }
+      window.webContents.startDrag({files:batch.files,icon});
+    }catch(error){
+      if(batch.batch)dragFiles.remove(batch.batch);
+      throw error;
+    }finally{
+      if(window&&!window.isDestroyed()){
+        try{window.setIgnoreMouseEvents(false);}catch{}
+      }
+    }
+  }
+  else if(action==='dragStartOverlay'){
+    if(window&&view==='shelves'){
+      try{window.setIgnoreMouseEvents(true);}catch{}
+    }
+    result=true;
+  }
+  else if(action==='dragEndOverlay'){
+    if(window&&!window.isDestroyed()){
+      try{window.setIgnoreMouseEvents(false);}catch{}
+    }
+    if(payload.completed&&view==='shelves')void hide(false);
+    result=true;
   }
   else if(action==='setSettings'){
     if(payload.recordingToken!==undefined){if(typeof payload.recordingToken!=='string')throw new Error('Invalid shortcut recorder.');finishShortcutRecording(payload.recordingToken);}
@@ -408,7 +446,7 @@ async function command(action,payload={}) {
     await updates.install(launchInstaller);app.quit();
   }else if(action==='quit')app.quit();
   else throw new Error('Unknown command');
-  const packet=broadcast({surfaceOnly:['show','search','hide','library','settings','windowClose','windowMinimize','windowMaximize'].includes(action)});return result===undefined?packet:{...packet,result};
+  const packet=broadcast({surfaceOnly:['show','search','hide','library','settings','windowClose','windowMinimize','windowMaximize','dragStartOverlay','dragEndOverlay'].includes(action)});return result===undefined?packet:{...packet,result};
 }
 
 let applicationIcon;
