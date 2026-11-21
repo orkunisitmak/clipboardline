@@ -969,10 +969,18 @@ extension String {
         // A screenshot deleted in Finder falls off the shelf, as it does without the Library.
         let expiredIDs = Set(expired.map(\.id))
         let gone = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='image' AND shelf=1 AND deleted IS NULL AND retained IS NULL")).filter { record in
-            record.path.map { !FileManager.default.fileExists(atPath: $0) } ?? false && !expiredIDs.contains(record.id)
+            record.path.map(Self.fileWasDeleted) ?? false && !expiredIDs.contains(record.id)
         }
         expired += gone
         if !expired.isEmpty { try trash(expired.map(\.id)) }
+    }
+    /// Only a file that is really gone (ENOENT) while its folder can still be read counts as deleted.
+    /// A disk that is not mounted, a permission error or any other read failure keeps the item.
+    private static func fileWasDeleted(_ path: String) -> Bool {
+        var info = stat()
+        guard stat(path, &info) != 0, errno == ENOENT else { return false }
+        let folder = (path as NSString).deletingLastPathComponent
+        return stat(folder, &info) == 0 && info.st_mode & S_IFMT == S_IFDIR && access(folder, R_OK | X_OK) == 0
     }
     func collections() throws -> [LibraryCollection] {
         try db.rows("SELECT * FROM collections ORDER BY folded,id").map { row in
