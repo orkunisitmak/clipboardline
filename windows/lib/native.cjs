@@ -2,7 +2,7 @@
 const {spawn,execFile} = require('node:child_process');
 const path = require('node:path');
 const {ClipboardSequenceQueries}=require('./clipboard-sequence.cjs');
-const {FocusQueries}=require('./focus-queries.cjs');
+const {FocusQueries,routeMonitorMessage}=require('./focus-queries.cjs');
 const {windowsEnvironment}=require('./windows-environment.cjs');
 const script = __dirname.includes('app.asar') ? path.join(process.resourcesPath,'native','windows-bridge.ps1') : path.join(__dirname, '..', 'native', 'windows-bridge.ps1');
 const pasteChildren=new Set();
@@ -52,7 +52,7 @@ function monitor(changed, failed, focused = () => {}, ready = () => {}) {
   let buffer=''; child.stdout.on('data',chunk => {
     buffer += chunk.toString(); if (buffer.length > 64000) { child.kill(); return; }
     let newline;
-    while ((newline=buffer.indexOf('\n')) >= 0) { const line=buffer.slice(0,newline);buffer=buffer.slice(newline+1);try { const v=JSON.parse(line); if(v.clipboardQuery!==undefined){queries.receive(v);}else if(v.focusQuery!==undefined){focus.receive(v);}else if(Number.isInteger(v.sequence)) changed(v.sequence); if(v.focus) focused(v.focus); if(v.ready===true){focus.ready=true;ready();} } catch {} }
+    while ((newline=buffer.indexOf('\n')) >= 0) { const line=buffer.slice(0,newline);buffer=buffer.slice(newline+1);try { routeMonitorMessage(JSON.parse(line),{queries,focus,changed,focused,ready}); } catch {} }
   });
   child.on('error',error=>{stopped();failed(error);}); child.on('exit',code => { stopped();if(code) failed(new Error('Native clipboard monitor stopped.')); }); return child;
 }

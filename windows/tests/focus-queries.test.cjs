@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {FocusQueries}=require('../lib/focus-queries.cjs');
+const {FocusQueries,routeMonitorMessage}=require('../lib/focus-queries.cjs');
 test('focus capture uses the running monitor only after it reports ready',async()=>{
  const sent=[],queries=new FocusQueries(value=>sent.push(value));
  await assert.rejects(queries.capture(),/unavailable/);assert.deepEqual(sent,[]);
@@ -24,4 +24,17 @@ test('a silent, broken or stopped monitor rejects so the caller can use its one-
  const broken=new FocusQueries(()=>{throw new Error('pipe closed');});broken.ready=true;await assert.rejects(broken.capture(),/pipe closed/);assert.equal(broken.pending.size,0);
  const stopped=new FocusQueries(()=>{});stopped.ready=true;const pending=stopped.capture();stopped.close();
  await assert.rejects(pending,/stopped/);assert.equal(stopped.available(),false);await assert.rejects(stopped.capture(),/unavailable/);
+});
+test('focus query replies are never observed as focus events, even when late',async()=>{
+ const observed=[],sequences=[];let readyCalls=0;
+ const queries={receive:()=>true},focus=new FocusQueries(()=>{},{timeout:5});
+ const handlers={queries,focus,changed:value=>sequences.push(value),focused:value=>observed.push(value),ready:()=>readyCalls++};
+ routeMonitorMessage({ready:true},handlers);assert.equal(focus.ready,true);assert.equal(readyCalls,1);
+ const pending=focus.capture();await assert.rejects(pending,/timed out/);
+ const stale={handle:'7',processId:3,runtime:'1.1',editable:true,secure:false};
+ routeMonitorMessage({focusQuery:1,ok:true,focus:stale,captureTrace:null},handlers);
+ assert.deepEqual(observed,[]);
+ const current={handle:'8',processId:4,runtime:'1.2',editable:true,secure:false};
+ routeMonitorMessage({focus:current},handlers);routeMonitorMessage({sequence:12},handlers);
+ assert.deepEqual(observed,[current]);assert.deepEqual(sequences,[12]);
 });

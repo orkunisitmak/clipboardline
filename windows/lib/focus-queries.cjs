@@ -30,4 +30,14 @@ class FocusQueries{
  }
  close(){this.closed=true;this.ready=false;for(const value of this.pending.values()){clearTimeout(value.timer);value.reject(new Error('Focus monitor stopped.'));}this.pending.clear();}
 }
-module.exports={FocusQueries};
+// Routes one parsed monitor line. A focus query reply is only a query result:
+// a late or unmatched one must not be observed as a new focus event, or a
+// stale field could become the external paste target.
+function routeMonitorMessage(value,{queries,focus,changed,focused,ready}){
+ if(!value||typeof value!=='object')return;
+ if(value.clipboardQuery!==undefined)queries.receive(value);
+ else if(value.focusQuery!==undefined)focus.receive(value);
+ else{if(Number.isInteger(value.sequence))changed(value.sequence);if(value.focus)focused(value.focus);}
+ if(value.ready===true){focus.ready=true;ready();}
+}
+module.exports={FocusQueries,routeMonitorMessage};
