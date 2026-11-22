@@ -125,9 +125,11 @@ async function show(next='shelves',event=null) {
   if(pastePromise){pasteGeneration++;cancelNativePaste();}
   const generation=++visibilityGeneration,wasClosing=!desiredVisible&&window.isVisible();desiredVisible=true;shelfMotion.cancel();showing++;
   try {
-    // A hidden window can still be restoring its previous native field.
-    // Complete that operation before a rapid reopen captures and takes focus.
-    if(hidePromise)await hidePromise;
+    // A hidden window can still be returning focus to its previous field.
+    // A reopen means the user stayed with ClipBoardLine: end that restore
+    // helper instead of waiting for it, then capture. The last observed
+    // external field is kept when the foreground is ClipBoardLine's own.
+    if(hidePromise){native.cancelRestore();await hidePromise;}
     if(generation!==visibilityGeneration)return;
     if(!window.isVisible() || !window.isFocused()) {
       const target=await native.capture().catch(()=>null);
@@ -145,7 +147,12 @@ async function show(next='shelves',event=null) {
     const animate=next==='shelves'&&(!window.isVisible()||wasClosing);
     if(animate)await shelfMotion.request('prepare',{hidden:!window.isVisible()});else await shelfMotion.request('reset');
     if(generation!==visibilityGeneration)return;
-    window.show();window.focus();windowBounds.shown(window);broadcast({surfaceOnly:true});
+    window.show();
+    // Re-assert the overlay's topmost band and place it first on every reveal,
+    // not only when the surface type changes, so a window another program
+    // raised meanwhile cannot stay above the shelves.
+    if(next==='shelves'){window.setAlwaysOnTop(true);window.moveTop();}
+    window.focus();windowBounds.shown(window);broadcast({surfaceOnly:true});
     // Commands can await the settled pixels, but the window and keyboard are
     // available immediately. A concurrent toggle can cancel this animation.
     if(animate)await shelfMotion.request('open');
@@ -484,4 +491,4 @@ else app.whenReady().then(async()=>{
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
 app.on('second-instance',()=>{if(window)void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});
-app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
+app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();native.cancelRestore();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
