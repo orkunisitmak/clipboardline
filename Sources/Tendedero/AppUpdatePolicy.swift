@@ -7,14 +7,14 @@ enum AppUpdatePolicyError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidRepository: "The update repository is invalid."
-        case .invalidRelease: "The release contains an invalid download address."
-        case .invalidEnvelope: "The update manifest is malformed."
-        case .invalidSignature: "The update manifest signature is invalid."
-        case .invalidManifest: "The update manifest contains invalid release information."
-        case .wrongRepository: "The update belongs to another repository."
-        case .nonIncreasingBuild: "The update is not newer than the installed application."
-        case .oversizedArchive: "The update archive exceeds the download limit."
+        case .invalidRepository: L("The update repository is invalid.")
+        case .invalidRelease: L("The release contains an invalid download address.")
+        case .invalidEnvelope: L("The update manifest is malformed.")
+        case .invalidSignature: L("The update manifest signature is invalid.")
+        case .invalidManifest: L("The update manifest contains invalid release information.")
+        case .wrongRepository: L("The update belongs to another repository.")
+        case .nonIncreasingBuild: L("The update is not newer than the installed application.")
+        case .oversizedArchive: L("The update archive exceeds the download limit.")
         }
     }
 }

@@ -10,6 +10,16 @@ import XCTest
         try XCTUnwrap(ActionBarCatalog.entries(context: context, bindings: bindings).first { $0.action == action }?.command)
     }
 
+    func testClearFiltersIsDisabledUntilTheLibraryHasAFilter() throws {
+        let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
+        let bindings = KeyboardBindings(defaults: fixture.defaults)
+        var context = ActionBarCatalog.Context(); context.origin = .library; context.libraryAvailable = true
+        let idle = try command(.menu(.clearFilters), context: context, bindings: bindings)
+        XCTAssertFalse(idle.isEnabled); XCTAssertEqual(idle.disabledReason, L("No filters to clear"))
+        context.hasLibraryFilters = true
+        XCTAssertTrue(try command(.menu(.clearFilters), context: context, bindings: bindings).isEnabled)
+    }
+
     func testCatalogCoversEveryBrowsingShortcutAndMenuWithoutDuplicateIDs() throws {
         let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
         let bindings = KeyboardBindings(defaults: fixture.defaults)
@@ -56,6 +66,19 @@ import XCTest
         XCTAssertTrue(try command(.menu(.refreshLink), context: context, bindings: bindings).isEnabled)
     }
 
+    func testDisabledRowsNameTheSurfaceOrSelectionThatIsMissing() throws {
+        let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
+        let bindings = KeyboardBindings(defaults: fixture.defaults)
+        var line = ActionBarCatalog.Context(); line.origin = .line; line.libraryAvailable = true
+        XCTAssertEqual(try command(.keyboard(.focusNextPane), context: line, bindings: bindings).disabledReason, L("Available in Library"))
+        line.canUndoLibraryTrash = true
+        XCTAssertEqual(try command(.keyboard(.undoTrash), context: line, bindings: bindings).disabledReason, L("Available in Library"))
+        line.selectedCount = 1; line.kind = .text; line.canTakeDownLeft = true
+        XCTAssertEqual(try command(.menu(.takeDownLeft), context: line, bindings: bindings).disabledReason, L("Select one image first"))
+        var library = ActionBarCatalog.Context(); library.origin = .library; library.libraryAvailable = true; library.canUndoShelfRemoval = true
+        XCTAssertEqual(try command(.keyboard(.undoRemoveFromLine), context: library, bindings: bindings).disabledReason, L("Available on the shelves"))
+    }
+
     func testCatalogReflectsRemappedDisabledAndContextSpecificShortcutHints() throws {
         let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
         let bindings = KeyboardBindings(defaults: fixture.defaults)
@@ -63,8 +86,8 @@ import XCTest
         context.selectedCount = 1; context.kind = .image; context.hasFile = true
         try bindings.set([KeyShortcut(keyCode: 35, modifiers: controlKey | optionKey, keyLabel: "P")], for: .pin)
         XCTAssertEqual(try command(.keyboard(.pin), context: context, bindings: bindings).keyHint, "⌃⌥P")
-        XCTAssertEqual(try command(.keyboard(.markupMarker), context: context, bindings: bindings).keyHint, "Space → M → H")
-        XCTAssertEqual(try command(.keyboard(.markup), context: context, bindings: bindings).keyHint, "Space → M")
+        XCTAssertEqual(try command(.keyboard(.markupMarker), context: context, bindings: bindings).keyHint, "M → H")
+        XCTAssertEqual(try command(.keyboard(.markup), context: context, bindings: bindings).keyHint, "M")
         XCTAssertEqual(try command(.keyboard(.trash), context: context, bindings: bindings).keyHint, "⌦")
         context.origin = .library
         XCTAssertEqual(try command(.keyboard(.trash), context: context, bindings: bindings).keyHint, "S / ⌦ / ⌘⌫")
@@ -131,6 +154,21 @@ import XCTest
         XCTAssertFalse(try command(.menu(.newNote), context: context, bindings: bindings).isEnabled)
     }
 
+    func testCopyStaysAvailableForTrashedItemsWhileEditingActionsDoNot() throws {
+        let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
+        let bindings = KeyboardBindings(defaults: fixture.defaults)
+        var context = ActionBarCatalog.Context()
+        context.origin = .library; context.libraryScope = .trash; context.isDeleted = true
+        context.selectedCount = 1; context.kind = .text; context.hasItems = true
+        let copy = try command(.keyboard(.copy), context: context, bindings: bindings)
+        XCTAssertTrue(copy.isEnabled); XCTAssertEqual(copy.disabledReason, "")
+        for action in [KeyboardAction.paste, .preview, .pin, .tag] {
+            XCTAssertFalse(try command(.keyboard(action), context: context, bindings: bindings).isEnabled)
+        }
+        context.selectedCount = 0
+        XCTAssertFalse(try command(.keyboard(.copy), context: context, bindings: bindings).isEnabled)
+    }
+
     func testCatalogFolderTagCommandsUseStableIDsAndCurrentScope() throws {
         let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
         let bindings = KeyboardBindings(defaults: fixture.defaults)
@@ -162,6 +200,24 @@ import XCTest
         XCTAssertTrue(try command(.openTag(tag.id), context: context, bindings: bindings).isActive)
         context.selectedCount = 2
         XCTAssertFalse(try command(.unassignFolder(folder.id), context: context, bindings: bindings).isEnabled)
+    }
+
+    func testSameNamedSubfoldersGetDistinctFolderRows() throws {
+        let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
+        let bindings = KeyboardBindings(defaults: fixture.defaults)
+        let work = LibraryCollection(id: UUID(), name: "Work", parentID: nil), personal = LibraryCollection(id: UUID(), name: "Personal", parentID: nil)
+        let workYear = LibraryCollection(id: UUID(), name: "2024", parentID: work.id), personalYear = LibraryCollection(id: UUID(), name: "2024", parentID: personal.id)
+        var context = ActionBarCatalog.Context()
+        context.origin = .library; context.selectedCount = 1; context.kind = .text
+        context.collections = [work, personal, workYear, personalYear]; context.itemFolders = [workYear, personalYear]
+        let entries = ActionBarCatalog.entries(context: context, bindings: bindings)
+        for (action, label) in [(ActionBarAction.openFolder(workYear.id), "Open folder"), (.assignFolder(workYear.id), "Add to folder"), (.unassignFolder(workYear.id), "Remove from folder")] {
+            XCTAssertEqual(try command(action, context: context, bindings: bindings).title, L(label) + ": Work / 2024")
+        }
+        XCTAssertEqual(try command(.assignFolder(personalYear.id), context: context, bindings: bindings).title, L("Add to folder") + ": Personal / 2024")
+        context.libraryScope = .collection(personalYear.id)
+        XCTAssertEqual(try command(.moveToFolder(workYear.id), context: context, bindings: bindings).title, L("Move to folder") + ": Work / 2024")
+        XCTAssertEqual(entries.map { $0.command.title }.count, Set(entries.map { $0.command.title }).count)
     }
 
     func testCatalogBilingualKeywordsAreExplicitAndNeverIncludeOpaqueIdentifiers() throws {
@@ -279,13 +335,15 @@ import XCTest
         try bindings.set([KeyShortcut(keyCode: 4, modifiers: controlKey | optionKey, keyLabel: "H")], for: .markupMarker)
         var context = ActionBarCatalog.Context()
         context.selectedCount = 1; context.kind = .image; context.hasFile = true
-        XCTAssertEqual(try command(.keyboard(.markupMarker), context: context, bindings: bindings).keyHint, "⌃⌥Space → ⌃⌥M → ⌃⌥H")
+        XCTAssertEqual(try command(.keyboard(.markupMarker), context: context, bindings: bindings).keyHint, "⌃⌥M → ⌃⌥H")
         context.origin = .shelfPreview
         XCTAssertEqual(try command(.keyboard(.markupMarker), context: context, bindings: bindings).keyHint, "⌃⌥M → ⌃⌥H")
         context.isMarkupEditing = true
         XCTAssertEqual(try command(.keyboard(.markupMarker), context: context, bindings: bindings).keyHint, "⌃⌥H")
         try bindings.set([], for: .preview)
         context.origin = .line; context.isMarkupEditing = false
+        XCTAssertEqual(try command(.keyboard(.markupMarker), context: context, bindings: bindings).keyHint, "⌃⌥M → ⌃⌥H", "Direct shelf markup does not depend on Preview")
+        try bindings.set([], for: .markup)
         XCTAssertEqual(try command(.keyboard(.markupMarker), context: context, bindings: bindings).keyHint, "", "A disabled prefix cannot be presented as an executable key sequence")
     }
 
@@ -302,7 +360,7 @@ import XCTest
         XCTAssertEqual(try command(.keyboard(.searchShelf), context: context, bindings: bindings).keyHint, "⇧S")
         let marker = try command(.keyboard(.markupMarker), context: context, bindings: bindings)
         XCTAssertFalse(marker.isEnabled)
-        XCTAssertEqual(marker.keyHint, "Space → M → H")
+        XCTAssertEqual(marker.keyHint, "M → H")
         XCTAssertFalse(try command(.keyboard(.trash), context: context, bindings: bindings).isEnabled)
         XCTAssertEqual(try command(.keyboard(.trash), context: context, bindings: bindings).keyHint, "⌦")
         context.origin = .shelfPreview; context.kind = .image; context.hasFile = true; context.selectedCount = 1

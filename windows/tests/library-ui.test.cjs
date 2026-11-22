@@ -48,7 +48,7 @@ function fixture({deferInitialState=false,initialVisible=true}={}){
   if(action==='folder'){if(folderFailures){folderFailures--;cleanupError='Synthetic folder commit failure';}else{selected.forEach(item=>{item.folderIds=[...new Set([...item.folderIds,payload.folderId])];if(payload.pinning!==false)item.pinned=true;item.retainedAt??=Date.now();});if(payload.rememberRecent)state.settings.recentPinFolderIds=[payload.folderId,...(state.settings.recentPinFolderIds||[]).filter(id=>id!==payload.folderId)].slice(0,8);}}
   if(action==='unassign')selected.forEach(item=>item.folderIds=item.folderIds.filter(id=>id!==payload.folderId));
   if(action==='removeTag')selected.forEach(item=>item.tags=item.tags.filter(tag=>tag!==payload.tag));
-  if(action==='renameTag')state.items.forEach(item=>item.tags=item.tags.map(tag=>tag===payload.tag?payload.name:tag));
+  let renamedTag;if(action==='renameTag'){renamedTag=payload.name.trim().replace(/^#+|#+$/g,'').trim();state.items.forEach(item=>item.tags=item.tags.map(tag=>tag===payload.tag?renamedTag:tag));}
   if(action==='deleteTag')state.items.forEach(item=>item.tags=item.tags.filter(tag=>tag!==payload.tag));
   if(action==='pin')selected.forEach(item=>item.pinned=typeof payload.value==='boolean'?payload.value:!item.pinned);
    if(action==='restore')selected.forEach(item=>{item.trashedAt=null;item.trashRevision=null;item.retainedAt??=Date.now();});
@@ -58,14 +58,14 @@ function fixture({deferInitialState=false,initialVisible=true}={}){
   if(action==='copy'&&!payload.keepOpen||action==='paste'||action==='hide')state.windowVisible=false;
   if(action==='show'){state.view='shelves';state.windowVisible=true;state.viewEvent={serial:String(commands.length)};}
   if(action==='library'||action==='settings'){state.view=action;state.windowVisible=true;}
-  const output=clone(state);if(newNote)output.result={id:newNote.id};if(action==='searchImages')output.result=await visualSearch(clone(payload));if(cleanupError)output.result={error:cleanupError};subscriber?.(output);
+  const output=clone(state);if(newNote)output.result={id:newNote.id};if(renamedTag!==undefined)output.result={name:renamedTag};if(action==='searchImages')output.result=await visualSearch(clone(payload));if(cleanupError)output.result={error:cleanupError};subscriber?.(output);
   if(delayedReply?.action===action){const pending=delayedReply;delayedReply=null;await pending.promise;}
   return output;
  }};
  const context={window:{clipboardLine:api,addEventListener(){}},document,HTMLElement:Element,HTMLTextAreaElement:TextArea,Image:FixtureImage,console,structuredClone,URL,Set,Date,JSON,Math,Number,String,requestAnimationFrame:fn=>fn(),setTimeout:fn=>{queueMicrotask(fn);return 1;},clearTimeout(){}};
  vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../renderer.js'),'utf8'),context,{filename:'renderer.js'});
  async function ready(){await new Promise(setImmediate);}
- async function key(code,{ctrl=false,alt=false,shift=false,key,target}={}){const event={code,key:key||(/^Key/.test(code)?code.slice(3).toLowerCase():code==='Space'?' ':code),ctrlKey:ctrl,metaKey:false,altKey:alt,shiftKey:shift,repeat:false,target:target||new Element(),preventDefault(){this.prevented=true;}};for(const listener of listeners.get('keydown')||[])await listener(event);await ready();return event;}
+ async function key(code,{ctrl=false,alt=false,shift=false,repeat=false,key,target}={}){const event={code,key:key||(/^Key/.test(code)?code.slice(3).toLowerCase():code==='Space'?' ':code),ctrlKey:ctrl,metaKey:false,altKey:alt,shiftKey:shift,repeat,target:target||new Element(),preventDefault(){this.prevented=true;}};for(const listener of listeners.get('keydown')||[])await listener(event);await ready();return event;}
  async function click(action,extra={}){const target=new Element();target.dataset.action=action;Object.assign(target.dataset,extra);target.closest=selector=>selector==='[data-action]'?target:null;for(const listener of listeners.get('click')||[])listener({target,stopPropagation(){}});await ready();}
  async function pointer(type,x,y){const target=document.getElementById('markup-canvas');for(const listener of listeners.get(type)||[])listener({target,clientX:x,clientY:y,pointerId:1,shiftKey:false,preventDefault(){}});await ready();}
  function columnGrip(column){const target=new Element();target.dataset.listColumn=column;target.closest=selector=>selector==='[data-list-column]'?target:null;return target;}
@@ -111,6 +111,12 @@ test('inspector Add to folder preserves pin state and memberships while ShiftP s
  await f.key('KeyP',{shift:true});assert.match(f.overlay,/Pin without folder/);await f.click('choose-folder',{folder:b});assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:b,rememberRecent:true});assert.equal(f.state.items[0].pinned,true);
 });
 
+test('the action list Add to folder keeps an unpinned item unpinned',async()=>{
+ const f=fixture();await f.ready();const a='20000000-0000-4000-8000-000000000001';f.state.folders=[{id:a,name:'Work'}];Object.assign(f.state.items[0],{retainedAt:1000,folderIds:[],pinned:false});f.api.emit({folders:f.state.folders,items:f.state.items});await f.ready();await savedLibrary(f);await f.key('KeyK',{ctrl:true});await f.click('execute-command',{command:'folder.assign.'+a});
+ assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:a,pinning:false});
+ const value=f.state.items.find(entry=>entry.id===f.image);assert.deepEqual(value.folderIds,[a]);assert.equal(value.pinned,false);
+});
+
 test('ShiftP starts on the first real folder and keeps Pin without folder last like the native picker',async()=>{
  const f=fixture();await f.ready();const first='20000000-0000-4000-8000-000000000001',second='20000000-0000-4000-8000-000000000002';f.api.emit({folders:[{id:first,name:'References'},{id:second,name:'Video ideas'}]});await f.ready();await f.key('KeyP',{shift:true});assert.deepEqual([...f.overlay.matchAll(/data-action="choose-folder" data-folder="([^"]*)"/g)].map(match=>match[1]),[first,second,'']);await f.key('Enter');assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:first,rememberRecent:true});await f.key('KeyP',{shift:true});await f.key('ArrowDown');await f.key('ArrowDown');await f.key('Enter');assert.deepEqual(f.commands.at(-1),{action:'pin',payload:{ids:[f.image],value:true}});
 });
@@ -154,6 +160,19 @@ test('folder menus create only one subfolder level and generic New folder stays 
  const f=fixture();await f.ready();const parent='20000000-0000-4000-8000-000000000001',child='20000000-0000-4000-8000-000000000002';f.state.folders=[{id:parent,name:'Parent',parentId:null},{id:child,name:'Child',parentId:parent}];f.api.emit({folders:f.state.folders});await f.ready();await f.key('KeyL');await f.click('folder-menu',{folder:child});assert.doesNotMatch(f.overlay,/data-folder-action="new-subfolder"|New subfolder/);await f.click('close-modal');await f.click('folder-scope',{folder:child});await f.click('new-folder');await f.input('simple-input','New root');await f.click('confirm-modal');assert.deepEqual(f.commands.findLast(command=>command.action==='createFolder').payload,{name:'New root',parentId:null});await f.click('folder-menu',{folder:parent});assert.match(f.overlay,/New subfolder/);await f.click('new-subfolder',{folder:parent});await f.input('simple-input','Another child');await f.click('confirm-modal');assert.deepEqual(f.commands.findLast(command=>command.action==='createFolder').payload,{name:'Another child',parentId:parent});await f.click('remove-folder',{folder:parent});assert.match(f.overlay,/Remove this folder and its subfolders\? Item content remains in the library\./);
 });
 
+test('a subfolder scope is titled with its parent like macOS',async()=>{
+ const f=fixture();await f.ready();const parent='20000000-0000-4000-8000-000000000001',child='20000000-0000-4000-8000-000000000002';
+ f.state.folders=[{id:parent,name:'Parent',parentId:null},{id:child,name:'Child',parentId:parent}];f.api.emit({folders:f.state.folders});await f.ready();await savedLibrary(f);
+ await f.click('folder-scope',{folder:parent});assert.match(f.main,/<div class="window-title"><strong>Parent<\/strong>/);await f.click('folder-scope',{folder:child});assert.match(f.main,/<div class="window-title"><strong>Parent \/ Child<\/strong>/);
+});
+
+test('an unnamed item is titled like macOS: trimmed first line capped at 120, link host without a fetched title',async()=>{
+ const f=fixture();await f.ready();const base=(id,kind,extra)=>({id,kind,createdAt:500,updatedAt:500,name:'',title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,retainedAt:500,crop:null,annotations:[],...extra});
+ f.state.items=[base('30000000-0000-4000-8000-000000000001','text',{text:'\t  Indented first line \r\nsecond line'}),base('30000000-0000-4000-8000-000000000002','text',{text:'x'.repeat(130)}),base('30000000-0000-4000-8000-000000000003','link',{url:'https://www.example.com/a/very/long/path?utm_source=news'}),base('30000000-0000-4000-8000-000000000004','link',{url:'https://example.com/ref',title:'Fetched title'}),base('30000000-0000-4000-8000-000000000005','text',{text:'\n \t\r\nSecond line\nthird'}),base('30000000-0000-4000-8000-000000000006','text',{text:' \t\r\n  '}),base('30000000-0000-4000-8000-000000000007','link',{url:'http://[bad'})];
+ f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ assert.deepEqual([...f.main.matchAll(/<article class="[^"]*" [^>]*aria-label="([^"]*)"/g)].map(match=>match[1]),['Indented first line','x'.repeat(120),'www.example.com','Fetched title','Second line','Untitled note','Link']);
+});
+
 test('removing the active folder ancestor returns Library to Saved',async()=>{
  const f=fixture();await f.ready();const parent='20000000-0000-4000-8000-000000000001',child='20000000-0000-4000-8000-000000000002';
  f.state.items[0].retainedAt=1000;f.state.items[0].folderIds=[child];f.state.folders=[{id:parent,name:'Parent',parentId:null},{id:child,name:'Child',parentId:parent}];f.api.emit({items:f.state.items,folders:f.state.folders});await f.ready();
@@ -161,14 +180,109 @@ test('removing the active folder ancestor returns Library to Saved',async()=>{
  assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);assert.deepEqual(cards(f),[f.image]);
 });
 
+test('removing a folder that is not open keeps the current Library view',async()=>{
+ const f=fixture();await f.ready();const keep='20000000-0000-4000-8000-000000000003',other='20000000-0000-4000-8000-000000000004';
+ Object.assign(f.state.items[0],{retainedAt:1000,folderIds:[keep]});Object.assign(f.state.items[1],{retainedAt:900,folderIds:[keep]});f.state.folders=[{id:keep,name:'Keep',parentId:null},{id:other,name:'Other',parentId:null}];f.api.emit({items:f.state.items,folders:f.state.folders});await f.ready();
+ await savedLibrary(f);const command=f.api.command.bind(f.api),removed=[];f.api.command=async(action,payload)=>{if(action==='removeFolder'){removed.push(payload.id);f.state.folders=f.state.folders.filter(folder=>folder.id!==payload.id);}return command(action,payload);};await f.click('folder-scope',{folder:keep});assert.deepEqual(cards(f),[f.image,f.text1]);await f.key('ArrowRight');const selectedCard=/<article class="[^"]*\bselected\b[^"]*"[^>]*data-item-id="00000000-0000-4000-8000-000000000002"/;assert.match(f.main,selectedCard);assert.equal(focusedCard(f),f.text1);await f.click('remove-folder',{folder:other});await f.click('confirm-modal');
+ assert.deepEqual(removed,[other]);assert.deepEqual(f.state.folders.map(folder=>folder.id),[keep]);
+ assert.match(f.main,/<div class="window-title"><strong>Keep<\/strong>/);assert.doesNotMatch(f.main,/data-action="scope" data-scope="saved" class="active"/);assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,selectedCard);assert.equal(focusedCard(f),f.text1);
+});
+
+test('the action list keeps Copy enabled for Trash items while editing actions are disabled',async()=>{
+ const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image]);
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="copy" >/);assert.match(f.overlay,/data-command="pin" disabled>/);assert.match(f.overlay,/data-command="paste" disabled>/);assert.match(f.overlay,/data-command="preview" disabled>/);
+});
+test('edit actions need exactly one selected item',async()=>{
+ const f=fixture();await f.ready();await recent(f);await f.key('ArrowRight');await f.key('ArrowRight',{shift:true});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="edit" disabled>/);await f.key('Escape');
+ await f.key('KeyE');assert.doesNotMatch(f.main+f.overlay,/text-editor/);
+});
+test('image actions need exactly one selected item',async()=>{
+ const f=fixture();await f.ready();const other='00000000-0000-4000-8000-000000000005';f.state.items.push({...structuredClone(f.state.items[0]),id:other,createdAt:2000,mediaUrl:'appmedia://media/'+other,originalMediaUrl:'appmedia://media/'+other+'/original'});f.api.emit({items:f.state.items});await f.ready();await recent(f);await f.key('ArrowRight',{shift:true});
+ await f.key('KeyK',{ctrl:true});for(const id of ['crop','markup','pen','copyOCR'])assert.match(f.overlay,new RegExp('data-command="'+id+'" disabled>'));await f.key('Escape');
+ await f.key('KeyC');assert.doesNotMatch(f.main+f.overlay,/markup-canvas/);
+});
+test('the Open key acts on the focused link of a multi-selection like macOS',async()=>{
+ const f=fixture();await f.ready();const other='00000000-0000-4000-8000-000000000006',source=f.state.items.find(value=>value.kind==='link');f.state.items.push({...structuredClone(source),id:other,url:'https://example.com/other'});f.api.emit({items:f.state.items});await f.ready();await recent(f);await f.key('Digit3',{ctrl:true});await f.key('ArrowRight',{shift:true});
+ await f.key('KeyO',{ctrl:true});assert.equal(f.commands.at(-1).action,'openLink');assert.equal(f.commands.at(-1).payload.id,other);
+});
+test('Name and pin leaves the length of a name to the shared validation',async()=>{
+ const f=fixture();await f.ready();await f.key('KeyP',{alt:true});assert.match(f.overlay,/id="name-input"/);assert.doesNotMatch(f.overlay,/id="name-input"[^>]*maxlength/);
+});
+test('the action list disables item details and Remove from folder for an item in Trash',async()=>{
+ const f=fixture();await f.ready();const a='20000000-0000-4000-8000-000000000001';f.state.folders=[{id:a,name:'Work'}];Object.assign(f.state.items[0],{trashedAt:1000,folderIds:[a]});f.api.emit({folders:f.state.folders,items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="edit-details" disabled>/);assert.match(f.overlay,new RegExp('data-command="folder.remove.'+a+'" disabled>'));assert.match(f.overlay,/Restore this item first/);
+ await f.key('Escape');f.state.items[0].trashedAt=null;f.state.items[0].retainedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.click('scope',{scope:'saved'});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="edit-details" >/);assert.match(f.overlay,new RegExp('data-command="folder.remove.'+a+'" >'));
+});
+test('the action list disables Move to Trash for an item already in Trash',async()=>{
+ const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="trash" disabled>/);
+});
+test('the action list disables Clear filters until a Library filter is set',async()=>{
+ const f=fixture();await f.ready();await savedLibrary(f);
+ const row=()=>f.overlay.match(/<button[^>]*data-command="clear-filters"[^>]*>[\s\S]*?<\/button>/)[0];
+ await f.key('KeyK',{ctrl:true});assert.match(row(),/data-command="clear-filters" disabled>/);assert.match(row(),/<small>No filters to clear<\/small>/);
+ await f.key('Escape');await f.change('type-filter','text');
+ await f.key('KeyK',{ctrl:true});assert.doesNotMatch(row(),/disabled/);assert.match(row(),/<small><\/small>/);
+ await f.key('Escape');await f.change('type-filter','all');
+ await f.key('KeyK',{ctrl:true});assert.match(row(),/data-command="clear-filters" disabled>/);
+});
+test('Titles that fold equal sort newest first in both title directions',async()=>{
+ const f=fixture();await f.ready();const names=[['Alpha',1000],['álpha',3000],['alpha',2000]];
+ f.state.items.splice(0,f.state.items.length,...names.map(([name,createdAt],index)=>({id:'00000000-0000-4000-8000-0000000002'+String(index).padStart(2,'0'),kind:'text',createdAt,updatedAt:createdAt,name,title:'',text:name,url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,crop:null,annotations:[],retainedAt:1})));
+ f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'saved'});
+ const order=()=>cards(f).map(id=>f.state.items.find(item=>item.id===id).createdAt);
+ await f.change('sort-filter','title');assert.deepEqual(order(),[3000,2000,1000]);
+ await f.change('sort-filter','titleDescending');assert.deepEqual(order(),[3000,2000,1000]);
+});
+test('Title sort orders by folded title, not system locale collation',async()=>{
+ const f=fixture();await f.ready();const names=['sut','şeker','çilek','cuma','Çay','ılık','zeytin'];
+ f.state.items.splice(0,f.state.items.length,...names.map((name,index)=>({id:'00000000-0000-4000-8000-0000000001'+String(index).padStart(2,'0'),kind:'text',createdAt:1000-index,updatedAt:1000-index,name,title:'',text:name,url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,crop:null,annotations:[],retainedAt:1})));
+ f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'saved'});await f.change('sort-filter','title');
+ const order=()=>cards(f).map(id=>f.state.items.find(item=>item.id===id).name);
+ assert.deepEqual(order(),['Çay','çilek','cuma','şeker','sut','zeytin','ılık']);
+ await f.change('sort-filter','titleDescending');assert.deepEqual(order(),['ılık','zeytin','sut','şeker','cuma','çilek','Çay']);
+});
+test('Title sort does not fold ligatures or circled digits, like the Mac',async()=>{
+ const f=fixture();await f.ready();const names=['\ufb01sh','fz','2','\u2460','fj','1'];
+ f.state.items.splice(0,f.state.items.length,...names.map((name,index)=>({id:'00000000-0000-4000-8000-0000000002'+String(index).padStart(2,'0'),kind:'text',createdAt:1000-index,updatedAt:1000-index,name,title:'',text:name,url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,crop:null,annotations:[],retainedAt:1})));
+ f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'saved'});await f.change('sort-filter','title');
+ assert.deepEqual(cards(f).map(id=>f.state.items.find(item=>item.id===id).name),['1','2','fj','fz','\u2460','\ufb01sh']);
+});
+test('disabled undo rows name the surface before saying there is nothing to undo',async()=>{
+ const f=fixture();await f.ready();
+ const detail=id=>f.overlay.match(new RegExp('<button[^>]*data-command="'+id+'"[^>]*>[\\s\\S]*?</button>'))[0].match(/<small>([^<]*)<\/small>/)[1];
+ await f.key('KeyK',{ctrl:true});assert.equal(detail('undoTrash'),'Available in Library');assert.equal(detail('undo'),'Nothing to undo.');
+ await f.key('Escape');await savedLibrary(f);await f.key('KeyK',{ctrl:true});
+ assert.equal(detail('undo'),'Available on the shelves');assert.equal(detail('undoTrash'),'Nothing to undo.');
+});
+test('restoring from Trash moves focus and selection to the first remaining item',async()=>{
+ const f=fixture();await f.ready();for(const value of f.state.items.slice(0,3))value.trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);
+ await f.key('ArrowRight');assert.equal(focusedCard(f),f.text1);await f.click('restore');assert.deepEqual(cards(f),[f.image,f.text2]);assert.equal(focusedCard(f),f.image);assert.match(f.main,/<article class="[^"]*\bselected\b[^"]*"[^>]*data-item-id="00000000-0000-4000-8000-000000000001"/);
+});
+
 test('restoring the only Trash item clears its stale inspector selection',async()=>{
  const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image]);
  await f.click('restore');assert.deepEqual(cards(f),[]);assert.doesNotMatch(f.main,/data-action="restore"/);assert.match(f.main,/Select an item to view its details/);
 });
 
+test('Library tags are listed in folded-name order like the Mac library',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['zebra','Çay']});Object.assign(f.state.items[1],{retainedAt:900,tags:['apple','Banana']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ const expected=['apple','Banana','Çay','zebra'],order=(html,pattern)=>[...html.matchAll(pattern)].map(match=>match[1]);
+ assert.deepEqual(order(f.main,/data-action="tag-scope" data-tag="([^"]+)"/g),expected,'sidebar');
+ await f.click('toggle-filters');assert.deepEqual(order(f.main,/data-filter-tag="([^"]+)"/g),expected,'Library tag filter');
+ await f.key('KeyT',{ctrl:true,shift:true});assert.deepEqual(order(f.overlay,/data-action="pick-tag" data-tag="([^"]+)"/g),expected,'Add tags dialog');await f.key('Escape');
+ await f.key('KeyK',{ctrl:true});assert.deepEqual(order(f.overlay,/Open tag · ([^<"]+)/g),expected,'command palette');
+});
 test('global tag menu keyboard rename follows the selected scope and filters while deletion requires confirmation',async()=>{
  const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client'],pinned:true});Object.assign(f.state.items[1],{retainedAt:900,tags:['client'],pinned:false});Object.assign(f.state.items[2],{retainedAt:800,tags:['other']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('tag-scope',{tag:'client'});await f.change('filter-client','',{dataset:{filterTag:'client'},checked:true});assert.deepEqual(cards(f),[f.image,f.text1]);await f.click('tag-menu',{tag:'client'});assert.match(f.overlay,/Rename tag/);assert.match(f.overlay,/Remove tag/);await f.key('Enter');assert.match(f.overlay,/Rename tag/);await f.input('simple-input','Renamed client');await f.key('Enter');assert.deepEqual(f.commands.findLast(command=>command.action==='renameTag').payload,{tag:'client',name:'Renamed client'});assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,/data-action="tag-scope" data-tag="Renamed client" class="active"/);assert.deepEqual(f.state.items[0].tags,['Renamed client']);assert.deepEqual(f.state.items[1].tags,['Renamed client']);assert.equal(f.state.items[1].pinned,false);
  await f.click('tag-menu',{tag:'Renamed client'});await f.key('ArrowDown');await f.key('Enter');assert.match(f.overlay,/Remove this tag\?/);assert.equal(f.commands.some(command=>command.action==='deleteTag'),false);await f.key('Escape');assert.deepEqual(f.state.items[0].tags,['Renamed client']);await f.click('tag-menu',{tag:'Renamed client'});await f.key('ArrowDown');await f.key('Enter');await f.click('confirm-modal');assert.deepEqual(f.commands.findLast(command=>command.action==='deleteTag').payload,{tag:'Renamed client'});assert.deepEqual(f.state.items[0].tags,[]);assert.deepEqual(f.state.items[1].tags,[]);assert.deepEqual(f.state.items[2].tags,['other']);assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);assert.doesNotMatch(f.main,/data-action="tag-scope" data-tag="Renamed client"/);
+});
+test('renaming the open, filtered tag to a hashtag keeps its cards visible under the stored name',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client'],pinned:true});Object.assign(f.state.items[1],{retainedAt:900,tags:['client']});Object.assign(f.state.items[2],{retainedAt:800,tags:['other']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('tag-scope',{tag:'client'});await f.change('filter-client','',{dataset:{filterTag:'client'},checked:true});assert.deepEqual(cards(f),[f.image,f.text1]);
+ await f.click('tag-menu',{tag:'client'});await f.key('Enter');await f.input('simple-input','#Renamed');await f.key('Enter');assert.deepEqual(f.commands.findLast(command=>command.action==='renameTag').payload,{tag:'client',name:'#Renamed'});assert.deepEqual(f.state.items[0].tags,['Renamed']);assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,/data-action="tag-scope" data-tag="Renamed" class="active"/);assert.doesNotMatch(f.main,/data-tag="#Renamed"/);
+ await f.click('tag-menu',{tag:'Renamed'});await f.key('Enter');await f.input('simple-input',' #Renamed ');await f.key('Enter');assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,/data-action="tag-scope" data-tag="Renamed" class="active"/);
 });
 
 test('Library title descending and best match order actual result identities',async()=>{
@@ -338,6 +452,21 @@ test('a background state push keeps keyboard focus on the focused dialog button 
  const again=buttons.filter(button=>button.dataset.action==='close-modal');again[1].focus();overlay.querySelectorAll=()=>{throw new SyntaxError('invalid selector');};
  f.api.emit({});await f.ready();assert.ok(overlay.innerHTML.includes('close-modal'),'the overlay is still rebuilt');
 });
+test('Space on a focused dialog button activates it on keydown, so a background refresh between keydown and keyup cannot drop the click',async()=>{
+ const f=fixture();await f.ready();await f.key('KeyF');
+ // Chromium clicks a button on Space keyup only if the same element saw the keydown; a state push rebuilds the overlay in between.
+ const overlay=f.nodes.get('overlay-root'),buttons=[];
+ Object.defineProperty(overlay,'innerHTML',{configurable:true,get(){return this._html||'';},set(html){
+  this._html=html;buttons.length=0;
+  for(const [, attributes] of html.matchAll(/<button([^>]*)>/g)){const action=attributes.match(/ data-action="([^"]*)"/)?.[1];if(!action)continue;const button={id:'',dataset:{action},clicks:0,closest:selector=>selector==='button'?button:null,focus(){f.document.activeElement=button;},click(){button.clicks++;void f.click(action);}};buttons.push(button);}
+ }});
+ overlay.contains=node=>buttons.includes(node);overlay.querySelectorAll=()=>[];overlay.querySelector=()=>null;
+ await f.click('new-note');
+ const cancel=buttons.filter(button=>button.dataset.action==='close-modal')[1];cancel.focus();
+ const enter=await f.key('Enter',{target:cancel});assert.equal(enter.prevented,undefined,'Enter keeps its native activation');assert.equal(cancel.clicks,0);assert.ok(overlay.innerHTML.includes('close-modal'));
+ const repeat=await f.key('Space',{target:cancel,repeat:true});assert.equal(cancel.clicks,0,'a held key does not repeat the click');assert.equal(repeat.prevented,true);
+ const space=await f.key('Space',{target:cancel});assert.equal(space.prevented,true,'the native keyup click is suppressed so it cannot fire twice');assert.equal(cancel.clicks,1);assert.ok(!overlay.innerHTML.includes('close-modal'),'Cancel closed the dialog on keydown');
+});
 test('Library Last copied falls back to the creation time, so editing a never-copied item does not reorder it',async()=>{
  const f=fixture();await f.ready();f.state.items[1].lastCopiedAt=950;f.state.items[2].updatedAt=5000;f.api.emit({items:f.state.items});await f.ready();await recent(f);
  await f.change('sort-filter','copied');assert.deepEqual(cards(f),[f.image,f.text1,f.text2,f.link]);
@@ -347,4 +476,39 @@ test('Library domain filter ignores case, surrounding spaces and dots, www and a
  for(const value of ['example.com',' Example.COM ','WWW.example.com','.example.com.'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[f.link],JSON.stringify(value));
  await f.input('domain-filter','other.org');assert.deepEqual(cards(f),[]);
  await f.input('domain-filter','  ');assert.deepEqual(cards(f),[f.image,f.link]);
+});
+test('the multi-selection inspector says Unpin when every selected item is pinned',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});Object.assign(f.state.items[1],{retainedAt:900,pinned:true});Object.assign(f.state.items[2],{retainedAt:800,pinned:false});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ const pinLabel=()=>f.main.match(/<aside class="inspector"[\s\S]*?<\/aside>/)[0].match(/<button[^>]*data-action="pin"[^>]*>([\s\S]*?)<\/button>/)[1].replace(/<[^>]*>/g,'').trim();
+ await f.key('KeyA',{ctrl:true});assert.equal(pinLabel(),'Pin');
+ f.state.items[2].pinned=true;f.api.emit({items:f.state.items});await f.ready();assert.equal(pinLabel(),'Unpin');
+});
+test('removing a tag that is not open keeps the open tag view',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client']});Object.assign(f.state.items[1],{retainedAt:900,tags:['client']});Object.assign(f.state.items[2],{retainedAt:800,tags:['other']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ await f.click('tag-scope',{tag:'client'});await f.key('ArrowRight');const selectedCard=/<article class="[^"]*\bselected\b[^"]*"[^>]*data-item-id="00000000-0000-4000-8000-000000000002"/;assert.match(f.main,selectedCard);assert.equal(focusedCard(f),f.text1);await f.click('tag-menu',{tag:'other'});await f.key('ArrowDown');await f.key('Enter');await f.click('confirm-modal');
+ assert.deepEqual(f.commands.findLast(command=>command.action==='deleteTag').payload,{tag:'other'});
+ assert.match(f.main,/data-action="tag-scope" data-tag="client" class="active"/);assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,selectedCard);assert.equal(focusedCard(f),f.text1);
+});
+test('removing a tag that is not open drops only that tag filter',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client','keep']});Object.assign(f.state.items[1],{retainedAt:900,tags:['client']});Object.assign(f.state.items[2],{retainedAt:800,tags:['other','keep']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ await f.click('tag-scope',{tag:'client'});await f.click('toggle-filters');await f.change('filter-keep','',{dataset:{filterTag:'keep'},checked:true});await f.change('filter-other','',{dataset:{filterTag:'other'},checked:true});assert.deepEqual(cards(f),[]);
+ await f.click('tag-menu',{tag:'other'});await f.key('ArrowDown');await f.key('Enter');await f.click('confirm-modal');
+ assert.deepEqual(f.commands.findLast(command=>command.action==='deleteTag').payload,{tag:'other'});
+ assert.match(f.main,/data-filter-tag="keep" checked/);assert.doesNotMatch(f.main,/data-filter-tag="other"/);assert.deepEqual(cards(f),[f.image]);
+});
+test('changing the Library sort keeps the selected item like macOS setSort',async()=>{
+ const f=fixture();await f.ready();await recent(f);
+ await f.key('ArrowRight');assert.equal(focusedCard(f),f.text1);
+ await f.change('sort-filter','oldest');assert.deepEqual(cards(f),[f.link,f.text2,f.text1,f.image]);assert.equal(focusedCard(f),f.text1);
+ await f.click('view-mode');await f.click('sort-column',{column:'title'});assert.equal(focusedCard(f),f.text1);
+});
+test('Library cards do not offer the shelf-only Take down button',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ assert.match(f.main,/data-action="card-pin"/);assert.doesNotMatch(f.main,/data-action="card-remove"/);
+});
+test('copying several Library items says how many were copied',async()=>{
+ const f=fixture();await f.ready();await recent(f);
+ await f.key('ArrowRight');await f.key('KeyC',{ctrl:true});assert.equal(f.nodes.get('toast').textContent,'Copied');
+ await f.key('ArrowRight',{shift:true});await f.key('ArrowRight',{shift:true});await f.key('KeyC',{ctrl:true});
+ assert.equal(f.commands.findLast(command=>command.action==='copy').payload.ids.length,3);assert.equal(f.nodes.get('toast').textContent,'3 items copied');
 });

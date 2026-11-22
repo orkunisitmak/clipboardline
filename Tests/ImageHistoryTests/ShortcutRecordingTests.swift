@@ -18,13 +18,25 @@ import XCTest
             }, unregister: { self.active[id] = nil }), action: action)
         }
     }
-    private struct Contract: Decodable { let commonGlobalActions: [String]; let exitReasons: [String] }
+    private struct NativeException: Decodable { let id: String; let macos: String; let windows: String; let reason: String }
+    private struct Contract: Decodable {
+        let commonGlobalActions: [String]
+        let exitReasons: [String]
+        let nativeExceptions: [NativeException]
+    }
     private func contract() throws -> Contract {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         return try JSONDecoder().decode(Contract.self, from: Data(contentsOf: root.appendingPathComponent("contracts/shortcut-recording.json")))
     }
     private func key(_ code: UInt16, _ value: String, _ flags: NSEvent.ModifierFlags = []) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil, characters: value, charactersIgnoringModifiers: value, isARepeat: false, keyCode: code)!
+    }
+    func testGlobalShortcutDisplayNamesArrowFunctionAndReturnKeys() throws {
+        func display(_ code: UInt16, _ character: String, _ flags: NSEvent.ModifierFlags) throws -> String { try XCTUnwrap(Shortcut(event: key(code, character, flags))).display }
+        XCTAssertEqual(try display(123, "\u{F702}", [.control, .option]), "⌃⌥←")
+        XCTAssertEqual(try display(96, "\u{F708}", .command), "⌘F5")
+        XCTAssertEqual(try display(36, "\r", .control), "⌃↩")
+        XCTAssertEqual(try display(17, "t", [.control, .option]), "⌃⌥T")
     }
     func testOwnedGlobalLeaseSuspendsAllAndBlocksStaleCallbacksUntilLastRecorderEnds() throws {
         let registry = Registry(); var actions = [Int]()
@@ -95,6 +107,20 @@ import XCTest
         registry.blocked.insert(1); lease.resume(); lease.resume()
         XCTAssertEqual(warnings, 1); XCTAssertFalse(global.isRegistered); XCTAssertTrue(registry.active.isEmpty)
         registry.blocked.remove(1); global.invalidate()
+    }
+    func testNativeRecorderFocusReturnPolicyUsesASeparateNonactivatingPanel() throws {
+        let policy = try XCTUnwrap(contract().nativeExceptions.first { $0.id == "shortcut-recorder-return-focus" })
+        XCTAssertTrue(policy.macos.contains("NSPanel"))
+        XCTAssertTrue(policy.windows.contains("Record button"))
+        XCTAssertFalse(policy.reason.isEmpty)
+        _ = NSApplication.shared
+        let recorder = ShortcutRecorder()
+        XCTAssertTrue(recorder.window.styleMask.contains(.nonactivatingPanel))
+        var completions = 0
+        recorder.onFinish = { value in XCTAssertNil(value); completions += 1 }
+        recorder.beginRecording()
+        XCTAssertTrue(recorder.window.performKeyEquivalent(with: key(UInt16(kVK_Escape), "\u{1B}")))
+        XCTAssertEqual(completions, 1)
     }
     func testRecorderCancelFocusLossAndWindowCloseReleaseTheirLeases() throws {
         _ = NSApplication.shared

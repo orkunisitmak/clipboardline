@@ -2256,6 +2256,136 @@
           }
         }
       ]
+    },
+    {
+      "id": "library-pin-on-a-mixed-selection-pins-all-then-unpins-all",
+      "columns": 3,
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "focused": "i1",
+            "selected": [
+              "i1"
+            ],
+            "visible": "all",
+            "scope": "saved",
+            "kind": "all",
+            "search": "",
+            "list": false,
+            "trashed": [],
+            "pinned": [
+              "i1",
+              "t2"
+            ],
+            "pinnedOnly": false
+          }
+        },
+        {
+          "action": "key",
+          "code": "ArrowRight",
+          "modifiers": [
+            "shift"
+          ],
+          "editing": false,
+          "expect": {
+            "focused": "t1",
+            "selected": [
+              "i1",
+              "t1"
+            ],
+            "visible": "all",
+            "scope": "saved",
+            "kind": "all",
+            "search": "",
+            "list": false,
+            "trashed": [],
+            "pinned": [
+              "i1",
+              "t2"
+            ],
+            "pinnedOnly": false
+          }
+        },
+        {
+          "action": "key",
+          "code": "ArrowRight",
+          "modifiers": [
+            "shift"
+          ],
+          "editing": false,
+          "expect": {
+            "focused": "l1",
+            "selected": [
+              "i1",
+              "t1",
+              "l1"
+            ],
+            "visible": "all",
+            "scope": "saved",
+            "kind": "all",
+            "search": "",
+            "list": false,
+            "trashed": [],
+            "pinned": [
+              "i1",
+              "t2"
+            ],
+            "pinnedOnly": false
+          }
+        },
+        {
+          "action": "key",
+          "code": "KeyP",
+          "modifiers": [],
+          "editing": false,
+          "expect": {
+            "focused": "l1",
+            "selected": [
+              "i1",
+              "t1",
+              "l1"
+            ],
+            "visible": "all",
+            "scope": "saved",
+            "kind": "all",
+            "search": "",
+            "list": false,
+            "trashed": [],
+            "pinned": [
+              "i1",
+              "t1",
+              "l1",
+              "t2"
+            ],
+            "pinnedOnly": false
+          }
+        },
+        {
+          "action": "key",
+          "code": "KeyP",
+          "modifiers": [],
+          "editing": false,
+          "expect": {
+            "focused": "l1",
+            "selected": [
+              "i1",
+              "t1",
+              "l1"
+            ],
+            "visible": "all",
+            "scope": "saved",
+            "kind": "all",
+            "search": "",
+            "list": false,
+            "trashed": [],
+            "pinned": [
+              "t2"
+            ],
+            "pinnedOnly": false
+          }
+        }
+      ]
     }
   ]
 }

@@ -17,6 +17,7 @@ function copyFiles({files,text='',marker=''}){
   const child=execFile(executable,['-NoLogo','-NoProfile','-STA','-NonInteractive','-ExecutionPolicy','Bypass','-File',script],{windowsHide:true,timeout:12000,maxBuffer:64000,env:windowsEnvironment()},(error,stdout)=>{
    pending.delete(child);
    let result;try{result=JSON.parse(stdout.trim());}catch{return reject(new Error('Windows file clipboard helper did not respond.'));}
+   if(!result||typeof result!=='object'||Array.isArray(result))return reject(new Error('Windows file clipboard helper did not respond.'));
    if(error||result.ok!==true)return reject(new Error(result.error||'Windows could not copy these files.'));resolve(result);
   });pending.add(child);child.stdin.on('error',()=>{});child.stdin.end(JSON.stringify({files,text,marker}));
  });

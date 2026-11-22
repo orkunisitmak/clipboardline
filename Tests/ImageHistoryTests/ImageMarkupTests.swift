@@ -8,6 +8,21 @@ import XCTest
 @MainActor final class ImageMarkupTests: HistoryTestCase {
     private var temporary: [URL] = []
 
+    func testMarkupErrorMessagesAreTranslatedInEveryCatalog() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let resources = root.appendingPathComponent("Sources/Tendedero/Resources")
+        let folders = try FileManager.default.contentsOfDirectory(atPath: resources.path).filter { $0.hasSuffix(".lproj") }
+        XCTAssertGreaterThan(folders.count, 1)
+        // Catalog keys are the English source strings; errorDescription itself may already be translated.
+        let messages = ["The image markup document is invalid.", "This image could not be opened for markup.",
+                        "Markup supports images up to 80 megapixels.", "The marked image could not be rendered."]
+        for message in messages {
+            for folder in folders {
+                let table = try XCTUnwrap(NSDictionary(contentsOf: resources.appendingPathComponent(folder).appendingPathComponent("Localizable.strings")) as? [String: String])
+                XCTAssertNotNil(table[message], "\(folder) has no entry for \(message)")
+            }
+        }
+    }
     private func cleanup() {
         for url in temporary { try? FileManager.default.removeItem(at: url) }
         temporary = []

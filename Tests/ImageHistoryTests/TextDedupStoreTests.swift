@@ -116,6 +116,22 @@ import XCTest
         XCTAssertEqual(try live(library).map(\.id), [original.id])
     }
 
+    func testExpiredCopiesLeaveTheShelfAtLaunchAndOnTheNextCopy() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        f.defaults.set(1, forKey: HistoryRetention.key(.text))
+        let old = try XCTUnwrap(store(f).captureText("Copied two days ago"))
+        f.date.addTimeInterval(2 * 86400)
+        let relaunched = try store(f)
+        XCTAssertNotNil(try relaunched.item(old.id)?.deletedAt)
+        XCTAssertTrue(try live(relaunched).isEmpty)
+
+        let kept = try XCTUnwrap(relaunched.captureText("Copied today"))
+        f.date.addTimeInterval(2 * 86400)
+        let next = try XCTUnwrap(relaunched.captureText("Copied after two more days"))
+        XCTAssertNotNil(try relaunched.item(kept.id)?.deletedAt)
+        XCTAssertEqual(try live(relaunched).map(\.id), [next.id])
+    }
+
     func testRecaptureNeverResurrectsAnExplicitlyTrashedRecord() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let library = try store(f), original = try XCTUnwrap(library.captureText("Trashed value"))
@@ -467,9 +483,12 @@ import XCTest
         f.defaults.set(30, forKey: HistoryRetention.key(.text))
         let library = try store(f), baseline = f.date
         let original = try XCTUnwrap(library.captureText("Recaptured before clock correction"))
+        // A capture expires old copies, so the original is pinned across the clock jump.
+        try library.pin([original.id])
         f.date = baseline.addingTimeInterval(100 * 86400)
         let future = try XCTUnwrap(library.captureText("Pinned future ordering anchor"))
         try library.pin([future.id])
+        try library.update(original.id) { $0.favorite = false; $0.retainedAt = nil }
         f.date = baseline.addingTimeInterval(86400)
         let recaptured = try XCTUnwrap(library.captureText("Recaptured before clock correction"))
         let fresh = try XCTUnwrap(library.captureText("New after clock correction"))

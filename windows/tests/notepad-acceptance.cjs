@@ -6,6 +6,7 @@ const path=require('node:path');
 const {spawn}=require('node:child_process');
 const {windowsEnvironment}=require('../lib/windows-environment.cjs');
 const {readJsonRetry}=require('./read-json-retry.cjs');
+const {renameRetry}=require('./rename-retry.cjs');
 
 // This consumer test never replaces the app's native paste with fixture input.
 // The PowerShell helper only opens/selects/observes its own UUID-named document.
@@ -35,7 +36,7 @@ module.exports=async function notepadAcceptance({page,application,textItem,check
     return readJsonRetry(output);
   };
   const command=async action=>{
-    const serial=crypto.randomUUID();fs.writeFileSync(commands+'.tmp',JSON.stringify({action,serial}));fs.renameSync(commands+'.tmp',commands);
+    const serial=crypto.randomUUID();fs.writeFileSync(commands+'.tmp',JSON.stringify({action,serial}));await renameRetry(commands+'.tmp',commands);
     const value=await until(state,next=>!!next&&(next.lastSerial===serial||next.status==='failed'),15000);
     assert.notEqual(value.status,'failed',value.reason);assert.equal(value.commandError||'','',value.commandError);return value;
   };

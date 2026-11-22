@@ -72,6 +72,30 @@ import XCTest
         view === ancestor || view.isDescendant(of: ancestor)
     }
 
+    /// Markup makes the canvas (an NSControl) first responder. Mouse events routed
+    /// through the panel must still reach it instead of being read as key events.
+    func testPanelRoutesMouseEventsToMarkupCanvas() throws {
+        let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
+        let preview = try XCTUnwrap(ImagePreview(url: image(fixture)))
+        defer { preview.requestClose() }
+        let panel = try XCTUnwrap(preview.window as? ActionPreviewPanel)
+        preview.beginMarkup(); preview.canvas.setTool(.rectangle)
+        XCTAssertTrue(panel.firstResponder === preview.canvas)
+        let canvas = preview.canvas
+        let start = NSPoint(x: canvas.bounds.width * 0.2, y: canvas.bounds.height * 0.25)
+        let end = NSPoint(x: canvas.bounds.width * 0.7, y: canvas.bounds.height * 0.75)
+        func event(_ type: NSEvent.EventType, _ point: NSPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: canvas.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        // Before the fix, reading keyCode from this mouse event raised
+        // NSInternalInconsistencyException inside sendEvent and the click was lost.
+        for (type, point) in [(NSEvent.EventType.leftMouseDown, start), (.leftMouseDragged, end), (.leftMouseUp, end)] {
+            panel.sendEvent(event(type, point))
+        }
+        XCTAssertTrue(preview.isMarkupEditing)
+    }
+
     func testMarkupSharesTopRowAndFreesBottomCanvas() throws {
         _ = NSApplication.shared
         let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
