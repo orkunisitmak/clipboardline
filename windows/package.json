@@ -24,7 +24,9 @@
     "playwright": "1.64.1"
   },
   "overrides": {
-    "global-agent": "4.1.3"
+    "global-agent": "4.1.3",
+    "minimatch@^9.0.3": "11.0.5",
+    "minimatch@^10.2.5": "11.0.5"
   },
   "build": {
     "appId": "com.clipboardline.desktop.windows",
