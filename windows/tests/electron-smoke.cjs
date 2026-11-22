@@ -51,7 +51,9 @@ async function waitForCropBox(page,viewport,raster={width:900,height:220}){
   return ready.box;
 }
 async function main(){
-  const args=['--test-mode','--test-data='+data,'--test-tray'];
+  // The checks below read English UI text. Pin the isolated instance's locale so
+  // they hold on a non-English Windows; localized text has its own renderer tests.
+  const args=['--test-mode','--test-data='+data,'--test-tray','--lang=en-US'];
   application=await electron.launch({...(process.env.CLIPBOARDLINE_EXECUTABLE?{executablePath:path.resolve(process.env.CLIPBOARDLINE_EXECUTABLE)}:{args:[path.resolve('.'),...args]}),...(process.env.CLIPBOARDLINE_EXECUTABLE?{args}:{}),timeout:60000});
   const page=await application.firstWindow();activePage=page;await page.waitForFunction(()=>!!window.clipboardLine);
   report.rendererErrors=[];page.on('pageerror',error=>{if(report.rendererErrors.length<20)report.rendererErrors.push(String(error.stack||error.message).slice(0,2000));});
