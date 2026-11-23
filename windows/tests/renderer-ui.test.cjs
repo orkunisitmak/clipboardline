@@ -113,6 +113,12 @@ test('an initial library older than a queued lightweight revision is refreshed b
 
 test('preview arrows move across shelf kinds, S keeps preview on neighbor, Backspace restores',async()=>{const f=fixture();await f.ready();await f.key('Space');await f.key('ArrowDown');assert.match(f.overlay,/aria-label="Text one"/);await f.key('KeyS');assert.match(f.overlay,/aria-label="Text two"/);assert.ok(f.state.items.find(item=>item.id===f.text1).trashedAt);await f.key('Backspace');assert.match(f.overlay,/aria-label="Text one"/);assert.equal(f.state.items.find(item=>item.id===f.text1).trashedAt,null);});
 
+test('Undo take down that leaves a copied-again text in Trash keeps the selection and preview where they are',async()=>{
+ const f=fixture();await f.ready();await f.key('Space');await f.key('ArrowDown');await f.key('KeyS');assert.match(f.overlay,/aria-label="Text two"/);
+ const command=f.api.command;f.api.command=async(action,payload)=>action==='undo'?structuredClone(f.state):command(action,payload);
+ await f.key('Backspace');assert.ok(f.state.items.find(item=>item.id===f.text1).trashedAt);assert.match(f.overlay,/aria-label="Text two"/);assert.doesNotMatch(f.overlay,/empty-preview/);assert.deepEqual(selectedCards(f),[f.text2]);
+});
+
 test('removing the final preview item keeps an empty Undo view and Backspace restores that exact item',async()=>{
  for(const pinned of [false,true]){
   const f=fixture();await f.ready();f.api.emit({items:[{...f.state.items[0],pinned}]});await f.ready();await f.key('Space');await f.key('KeyS');
@@ -147,6 +153,11 @@ test('native hide clears clean preview and does not leave it on the next opening
 
 test('editor requests anonymous CORS before loading managed original',async()=>{const f=fixture();await f.ready();await f.key('Space');await f.key('KeyC');assert.equal(f.imageLoads.length,1);assert.equal(f.imageLoads[0].crossOrigin,'anonymous');assert.match(f.imageLoads[0].url,/\/original$/);});
 
+test('a click without a drag in crop mode leaves the image uncropped like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyC');
+ await f.pointer('pointerdown',300,100);await f.pointer('pointerup',300,100);await f.key('Enter');
+ assert.deepEqual(f.commands.filter(value=>value.action==='saveImage'),[]);
+});
 test('canvas export rejection retains dirty crop and explicit Enter retry saves it',async()=>{const f=fixture();await f.ready();await f.key('Space');await f.key('KeyC');await f.pointer('pointerdown',60,30);await f.pointer('pointermove',500,150);await f.pointer('pointerup',500,150);f.failExportOnce();await f.key('Enter');assert.match(f.overlay,/id="markup-canvas"/);assert.equal(f.commands.filter(command=>command.action==='saveImage').length,0);assert.match(f.nodes.get('toast').textContent,/Image changes could not be saved/);await f.key('Enter');assert.doesNotMatch(f.overlay,/id="markup-canvas"/);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,{x:60,y:30,width:440,height:120});});
 
 for(const ordering of ['broadcast before reply','reply before broadcast','unrelated surface before reply'])test('preview crop undo and redo survive '+ordering,async()=>{
