@@ -96,6 +96,11 @@ const graphemes=new Intl.Segmenter('en',{granularity:'grapheme'});
 // 64 graphemes can span far more UTF-16 units; this only bounds raw input.
 const TAG_INPUT_LIMIT=4096;
 const validTagName=name=>!/[\p{Cc}\p{Cf}]/u.test(name)&&[...graphemes.segment(name)].length<=64;
+// Match macOS nameAndPin: 1-160 Characters, at most 1024 UTF-8 bytes, and no
+// control, line or paragraph separator characters.
+// Swift's .whitespacesAndNewlines also trims U+0085, which String.trim() keeps.
+const trimName=value=>value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu,'');
+function itemName(value){let name='';try{name=text(typeof value==='string'?trimName(value):value,TAG_INPUT_LIMIT,true);}catch{}if(!name||[...graphemes.segment(name)].length>160||Buffer.byteLength(name)>1024||/[\p{Cc}\p{Zl}\p{Zp}]/u.test(name))fail('Enter a name (1–160 characters)');return name;}
 function saved(item) { return item.retainedAt != null || item.pinned || item.folderIds.length > 0 || item.tags.length > 0; }
 // Match macOS LinkIdentity.standalone: a copied URL keeps its link identity
 // when the source adds a trailing newline or surrounding spaces.
@@ -104,6 +109,14 @@ function plainURL(value) {
   value = value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, '');
   if (!value || /\s/.test(value) || value.length > 8192 || !/^https?:\/\/[^/\\]/i.test(value)) return null;
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
+}
+
+// Match macOS LinkIdentity.normalized: utm_*, fbclid and gclid (any case) do not make a different link.
+function linkIdentity(href) {
+  try {
+    const u = new URL(href), drop = part => { const name = part.split('=')[0]; let decoded = name; try { decoded = decodeURIComponent(name); } catch {} return /^utm_/i.test(decoded) || /^(fbclid|gclid)$/i.test(decoded); };
+    u.search = u.search.slice(1).split('&').filter(part => !drop(part)).join('&'); return u.href;
+  } catch { return href; }
 }
 
 // A cold PowerShell start can exceed 15 seconds on a busy machine, for example
@@ -293,7 +306,8 @@ class Store {
   async insertRecording(value){
     const assets=await this.recordingAssets(value);
     try{
-      const matching=this.data.items.filter(item=>item.recording&&!item.trashedAt&&item.videoFile===assets.videoFile),prior=matching.sort((a,b)=>b.createdAt-a.createdAt)[0];
+      // Like macOS identicalImage, a trimmed recording no longer matches its original.
+      const matching=this.data.items.filter(item=>item.recording&&!item.trashedAt&&!item.renderedVideoFile&&item.videoFile===assets.videoFile),prior=matching.sort((a,b)=>b.createdAt-a.createdAt)[0];
       if(value.signal?.aborted)fail('Video operation canceled');
       if(!prior&&this.data.items.length>=20000){
         this.releaseInFlightMedia(assets.inFlightMediaFiles);assets.inFlightMediaFiles=[];
@@ -304,7 +318,7 @@ class Store {
       const before=clone(this.data),live=this.liveItems(),now=this.clock();
       try{
         const item=prior||{id:crypto.randomUUID(),kind:'image',recording:true,text:'',url:'',title:'',name:'',pinned:false,folderIds:[],tags:[],note:'',retainedAt:null,lastCopiedAt:null,createdAt:now,updatedAt:now,trashedAt:null,hiddenFromShelf:false,annotations:[],crop:null,ocrText:'',imageFile:assets.posterFile,renderedFile:'',videoFile:assets.videoFile,renderedVideoFile:'',...assets.details};
-        item.createdAt=now;item.updatedAt=now;item.hiddenFromShelf=false;item.captureRevision=crypto.randomUUID();
+        item.createdAt=now;if(prior)item.lastCapturedAt=now;item.updatedAt=now;item.hiddenFromShelf=false;item.captureRevision=crypto.randomUUID();
         this.data.items=[item,...this.data.items.filter(entry=>entry.id!==item.id)];this.expire(false);this.persist();return item;
       }catch(error){this.rollback(before,live);throw error;}
     }finally{this.releaseInFlightMedia(assets.inFlightMediaFiles);}
@@ -328,8 +342,20 @@ class Store {
     // A new note is always its own record, like macOS createNote; only captures deduplicate,
     // and they never match a note (createdAsNote), so a capture or import cannot merge or drop one.
     const matching = extra.fresh ? [] : this.data.items.filter(i => i.kind === kind && !i.trashedAt && !i.createdAsNote &&
-      (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? i.url === url : !i.recording&&i.imageFile === imageFile));
+      (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? linkIdentity(i.url) === linkIdentity(url) : !i.recording&&i.imageFile === imageFile));
     const prior = matching.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (kind === 'link' && matching.length > 1) {
+      // Libraries made before tracking parameters were ignored can hold several of these. Merge only the ones whose name and note do not clash with the kept
+      // item's (macOS never deletes them); the others stay as they are. The merged item keeps the address of the oldest copy.
+      let name = prior.name, note = prior.note;
+      const merged = [prior];
+      for (const other of matching.slice(1)) {
+        if ((other.name && name && other.name !== name) || (other.note && note && other.note !== note)) continue;
+        name ||= other.name; note ||= other.note; merged.push(other);
+      }
+      matching.splice(0, matching.length, ...merged);
+      prior.url = merged.reduce((a, b) => b.createdAt < a.createdAt ? b : a).url;
+    }
     if(!prior&&this.data.items.length>=20000){
       if(kind==='image'){
         const referenced=this.mediaReferencesForCapacityCleanup();
@@ -340,7 +366,7 @@ class Store {
     const now = this.clock();
     const item = prior || {id: crypto.randomUUID(), kind, text: textValue, url, title: '', name: '', pinned: false, folderIds: [], tags: [],
       imageFile, renderedFile: '', ocrText: '', annotations: [], crop: null, note:'', retainedAt:null, lastCopiedAt:null, createdAt: now, updatedAt: now, trashedAt: null, hiddenFromShelf: false};
-    if(kind==='link'&&prior){item.lastCopiedAt=now;item.lastCapturedAt=now;}else item.createdAt=now;
+    if(prior){item.lastCopiedAt=now;item.lastCapturedAt=now;}if(!(kind==='link'&&prior))item.createdAt=now;
     item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
     if(kind==='text')item.text=textValue;
     if (extra.title) item.title = text(extra.title, 500, true);
@@ -350,7 +376,9 @@ class Store {
       item.folderIds = [...new Set(matching.flatMap(i => i.folderIds))]; item.tags = [...new Set(matching.flatMap(i => i.tags))];
       item.name ||= matching.find(i => i.name)?.name || '';
       item.note ||= matching.find(i => i.note)?.note || '';
+      for(const key of ['title','author','thumbnailFile'])if(!item[key]){const from=matching.find(i=>i[key]);if(from)item[key]=from[key];}
       const dates=matching.map(i=>i.retainedAt).filter(Number.isFinite);if(dates.length)item.retainedAt=Math.min(...dates);
+      const copied=matching.map(i=>i.lastCopiedAt).filter(Number.isFinite);if(copied.length)item.lastCopiedAt=Math.max(...copied);
     }
     this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
     this.expire(false); this.persist(); return item;
@@ -426,7 +454,7 @@ class Store {
     if(action==='cleanup'){this.finishPermanentDeletion();return;}
     if (action === 'setSettings') { this.data.settings = settings(payload.patch, this.data.settings);this.pruneRecentFolders();this.expire(false); this.persist(); return; }
     if (action === 'createFolder') {
-      const name = text(payload.name, TAG_INPUT_LIMIT).trim(); if (!name) fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');
+      const name = trimName(text(payload.name, TAG_INPUT_LIMIT)); if (!name) fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');
       const parentId = payload.parentId || null;
       if(parentId){const parent=this.data.folders.find(f=>f.id===parentId);if(!parent)fail('Parent folder is unavailable');if(parent.parentId!=null)fail('Only top-level folders can contain subfolders');}
       if(this.data.folders.some(f=>(f.parentId??null)===parentId&&foldedName(f.name)===foldedName(name)))fail('A folder with this name already exists');
@@ -434,7 +462,7 @@ class Store {
     }
     if(action==='renameFolder'||action==='removeFolder') {
       const folder=this.data.folders.find(f=>f.id===payload.id);if(!folder)fail('Folder unavailable');const originalMemberships=new Map(this.data.items.map(item=>[item.id,JSON.stringify(item.folderIds)]));
-      if(action==='renameFolder'){const name=text(payload.name,TAG_INPUT_LIMIT).trim();if(!name)fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');folder.name=name;if(this.data.folders.some(f=>f!==folder&&(f.parentId??null)===(folder.parentId??null)&&foldedName(f.name)===foldedName(folder.name)))fail('A folder with this name already exists');}
+      if(action==='renameFolder'){const name=trimName(text(payload.name,TAG_INPUT_LIMIT));if(!name)fail('Folder name is empty');if(!validTagName(name))fail('Invalid folder name');folder.name=name;if(this.data.folders.some(f=>f!==folder&&(f.parentId??null)===(folder.parentId??null)&&foldedName(f.name)===foldedName(folder.name)))fail('A folder with this name already exists');}
       else {const removed=new Set([folder.id]);let changed=true;while(changed){changed=false;for(const child of this.data.folders)if(removed.has(child.parentId)&&!removed.has(child.id)){removed.add(child.id);changed=true;}}this.data.folders=this.data.folders.filter(f=>!removed.has(f.id));for(const item of this.data.items)if(item.folderIds.some(id=>removed.has(id))){item.retainedAt??=now;item.folderIds=item.folderIds.filter(id=>!removed.has(id));}}
       this.pruneRecentFolders();this.persist();this.invalidateTrashUndo(this.data.items.filter(item=>originalMemberships.get(item.id)!==JSON.stringify(item.folderIds)).map(item=>item.id));return;
     }
@@ -443,16 +471,22 @@ class Store {
       if(!tag||!affected.length)fail('Tag unavailable');
       let name;
       if(action==='renameTag'){
-        name=text(payload.name,TAG_INPUT_LIMIT).trim();
+        name=text(payload.name,TAG_INPUT_LIMIT).trim().replace(/^#+|#+$/g,'').trim();
         if(!name||!validTagName(name))fail('Invalid tag name');
         if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&foldedName(value)===foldedName(name))))fail('A tag with this name already exists');
+        if(name===tag)return {name};
       }
       for(const item of affected){item.retainedAt??=now;item.tags=action==='renameTag'?[...new Set(item.tags.map(value=>value===tag?name:value))]:item.tags.filter(value=>value!==tag);}
-      this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return;
+      this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return action==='renameTag'?{name}:undefined;
     }
     if (action === 'undo') {
       const batch = this.undoStack.pop(); if (!batch) return;
-      for (const before of batch) { const item = this.data.items.find(i => i.id === before.id); if (item) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; } }
+      // Copying the same text or link again while it was off the shelf made a new card; Undo must not hang it twice.
+      // Decide for the whole batch first, like macOS, so two items of one take down never block each other.
+      const twin = item => item.trashedAt && item.kind !== 'image' && !item.createdAsNote && this.data.items.some(other => other !== item && !other.trashedAt && !other.hiddenFromShelf && !other.createdAsNote && other.kind === item.kind &&
+        (item.kind === 'text' ? this.textIdentity(other) === this.textIdentity(item) : linkIdentity(other.url) === linkIdentity(item.url)));
+      const entries = batch.map(before => ({before, item: this.data.items.find(i => i.id === before.id)})).filter(entry => entry.item && !(entry.before.trashedAt == null && twin(entry.item)));
+      for (const {before, item} of entries) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; }
       this.persist(); return;
     }
     const items = this.selected(payload.ids || (payload.id ? [payload.id] : []));
@@ -474,7 +508,7 @@ class Store {
         if(payload.text!==undefined){if(item.kind!=='text')fail('Only text can be edited');item.text=sizedText(payload.text,true);}
       }
       else if(action==='markCopied'){item.lastCopiedAt=now;item.captureRevision=crypto.randomUUID();}
-      else if (action === 'name') { item.name = text(payload.name, 200, true).trim(); item.pinned = true; item.retainedAt??=now; }
+      else if (action === 'name') { item.name = itemName(payload.name); item.pinned = true; item.retainedAt??=now; }
       else if (action === 'folder') {
         if (!this.data.folders.some(f => f.id === payload.folderId)) fail('Folder unavailable');
         if(payload.pinning!==undefined&&typeof payload.pinning!=='boolean')fail('Invalid folder pin option');
@@ -487,14 +521,14 @@ class Store {
         const tag=text(payload.tag,TAG_INPUT_LIMIT).trim();item.tags=item.tags.filter(value=>value!==tag);
       } else if (action === 'tag') {
         if (!Array.isArray(payload.tags)) fail('Invalid tags');
-        const tags = [...new Set(payload.tags.map(tag => { tag = text(tag, TAG_INPUT_LIMIT).trim(); if (item.tags.includes(tag)) return tag; tag = tag.replace(/^#+|#+$/g, '').trim(); const key = foldedName(tag), known = item.tags.find(own => foldedName(own) === key) ?? knownTags.get(key) ?? tag; if (tag) knownTags.set(key, known); return tag && known; }).filter(Boolean))];
+        const tags = [...new Set(payload.tags.map(tag => { tag = trimName(text(tag, TAG_INPUT_LIMIT)); if (item.tags.includes(tag)) return tag; tag = trimName(tag.replace(/^#+|#+$/g, '')); const key = foldedName(tag), known = item.tags.find(own => foldedName(own) === key) ?? knownTags.get(key) ?? tag; if (tag) knownTags.set(key, known); return tag && known; }).filter(Boolean))];
         // Existing longer tags stay editable; only newly added names must fit.
         if (tags.some(tag => !item.tags.includes(tag) && !validTagName(tag))) fail('Invalid tag name');
         item.tags = tags;
         if(item.tags.length)item.retainedAt??=now;
       } else if (action === 'remove') { if (saved(item)) item.hiddenFromShelf = true; else{item.trashedAt = now;item.trashRevision=crypto.randomUUID();} }
       else if (action === 'trash') item.trashedAt = now;
-      else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; }
+      else if (action === 'restore') { item.trashedAt = null; item.trashRevision=null; item.hiddenFromShelf = false; item.lastCapturedAt=now; }
       else if (action === 'editText') { if (item.kind !== 'text') fail('Only text can be edited'); item.text = sizedText(payload.text, true); }
       else if (action === 'saveImage') {
         if (item.kind !== 'image' || item.recording || typeof payload.dataUrl !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(payload.dataUrl) || payload.dataUrl.length > 90_000_000) fail('Invalid image edit');

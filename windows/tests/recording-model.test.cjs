@@ -18,6 +18,12 @@ test('recording recapture preserves names, pins, folders, tags and original medi
  const repeated=await store.insertRecording(imported(source));assert.equal(first.id,repeated.id);assert.equal(store.data.items.length,1);assert.equal(repeated.name,'Reference clip');assert.equal(repeated.pinned,true);assert.deepEqual(repeated.folderIds,[folder.id]);assert.deepEqual(repeated.tags,['reference']);
  const mov=await store.insertRecording(imported(path.join(fixtures,'synthetic-rgb-tone.mov')));assert.match(store.mediaPath(mov.id,true),/\.mov$/);
 }));
+test('recapturing a restored recording renews its retention like macOS',()=>fixture(async(_store,directory)=>{
+ let now=1000;const day=86400000,store=new Store(directory,{clock:()=>now}),item=await store.insertRecording(imported(source));
+ now=32*day;store.expire();assert.ok(item.trashedAt);store.modify('restore',{ids:[item.id]});
+ now=61*day;assert.equal((await store.insertRecording(imported(source))).id,item.id);
+ now=63*day;store.expire();assert.equal(item.trashedAt,null);now=92*day;store.expire();assert.ok(item.trashedAt);
+}));
 test('trim transaction preserves original video and organization and rejects stale or trashed targets',()=>fixture(async(store,directory)=>{
  const item=await store.insertRecording(imported(source)),original=store.mediaPath(item.id,true),hash=fingerprint(store,item.id),originalURL=store.publicState().items[0].videoUrl;store.modify('name',{id:item.id,name:'Kept name'});assert.equal(store.publicState().items[0].videoUrl,originalURL);
  // This test exercises storage transaction semantics; the separate native
@@ -28,6 +34,12 @@ test('trim transaction preserves original video and organization and rejects sta
  const trimmed=store.publicState().items[0];assert.notEqual(trimmed.videoUrl,originalURL);assert.equal(trimmed.videoUrl,'appmedia://media/'+item.id+'/video?v='+trimmed.sourceFingerprint);assert.equal(new Store(directory).publicState().items[0].videoUrl,trimmed.videoUrl);
  await assert.rejects(store.commitRecordingTrim({id:item.id,sourceFingerprint:hash,...imported(rendered)}),/changed/);
  const active=fingerprint(store,item.id);store.modify('trash',{ids:[item.id]});await assert.rejects(store.commitRecordingTrim({id:item.id,sourceFingerprint:active,...imported(source)}),/changed/);
+}));
+test('importing the original of a trimmed recording again adds the full recording like macOS',()=>fixture(async(store,directory)=>{
+ const item=await store.insertRecording(imported(source)),rendered=path.join(directory,'rendered.mp4');fs.writeFileSync(rendered,Buffer.concat([fs.readFileSync(source),Buffer.from([0,0,0,8,102,114,101,101])]));
+ await store.commitRecordingTrim({id:item.id,sourceFingerprint:fingerprint(store,item.id),...imported(rendered),durationMs:2000});
+ const again=await store.insertRecording(imported(source));assert.notEqual(again.id,item.id);assert.equal(again.durationMs,6000);assert.equal(store.item(item.id).durationMs,2000);assert.equal(store.data.items.length,2);
+ assert.equal((await store.insertRecording(imported(source))).id,again.id);assert.equal(store.data.items.length,2);
 }));
 test('failed trim commit preserves the previous record and both referenced media versions',()=>fixture(async(store,directory)=>{
  const item=await store.insertRecording(imported(source)),before=structuredClone(store.item(item.id)),hash=fingerprint(store,item.id),persist=store.persist;
