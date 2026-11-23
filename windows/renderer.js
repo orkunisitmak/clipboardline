@@ -956,13 +956,9 @@ document.addEventListener('dragstart',event=>{
   const onCardDragEnd=event=>{try{card.removeEventListener('dragend',onCardDragEnd);}catch{}document.body?.classList?.remove?.('dragging-out');clearLibraryDrag();const completed=Boolean(event?.dataTransfer&&event.dataTransfer.dropEffect!=='none');if(ui.view==='shelves')void command('dragEndOverlay',{completed});};
   card.addEventListener('dragend',onCardDragEnd);
  }
-  const text=values.filter(value=>value.kind!=='image').map(value=>value.kind==='link'?value.url:value.text).join('\n\n');
+ const text=values.filter(value=>value.kind!=='image').map(value=>value.kind==='link'?value.url:value.text).join('\n\n');
  event.dataTransfer.effectAllowed='copy';
- if(text){
-  try{event.dataTransfer.setData('text/plain',text);}catch{}
-  try{event.dataTransfer.setData('Text',text);}catch{}
-  try{event.dataTransfer.setData('text/html',esc(text));}catch{}
- }
+ if(text)try{event.dataTransfer.setData('text/plain',text);}catch{}
  event.dataTransfer.setData(libraryDragType,JSON.stringify(ids));
  const hasImage=values.some(value=>value.kind==='image');
  if(ui.view==='library'&&!event.altKey){
