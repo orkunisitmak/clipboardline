@@ -337,6 +337,16 @@ test('a click without a drag in a shape tool adds no mark and keeps undo and red
  await f.key('KeyD');await f.pointer('pointerdown',300,40);await f.pointer('pointermove',300,160);await f.pointer('pointerup',300,160);assert.deepEqual(markupHistory(f),{undo:true,redo:false},'A vertical line is a mark');
  await f.key('Escape');assert.deepEqual(f.state.items.find(value=>value.id===f.image).annotations.map(value=>value.type),['line']);
 });
+test('selecting a mark without moving it takes no undo step like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('KeyM');
+ await f.key('KeyR');await f.pointer('pointerdown',60,40);await f.pointer('pointermove',200,100);await f.pointer('pointerup',200,100);
+ await f.pointer('pointerdown',300,40);await f.pointer('pointermove',400,100);await f.pointer('pointerup',400,100);
+ await f.key('KeyZ',{ctrl:true});assert.deepEqual(markupHistory(f),{undo:true,redo:true});
+ await f.key('KeyV');await f.pointer('pointerdown',60,40);await f.pointer('pointerup',60,40);assert.deepEqual(markupHistory(f),{undo:true,redo:true},'Click a mark');
+ await f.pointer('pointerdown',800,200);await f.pointer('pointerup',800,200);assert.deepEqual(markupHistory(f),{undo:true,redo:true},'Click empty canvas');
+ await f.pointer('pointerdown',60,40);await f.pointer('pointermove',90,60);await f.pointer('pointerup',90,60);assert.deepEqual(markupHistory(f),{undo:true,redo:false},'Moving a mark is a step');
+ await f.key('KeyZ',{ctrl:true});await f.key('Escape');assert.deepEqual(f.state.items.find(value=>value.id===f.image).annotations.map(value=>value.x),[60]);
+});
 test('native image preview and crop event wait until the hidden window is shown',async()=>{
  const f=fixture();await f.ready();await f.api.command('hide');await f.ready();
  const viewEvent={selectId:f.image,kind:'image',preview:true,crop:true,serial:'capture-before-window-show'};
