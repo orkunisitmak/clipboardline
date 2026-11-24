@@ -166,6 +166,24 @@ for(const ordering of ['broadcast before reply','reply before broadcast','unrela
  await f.key('KeyZ',{ctrl:true,shift:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,3);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,crop);
 });
 
+test('drawing a mark and undoing it saves no edit like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyM');await f.key('KeyR');
+ await f.pointer('pointerdown',60,30);await f.pointer('pointermove',200,150);await f.pointer('pointerup',200,150);
+ await f.key('KeyZ',{ctrl:true});await f.key('Escape');assert.deepEqual(f.commands.filter(value=>value.action==='saveImage'),[]);
+});
+test('undoing a mark saved while the store reply is late still saves the undo',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyM');await f.key('KeyR');
+ await f.pointer('pointerdown',60,30);await f.pointer('pointermove',200,150);await f.pointer('pointerup',200,150);
+ f.deferImageBroadcast({surface:true});await f.key('KeyS',{ctrl:true});await f.key('KeyZ',{ctrl:true});await f.key('Escape');f.releaseImageBroadcast();await f.ready();
+ assert.equal(f.commands.filter(value=>value.action==='saveImage').length,2);assert.deepEqual(f.state.items.find(item=>item.id===f.image).annotations,[]);
+});
+test('a mark undone while its save is pending is still undone on disk',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyM');await f.key('KeyR');
+ await f.pointer('pointerdown',60,30);await f.pointer('pointermove',200,150);await f.pointer('pointerup',200,150);
+ const release=f.deferReply('saveImage'),saving=f.key('KeyS',{ctrl:true});await f.ready();await f.key('KeyZ',{ctrl:true});release();await saving;await f.ready();
+ await f.key('Escape');await f.ready();
+ assert.deepEqual(f.state.items.find(item=>item.id===f.image).annotations,[]);
+});
 test('an external same-ID image edit invalidates acknowledged preview undo history',async()=>{
  const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyC');await f.pointer('pointerdown',60,30);await f.pointer('pointermove',500,150);await f.pointer('pointerup',500,150);f.deferImageBroadcast();await f.key('Enter');f.releaseImageBroadcast();await f.ready();
  const external={x:10,y:20,width:80,height:90};f.api.emit({items:f.state.items.map(value=>value.id===f.image?{...value,crop:external,mediaUrl:value.mediaUrl+'?v=external'}:value)});await f.ready();
