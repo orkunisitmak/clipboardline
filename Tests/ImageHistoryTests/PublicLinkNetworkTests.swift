@@ -195,7 +195,7 @@ import XCTest
     func testPagesOfUnclosedTagsParseInLinearTime() throws {
         let url = URL(string: "https://public.example.org/page")!
         func filled(_ unit: String) -> String { String(repeating: unit, count: 512 * 1024 / unit.utf8.count) }
-        let pages = ["<title", "<title>", "<!--", "<script>", "<style x", "<meta ", "<", "&amp;"].map(filled)
+        let pages = ["<title", "<title>", "<!--", "<script>", "<style x", "<meta ", "<meta \"", "<meta '\"'\"", "<", "&amp;"].map(filled)
             + [String(repeating: "<meta " + String(repeating: "a", count: 4000) + ">", count: 128)]
         for page in pages {
             let start = Date()
@@ -225,6 +225,9 @@ import XCTest
         XCTAssertEqual(parsed.thumbnailURL?.absoluteString, "https://public.example.org/a.png")
         let single = "<meta property='og:title' content='Tips > Tricks'><title>Page</title>"
         XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(single.utf8), url: url).title, "Tips > Tricks")
+        // A quote that never closes does not swallow the tags after it: the tag ends at its first `>` as before.
+        let unclosed = "<meta name='size' content=\"5\" tall\"><meta property='og:title' content='Meta'><title>Page</title>"
+        XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(unclosed.utf8), url: url).title, "Meta")
     }
 }
 
