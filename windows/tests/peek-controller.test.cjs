@@ -197,3 +197,51 @@ test('non-hovered renewal extends expiration and new generation supersedes old g
   assert.equal(peek.start(3, 0), false);
   assert.equal(peek.active, false);
 });
+
+test('pending reveal preserves hover hold on commit and cancels cleanly on early focus or release', () => {
+  const clock = createClock();
+  const expired = [];
+  const peek = new PeekController({
+    onExpire: (generation) => expired.push(generation),
+    setTimeout: clock.setTimeout,
+    clearTimeout: clock.clearTimeout,
+    now: clock.now
+  });
+
+  // Hover arriving while show() awaits preparation holds the committed peek immediately.
+  peek.beginPending(10);
+  assert.equal(peek.pending, true);
+  assert.equal(peek.hold(), true);
+  assert.equal(peek.pendingHeld, true);
+  assert.equal(peek.commitPending(10, PEEK_DURATION_MS), true);
+  assert.equal(peek.pending, false);
+  assert.equal(peek.active, true);
+  assert.equal(peek.held, true);
+  assert.equal(clock.pending(), 0);
+  clock.advance(PEEK_DURATION_MS * 2);
+  assert.deepEqual(expired, []);
+
+  assert.equal(peek.release(), true);
+  clock.advance(PEEK_DURATION_MS);
+  assert.deepEqual(expired, [10]);
+
+  // Early release while still pending clears pendingHeld before commit.
+  peek.beginPending(11);
+  assert.equal(peek.hold(), true);
+  assert.equal(peek.release(), true);
+  assert.equal(peek.pendingHeld, false);
+  assert.equal(peek.commitPending(11, PEEK_DURATION_MS), true);
+  assert.equal(peek.held, false);
+  clock.advance(PEEK_DURATION_MS);
+  assert.deepEqual(expired, [10, 11]);
+
+  // Focus/promotion or drag canceling during pending show prevents any peek timer from starting.
+  peek.beginPending(12);
+  assert.equal(peek.cancel(), false);
+  assert.equal(peek.pending, false);
+  assert.equal(peek.commitPending(12, PEEK_DURATION_MS), false);
+  assert.equal(peek.active, false);
+  assert.equal(clock.pending(), 0);
+  clock.advance(PEEK_DURATION_MS * 2);
+  assert.deepEqual(expired, [10, 11]);
+});
