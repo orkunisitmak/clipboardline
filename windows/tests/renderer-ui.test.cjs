@@ -813,6 +813,13 @@ test('Tab onto an empty shelf leaves copy, take down, pin and preview with nothi
  for(const [code,extra]of [['Enter',{}],['KeyS',{}],['KeyP',{}],['Space',{}],['KeyC',{ctrl:true}]])await f.key(code,extra);
  assert.deepEqual(f.commands.slice(commands),[]);assert.equal(f.overlay,'');assert.equal(f.state.items.find(value=>value.id===f.image).trashedAt,null);assert.equal(f.state.windowVisible,true);
 });
+test('the Library action bar keeps the Take down title on its disabled row like macOS',async()=>{
+ const row=(f,id)=>{const start=f.overlay.indexOf('data-command="'+id+'"'),html=f.overlay.slice(start,f.overlay.indexOf('</button>',start));return{disabled:html.startsWith('data-command="'+id+'" disabled>'),title:html.match(/<span class="title">([^<]*)</)[1],detail:html.match(/<small>([^<]*)</)[1]};};
+ const f=fixture();await f.ready();f.state.items.find(value=>value.id===f.text1).retainedAt=1000;f.api.emit({items:f.state.items});await f.ready();
+ await f.key('KeyL');await f.click('scope',{scope:'saved'});await f.cardClick(f.text1);await f.key('KeyK',{ctrl:true});
+ assert.deepEqual(row(f,'remove'),{disabled:true,title:'Take down',detail:'Available on the shelves'});
+ assert.deepEqual(row(f,'trash'),{disabled:false,title:'Move to Trash',detail:'1 selected'});
+});
 test('Library selection counts use the shared "%d selected" catalog entry in the chosen language',async()=>{
  const f=fixture();await f.ready();await f.key('KeyP');await f.key('ArrowDown');await f.key('KeyP');await f.api.command('library');await f.ready();await f.key('KeyA',{ctrl:true});
  for(const [language,expected]of [['tr','2 seçili'],['es','2 seleccionadas'],['zh-Hans','已选择 2 项'],['en','2 selected']]){f.api.emit({settings:{...f.state.settings,language}});await f.ready();assert.match(f.main,new RegExp('<span>'+expected+'</span>'),language);assert.match(f.main,new RegExp('<h2>'+expected+'</h2>'),language+' inspector');await f.click('add-to-folder');assert.match(f.overlay,new RegExp('<p>'+expected+' · '),language+' folder picker');await f.click('close-modal');}
