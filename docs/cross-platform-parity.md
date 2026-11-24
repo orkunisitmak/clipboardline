@@ -66,6 +66,9 @@ declared character set (byte-order mark, `Content-Type`, XHTML declaration, earl
 Turkish letters.
 `image-recopy-dedupe` requires copying the same image again to keep one Library item,
 moved to the front with its pin, name, tags and folders.
+`note-survives-matching-copy` requires a note made with New note to stay as it is when
+the same text is copied: the copy becomes its own item and no note moves to the shelf
+or to Trash.
 `link-tracking-parameters` requires a link copied again with different `utm_*`,
 `fbclid` or `gclid` parameters to be the same item, keeping its first stored address,
 while any other query parameter or fragment makes a separate item; both adapters

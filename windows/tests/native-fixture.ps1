@@ -11,6 +11,16 @@ public static class FixtureFocus {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT bounds);
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left,top,right,bottom; }
+  // The placement Windows reports for the fixture's own top-level window.
+  public static string Placement(IntPtr window) {
+    string state=IsIconic(window)?"minimized":IsZoomed(window)?"maximized":"normal";
+    RECT bounds;if(!GetWindowRect(window,out bounds))throw new Exception("The fixture window bounds are unavailable.");
+    return state+":"+bounds.left+","+bounds.top+","+bounds.right+","+bounds.bottom;
+  }
   [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int key);
   [DllImport("user32.dll")] public static extern uint SendInput(uint count, INPUT[] inputs, int size);
   [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public InputUnion union; }
@@ -96,6 +106,11 @@ $timer.Add_Tick({
         } elseif ($command.action -eq 'activate-window') {
           if ($command.handle -notmatch '^\d{1,20}$' -or $command.processId -le 0) { throw 'Invalid source window/process.' }
           [FixtureFocus]::ActivateExpectedWindow([IntPtr][Int64]::Parse([string]$command.handle),[uint32]$command.processId,[uint32]$PID)
+        } elseif ($command.action -eq 'placement') {
+          if ($command.state -notin @('Normal','Maximized','Minimized')) { throw 'Unknown fixture window placement.' }
+          $form.WindowState=[System.Windows.Forms.FormWindowState]$command.state
+        } elseif ($command.action -eq 'report') {
+          # Acknowledges the serial, so the reader knows the state below is current.
         } elseif ($command.action -eq 'keys') { [System.Windows.Forms.SendKeys]::SendWait([string]$command.keys) }
         elseif ($command.action -eq 'hold-paste') { if($command.duration -lt 100 -or $command.duration -gt 1800){throw 'Invalid fixture key duration.'};if(-not $command.expectedForeground -or [FixtureFocus]::GetForegroundWindow().ToInt64().ToString() -ne [string]$command.expectedForeground){throw 'The source host is not the actual Win32 foreground; no test keys were sent.'};$script:keyDeadline=[DateTime]::UtcNow.AddMilliseconds($command.duration);[FixtureFocus]::PasteShortcut($false) }
         elseif ($command.action -eq 'release-keys') { [FixtureFocus]::PasteShortcut($true);$script:keyDeadline=$null }
@@ -106,7 +121,7 @@ $timer.Add_Tick({
   try {
     $files=[System.Windows.Forms.Clipboard]::GetFileDropList()
     $focused=(@($controls.Keys|Where-Object {$controls[$_].Focused})|Select-Object -First 1)
-    $value=@{ready=$true;handle=$form.Handle.ToInt64().ToString();secondHandle=$secondForm.Handle.ToInt64().ToString();secondText=$secondInput.Text;secondFocused=$secondInput.Focused;primaryActivations=$script:primaryActivations;foreground=[FixtureFocus]::GetForegroundWindow().ToInt64().ToString();processId=$PID;text=$controls.rich.Text;plainText=$controls.plain.Text;readOnlyText=$controls.readonly.Text;passwordLength=$controls.password.Text.Length;hasImage=$controls.rich.Rtf.Contains('\pict');dropCount=$files.Count;pngAvailable=[System.Windows.Forms.Clipboard]::ContainsData('PNG');focused=$focused;lastSerial=$script:lastSerial;commandError=$script:commandError;inputEvents=@($script:inputEvents.ToArray());shortcutHeld=([FixtureFocus]::GetAsyncKeyState(0x11) -lt 0 -and [FixtureFocus]::GetAsyncKeyState(0x0D) -lt 0)}
+    $value=@{ready=$true;handle=$form.Handle.ToInt64().ToString();placement=[FixtureFocus]::Placement($form.Handle);secondHandle=$secondForm.Handle.ToInt64().ToString();secondText=$secondInput.Text;secondFocused=$secondInput.Focused;primaryActivations=$script:primaryActivations;foreground=[FixtureFocus]::GetForegroundWindow().ToInt64().ToString();processId=$PID;text=$controls.rich.Text;plainText=$controls.plain.Text;readOnlyText=$controls.readonly.Text;passwordLength=$controls.password.Text.Length;hasImage=$controls.rich.Rtf.Contains('\pict');dropCount=$files.Count;pngAvailable=[System.Windows.Forms.Clipboard]::ContainsData('PNG');focused=$focused;lastSerial=$script:lastSerial;commandError=$script:commandError;inputEvents=@($script:inputEvents.ToArray());shortcutHeld=([FixtureFocus]::GetAsyncKeyState(0x11) -lt 0 -and [FixtureFocus]::GetAsyncKeyState(0x0D) -lt 0)}
     $temporary=$Output+'.tmp'
     [System.IO.File]::WriteAllText($temporary,($value|ConvertTo-Json -Compress))
     [System.IO.File]::Copy($temporary,$Output,$true)

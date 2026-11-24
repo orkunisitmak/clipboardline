@@ -169,6 +169,24 @@ for(const ordering of ['broadcast before reply','reply before broadcast','unrela
  await f.key('KeyZ',{ctrl:true,shift:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,3);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,crop);
 });
 
+test('drawing a mark and undoing it saves no edit like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyM');await f.key('KeyR');
+ await f.pointer('pointerdown',60,30);await f.pointer('pointermove',200,150);await f.pointer('pointerup',200,150);
+ await f.key('KeyZ',{ctrl:true});await f.key('Escape');assert.deepEqual(f.commands.filter(value=>value.action==='saveImage'),[]);
+});
+test('undoing a mark saved while the store reply is late still saves the undo',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyM');await f.key('KeyR');
+ await f.pointer('pointerdown',60,30);await f.pointer('pointermove',200,150);await f.pointer('pointerup',200,150);
+ f.deferImageBroadcast({surface:true});await f.key('KeyS',{ctrl:true});await f.key('KeyZ',{ctrl:true});await f.key('Escape');f.releaseImageBroadcast();await f.ready();
+ assert.equal(f.commands.filter(value=>value.action==='saveImage').length,2);assert.deepEqual(f.state.items.find(item=>item.id===f.image).annotations,[]);
+});
+test('a mark undone while its save is pending is still undone on disk',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyM');await f.key('KeyR');
+ await f.pointer('pointerdown',60,30);await f.pointer('pointermove',200,150);await f.pointer('pointerup',200,150);
+ const release=f.deferReply('saveImage'),saving=f.key('KeyS',{ctrl:true});await f.ready();await f.key('KeyZ',{ctrl:true});release();await saving;await f.ready();
+ await f.key('Escape');await f.ready();
+ assert.deepEqual(f.state.items.find(item=>item.id===f.image).annotations,[]);
+});
 test('an external same-ID image edit invalidates acknowledged preview undo history',async()=>{
  const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyC');await f.pointer('pointerdown',60,30);await f.pointer('pointermove',500,150);await f.pointer('pointerup',500,150);f.deferImageBroadcast();await f.key('Enter');f.releaseImageBroadcast();await f.ready();
  const external={x:10,y:20,width:80,height:90};f.api.emit({items:f.state.items.map(value=>value.id===f.image?{...value,crop:external,mediaUrl:value.mediaUrl+'?v=external'}:value)});await f.ready();
@@ -852,6 +870,33 @@ test('shelf markup does not consume M in native editors or open text and link it
  await f.key('Escape');await f.key('Escape');f.api.emit({settings:{...f.state.settings,localShortcuts:{markup:''}}});await f.ready();
  await f.key('KeyM');await f.key('KeyX');assert.equal(f.overlay,'');
  });
+test('rendered shelf and library card images carry no draggable=false and cards retain draggable=true with rope sag',async()=>{
+ const f=fixture();await f.ready();
+ const cards=[...f.main.matchAll(/<article class="card kind-([^"]+)"[^>]*style="([^"]*)"[^>]*draggable="([^"]+)"/g)];
+ assert.ok(cards.length>0);
+ for(const card of cards){
+  assert.equal(card[3],'true','Card must be draggable');
+  assert.match(card[2],/--sag:\d+(\.\d+)?px/,'Shelf card must retain --sag rope curve');
+ }
+ const shelfImages=[...f.main.matchAll(/<article class="card[^"]*"[^>]*>[\s\S]*?<img [^>]*draggable="false"/g)];
+ assert.equal(shelfImages.length,0,'Shelf card images must not carry draggable="false"');
+ await f.click('library');
+ const libraryImages=[...f.main.matchAll(/<article class="card[^"]*"[^>]*>[\s\S]*?<img [^>]*draggable="false"/g)];
+ assert.equal(libraryImages.length,0,'Library card images must not carry draggable="false"');
+});
+test('shelf page-next and page-back advance and rewind ui.pages and synchronize selection to visible cards',async()=>{
+ const f=fixture();await f.ready();
+ const extra=navigationItems(f,{image:18,text:4,link:4});
+ f.api.emit({items:[...extra.image,...extra.text,...extra.link]});
+ await f.ready();
+ assert.match(f.main,/<span class="selection-info">1 \/ 2<\/span>/);
+ await f.click('page-next',{kind:'image'});
+ assert.match(f.main,/<span class="selection-info">2 \/ 2<\/span>/);
+ assert.equal(selectedCards(f).length,1);
+ await f.click('page-back',{kind:'image'});
+ assert.match(f.main,/<span class="selection-info">1 \/ 2<\/span>/);
+ assert.deepEqual(selectedCards(f),[extra.image[0].id]);
+});
 test('Take down of a ctrl-selected pair continues right of the removed focus like macOS',async()=>{
  const f=fixture();await f.ready();const values=navigationItems(f,{image:6,text:0,link:0}).image;f.api.emit({items:values});await f.ready();
  await f.cardClick(values[2].id,{ctrl:true});assert.deepEqual(selectedCards(f),[values[0].id,values[2].id]);assert.equal(focusedCard(f),values[2].id);
