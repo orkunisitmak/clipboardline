@@ -328,6 +328,15 @@ test('global native search survives a hidden resize broadcast before the same ev
  assert.doesNotMatch(f.main,/class="search-hud"/,'An unchanged broadcast must not reopen a dismissed search');
 });
 
+const markupHistory=f=>({undo:!/data-action="image-undo"[^>]*disabled/.test(f.overlay),redo:!/data-action="image-redo"[^>]*disabled/.test(f.overlay)});
+test('a click without a drag in a shape tool adds no mark and keeps undo and redo like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('KeyM');
+ await f.key('KeyR');await f.pointer('pointerdown',60,40);await f.pointer('pointermove',200,100);await f.pointer('pointerup',200,100);
+ await f.key('KeyZ',{ctrl:true});assert.deepEqual(markupHistory(f),{undo:false,redo:true});
+ for(const tool of ['KeyR','KeyO','KeyA','KeyD']){await f.key(tool);await f.pointer('pointerdown',300,100);await f.pointer('pointerup',300,100);assert.deepEqual(markupHistory(f),{undo:false,redo:true},tool);}
+ await f.key('KeyD');await f.pointer('pointerdown',300,40);await f.pointer('pointermove',300,160);await f.pointer('pointerup',300,160);assert.deepEqual(markupHistory(f),{undo:true,redo:false},'A vertical line is a mark');
+ await f.key('Escape');assert.deepEqual(f.state.items.find(value=>value.id===f.image).annotations.map(value=>value.type),['line']);
+});
 test('native image preview and crop event wait until the hidden window is shown',async()=>{
  const f=fixture();await f.ready();await f.api.command('hide');await f.ready();
  const viewEvent={selectId:f.image,kind:'image',preview:true,crop:true,serial:'capture-before-window-show'};
