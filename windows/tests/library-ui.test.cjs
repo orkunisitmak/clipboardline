@@ -483,6 +483,17 @@ test('the multi-selection inspector says Unpin when every selected item is pinne
  await f.key('KeyA',{ctrl:true});assert.equal(pinLabel(),'Pin');
  f.state.items[2].pinned=true;f.api.emit({items:f.state.items});await f.ready();assert.equal(pinLabel(),'Unpin');
 });
+test('Library domain filter matches a typed number literally and does not rewrite it to an IP address',async()=>{
+ const f=fixture();await f.ready();const link=f.state.items.find(item=>item.id===f.link);link.url='http://127.0.0.1/page';link.retainedAt=1;f.state.items[0].tags=['x'];f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('toggle-filters');
+ await f.input('domain-filter','127.0.0.1');assert.deepEqual(cards(f),[f.link]);
+ for(const value of ['0x7f.1','2130706433'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[],value);
+});
+test('Library domain filter finds an internationalized link typed as written',async()=>{
+ const f=fixture();await f.ready();const link=f.state.items.find(item=>item.id===f.link);link.url='https://bücher.de/katalog';link.retainedAt=1;f.state.items[0].tags=['x'];f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('toggle-filters');
+ for(const value of ['bücher.de','BÜCHER.de','www.bücher.de','xn--bcher-kva.de'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[f.link],value);
+ await f.input('domain-filter','bücher.org');assert.deepEqual(cards(f),[]);
+ for(const value of ['bücher.de/katalog','bücher.de?x','bücher.de#x'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[],value);
+});
 test('removing a tag that is not open keeps the open tag view',async()=>{
  const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client']});Object.assign(f.state.items[1],{retainedAt:900,tags:['client']});Object.assign(f.state.items[2],{retainedAt:800,tags:['other']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
  await f.click('tag-scope',{tag:'client'});await f.key('ArrowRight');const selectedCard=/<article class="[^"]*\bselected\b[^"]*"[^>]*data-item-id="00000000-0000-4000-8000-000000000002"/;assert.match(f.main,selectedCard);assert.equal(focusedCard(f),f.text1);await f.click('tag-menu',{tag:'other'});await f.key('ArrowDown');await f.key('Enter');await f.click('confirm-modal');
