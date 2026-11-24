@@ -238,3 +238,15 @@ The genuine Windows upgrade baseline is 1.7.7/build70: 545777945 bytes, SHA256
 source `1c93c163e7e45d102d13c1077dd8baa969eab8ba`. Stage
 `clipboardline-1.7.8-build78`, then publish `windows-1.7.8-build71` with that
 verified counterpart. Latest must contain both signed 1.7.8 feeds and packages.
+
+## Windows focus capture through the running monitor
+
+Opening the shelves captures the previously focused field. Windows does this
+through the already running native monitor (one stdin line, a few
+milliseconds) instead of starting PowerShell and compiling the helper each
+time (about 750 ms). Returning focus on close still starts a one-shot helper:
+Windows 11 lets only a process started at that moment bring another window to
+the front, and measured attempts from the monitor or from a helper started
+earlier were refused. A reopen ends a pending focus return instead of waiting
+for it. `tests/focus-queries.test.cjs` covers the query channel; native
+acceptance covers the real focus path.

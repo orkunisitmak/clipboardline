@@ -276,12 +276,47 @@ public static class ClipBoardLineNative {
       try {
         string line;while((line=Console.In.ReadLine())!=null) {
           const string prefix="clipboard-sequence:";long id;
+          if(line.StartsWith("focus-",StringComparison.Ordinal)){if(line.Length<=128)focusRequests.TryAdd(line);continue;}
           if(!line.StartsWith(prefix,StringComparison.Ordinal)||!long.TryParse(line.Substring(prefix.Length),out id)||id<=0||id>9007199254740991L)continue;
           uint sequence=GetClipboardSequenceNumber();
           lock(outputLock) {Console.Out.WriteLine("{\"clipboardQuery\":"+id+",\"sequence\":"+sequence+"}");Console.Out.Flush();}
         }
       } catch(System.IO.IOException) {} catch(ObjectDisposedException) {}
     });reader.IsBackground=true;reader.Start();
+  }
+  // Focus capture requests run on one worker so a capture that waits
+  // for a loading browser document never delays clipboard sequence replies.
+  // The queue is bounded; an overflowing request times out in the caller,
+  // which then uses its one-shot helper instead.
+  private static readonly System.Collections.Concurrent.BlockingCollection<string> focusRequests=new System.Collections.Concurrent.BlockingCollection<string>(8);
+  private static readonly object captureLock=new object();
+  public static void ObserveFocusRequests() {
+    var worker=new System.Threading.Thread(delegate() {
+      foreach(var line in focusRequests.GetConsumingEnumerable())HandleFocusRequest(line);
+    });worker.IsBackground=true;worker.Start();
+  }
+  private static string JsonText(string value) {
+    var text=new System.Text.StringBuilder("\"");
+    foreach(char c in value??"") {
+      if(c=='"'||c=='\\')text.Append('\\').Append(c);
+      else if(c<0x20)text.Append("\\u").Append(((int)c).ToString("x4"));
+      else text.Append(c);
+    }
+    return text.Append('"').ToString();
+  }
+  // focus-capture:<id>
+  private static void HandleFocusRequest(string line) {
+    var parts=line.Split(':');long id;
+    if(parts.Length<2||!long.TryParse(parts[1],out id)||id<=0||id>9007199254740991L)return;
+    string reply;
+    try {
+      if(parts[0]=="focus-capture"&&parts.Length==2) {
+        string focus,trace;
+        lock(captureLock){focus=CaptureFocus();trace=CaptureTrace();}
+        reply="{\"focusQuery\":"+id+",\"ok\":true,\"focus\":"+(focus??"null")+",\"captureTrace\":"+trace+"}";
+      } else return;
+    } catch(Exception error) {reply="{\"focusQuery\":"+id+",\"ok\":false,\"error\":"+JsonText(error.Message)+"}";}
+    lock(outputLock){Console.Out.WriteLine(reply);Console.Out.Flush();}
   }
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -346,6 +381,7 @@ try {
   } elseif ($Mode -eq 'ClipboardSequence') {
     @{ok=$true;sequence=[ClipBoardLineNative]::GetClipboardSequenceNumber()} | ConvertTo-Json -Compress
   } elseif ($Mode -eq 'Monitor') {
+    [ClipBoardLineNative]::ObserveFocusRequests()
     [ClipBoardLineNative]::ObserveSequenceQueries()
     [ClipBoardLineNative]::ObserveFocus()
     # The clipboard present at launch is never reported, even when its sequence is 0; only later changes are.
