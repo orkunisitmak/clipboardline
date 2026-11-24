@@ -226,6 +226,12 @@
         "behavior": "The Library domain filter ignores case, surrounding dots and a leading www, and matches the host and its subdomains. A typed name is converted to its host form only when it has non-ASCII characters and no path, query, fragment, port, credentials, backslash or space, so bücher.de finds xn--bcher-kva.de; an ASCII entry such as 0x7f.1 is compared as typed and is not rewritten to 127.0.0.1.",
         "macos": "LibraryStore.query builds the domain match from the typed name and calls URL(string:) only when it has a non-ASCII scalar; LibraryStoreTests.testDomainFilterMatchesATypedNumberLiterallyInsteadOfAnIPAddress and testDomainFilterMatchesAnInternationalizedNameTypedAsWritten cover it.",
         "windows": "libraryBaseItems() in renderer.js runs new URL on the typed name only when it has a non-ASCII character; library-ui.test.cjs 'Library domain filter matches a typed number literally and does not rewrite it to an IP address' and 'Library domain filter finds an internationalized link typed as written' cover it."
+      },
+      {
+        "id": "note-survives-matching-copy",
+        "behavior": "A note made with New note is never taken over by a copy: copying text equal to a note's text makes a separate item, and every note with that text keeps its name, date added and place in the Library instead of moving to the shelf or to Trash. Text that was copied, not typed as a note, still deduplicates on the next copy.",
+        "macos": "LibraryStore.createNote marks the record (createdAsNote) and LibraryStore.captureText skips marked records when it looks for a match; records stored before the marker open unchanged and keep deduplicating. TextDedupStoreTests.testCopyingANotesTextNeverMergesOrTrashesNotes and testRecordsStoredBeforeTheNoteMarkerOpenAndStillTakeTheCopy cover it.",
+        "windows": "Store.createNote marks the item (createdAsNote) in its first write and Store.insert never matches a marked item; model.test.cjs 'a capture or import of a note's text never merges or removes notes, also after reopening' covers it."
       }
     ]
   },

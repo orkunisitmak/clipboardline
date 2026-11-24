@@ -150,6 +150,35 @@ import XCTest
         XCTAssertEqual(try library.item(second.id)?.title, "Tuesday")
     }
 
+    func testRecordsStoredBeforeTheNoteMarkerOpenAndStillTakeTheCopy() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        var old = text("Saved before the marker", at: f.date.addingTimeInterval(-1)); old.title = "Old name"; old.favorite = true
+        try library.importRecords([old])
+        let note = try library.createNote()
+        try library.update(note.id) { $0.text = "Typed note" }
+        let db = try LibraryDatabase(url: library.databaseURL, readOnly: true)
+        func payload(_ id: UUID) throws -> [String: Any] {
+            let data = try XCTUnwrap(db.rows("SELECT payload FROM items WHERE id=?", [.text(id.uuidString)]).first?["payload"]?.data)
+            return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        }
+        // The stored form of an unmarked record is the one earlier versions wrote.
+        XCTAssertNil(try payload(old.id)["createdAsNote"])
+        XCTAssertEqual(try payload(note.id)["createdAsNote"] as? Bool, true)
+
+        let reopened = try store(f)
+        XCTAssertNil(try XCTUnwrap(reopened.item(old.id)).createdAsNote)
+        XCTAssertEqual(try reopened.item(note.id)?.createdAsNote, true)
+        f.date.addTimeInterval(1)
+        let recopied = try XCTUnwrap(reopened.captureText("Saved before the marker"))
+        XCTAssertEqual(recopied.id, old.id)
+        XCTAssertEqual(recopied.title, "Old name")
+        XCTAssertTrue(recopied.favorite)
+        XCTAssertNotEqual(try reopened.captureText("Typed note")?.id, note.id)
+        XCTAssertNil(try reopened.item(note.id)?.deletedAt)
+        XCTAssertTrue(try reopened.query(LibraryQuery(scope: .trash)).isEmpty)
+    }
+
     func testRecaptureNeverResurrectsAnExplicitlyTrashedRecord() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let library = try store(f), original = try XCTUnwrap(library.captureText("Trashed value"))
