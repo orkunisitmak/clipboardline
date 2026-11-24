@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "Copied content admission before history, previews, indexing or metadata. Private markers on any item exclude the whole copy; nonblank text bytes stay exact.",
+  "description": "Copied content admission before history, previews, indexing or metadata. Private markers on any item exclude the whole copy; nonblank text bytes stay exact. With link capture on, each linkedRepresentationCases row is saved as the link in url or as the exact text in text; a row runs on both platforms unless platforms names the only one that has its representation (see the rich-link-representations exception in shelf-behavior.json). With link capture off every row with text/plain is saved as that text.",
   "privateMarkers": [
     "org.nspasteboard.ConcealedType",
     "org.nspasteboard.TransientType",
@@ -15,6 +15,7 @@
     },
     {
       "name": "URI list with a comment and a display label",
+      "platforms": ["windows"],
       "formats": {"text/plain": "Read docs", "text/uri-list": "# copied URL\r\nhttps://example.com/from-uri\r\n"},
       "url": "https://example.com/from-uri"
     },
@@ -22,6 +23,36 @@
       "name": "only HTML URL no plain-text representation",
       "formats": {"text/html": "<a title='docs' href='https://example.com/html-only'>Read docs</a>"},
       "url": "https://example.com/html-only"
+    },
+    {
+      "name": "styled anchor whose markup, entities and spacing differ from the label",
+      "formats": {"text/plain": "Tom & Jerry docs", "text/html": "<meta charset='utf-8'><A class=link HREF=\"https://example.com/styled\"><b>Tom &amp;\n  Jerry</b>&nbsp;docs</A>"},
+      "url": "https://example.com/styled"
+    },
+    {
+      "name": "data-href before the real href is not the destination",
+      "formats": {"text/plain": "Read docs", "text/html": "<a data-href=\"https://example.com/wrong\" title=\"href=https://example.com/also-wrong\" href=\"https://example.com/right\">Read docs</a>"},
+      "url": "https://example.com/right"
+    },
+    {
+      "name": "anchor with only data-href is not a link",
+      "formats": {"text/plain": "Read docs", "text/html": "<a data-href=\"https://example.com/wrong\">Read docs</a>"},
+      "text": "Read docs"
+    },
+    {
+      "name": "paragraph that contains one link stays text",
+      "formats": {"text/plain": "Read the docs before you start.", "text/html": "<p>Read the <a href=\"https://example.com/docs\">docs</a> before you start.</p>"},
+      "text": "Read the docs before you start."
+    },
+    {
+      "name": "two links are ambiguous",
+      "formats": {"text/plain": "Read docs", "text/html": "<a href=\"https://example.com/a\">Read</a> <a href=\"https://example.com/b\">docs</a>"},
+      "text": "Read docs"
+    },
+    {
+      "name": "unsafe anchor destination",
+      "formats": {"text/plain": "Read docs", "text/html": "<a href=\"javascript:alert(1)\">Read docs</a>"},
+      "text": "Read docs"
     }
   ],
   "textCases": [

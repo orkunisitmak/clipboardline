@@ -46,26 +46,34 @@ final class TextClipboardWatcher {
             !ClipboardWatcher.privateTypes.isDisjoint(with: types) || types.contains(.fileURL)
                 || types.contains(where: { UTType($0.rawValue)?.conforms(to: .image) == true })
         }), source.changeCount == count else { return }
-        for (index, types) in items.enumerated() where types.contains(.string) || (capturesLinks() && types.contains(.URL)) {
+        for (index, types) in items.enumerated() where types.contains(.string) || (capturesLinks() && (types.contains(.URL) || types.contains(.html))) {
             guard source.changeCount == count else { return }
-            let preferredType: NSPasteboard.PasteboardType = capturesLinks() && types.contains(.URL) ? .URL : .string
-            let representationTypes = preferredType == .URL && types.contains(.string) ? [.URL, .string] : [preferredType]
-            for type in representationTypes {
+            var raced = false
+            func value(_ type: NSPasteboard.PasteboardType) -> String? {
+                guard !raced, types.contains(type) else { return nil }
                 let data = source.data(forType: type, at: index)
-                guard source.changeCount == count else { return }
+                guard source.changeCount == count else { raced = true; return nil }
                 guard let data,
                       !data.isEmpty, data.count <= Self.maximumDataBytes,
-                      String(data: data, encoding: .utf8) != nil else { continue }
+                      String(data: data, encoding: .utf8) != nil else { return nil }
                 // Decode the validated UTF-8 literally; Foundation's encoding initializer
                 // consumes a leading BOM, which changes an otherwise valid copy.
                 let text = String(decoding: data, as: UTF8.self)
-                guard text.unicodeScalars.contains(where: { !$0.properties.isWhitespace }) else { continue }
-                guard source.changeCount == count else { return }
-                if capturesLinks(), let onLink, let url = LinkIdentity.standalone(text) { onLink(url); return }
-                if type == .URL && types.contains(.string) { continue }
-                if capturesText() { onText(text) }
-                return
+                return text.unicodeScalars.contains(where: { !$0.properties.isWhitespace }) ? text : nil
             }
+            // A linked copy carries its destination beside the display label: prefer
+            // the URL representation, then an HTML copy that is that one link.
+            let address = capturesLinks() ? value(.URL) : nil
+            let onLink = capturesLinks() ? onLink : nil
+            if let onLink, let url = address.flatMap(LinkIdentity.standalone) { onLink(url); return }
+            let text = types.contains(.string) ? value(.string) : address
+            if let onLink, types.contains(.html), text != nil || !types.contains(.string),
+               let url = value(.html).flatMap({ LinkedHTML.destination(html: $0, label: types.contains(.string) ? text : nil) }) { onLink(url); return }
+            if raced { return }
+            guard let text else { continue }
+            if let onLink, let url = LinkIdentity.standalone(text) { onLink(url) }
+            else if capturesText() { onText(text) }
+            return
         }
     }
 }

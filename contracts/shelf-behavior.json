@@ -26,6 +26,12 @@
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
+      },
+      {
+        "id": "rich-link-representations",
+        "macos": "A linked copy's destination is read from NSPasteboard.URL (public.url), which holds one address. macOS apps do not publish a text/uri-list pasteboard type, so that row of linkedRepresentationCases names Windows only.",
+        "windows": "The destination is read from Electron's application/bookmark entry or a text/uri-list entry with exactly one address.",
+        "reason": "Each system has its own native carrier for a copied link's address. The outcome is shared: with link capture on the destination is saved instead of the label, and the HTML single-link rule and its rows are the same on both platforms."
       }
     ],
     "sharedBehaviors": [
@@ -37,9 +43,9 @@
       },
       {
         "id": "rich-linked-url-capture",
-        "behavior": "When link capture is enabled, copying a rich link with a display label stores the safe HTTP(S) destination as a link instead of the label. If link capture is disabled, the original text stays text; private clipboard markers and ambiguous links are not admitted.",
-        "macos": "TextClipboardWatcher prefers NSPasteboard.URL over the accompanying string representation, validates with LinkIdentity.standalone and respects capture settings and private types.",
-        "windows": "readClipboardContent prefers the native Electron bookmark, then one valid text/uri-list URL or HTML anchor href over the plain-text label, validates with plainURL and checks the clipboard generation. clipboard-admission.test.cjs covers the shared synthetic representation cases."
+        "behavior": "When link capture is enabled, copying a rich link with a display label stores the safe HTTP(S) destination as a link instead of the label, also when text capture is on. The destination comes from the copy's URL representation, or from an HTML representation that is that one link: exactly one anchor with a real href attribute (data-href and text inside other attributes do not count) whose text, with whitespace normalized, is the whole copied label, or a copy with no plain text. A copied paragraph that merely contains a link stays the exact text, and several links, an unterminated tag or an unsafe destination fall back to the label. If link capture is disabled, the label stays text and no URL or HTML representation is read; private clipboard markers exclude the whole copy. The linkedRepresentationCases rows of contracts/clipboard-admission.json run against both adapters.",
+        "macos": "TextClipboardWatcher prefers NSPasteboard.URL over the accompanying string, then LinkedHTML.destination on public.html, validates with LinkIdentity.standalone, rechecks changeCount after every read and respects capture settings and private types. ClipboardAdmissionTests runs the shared rows.",
+        "windows": "readClipboardContent prefers the native Electron bookmark, then one valid text/uri-list URL, then htmlAnchorURL on text/html over the plain-text label, validates with plainURL and checks the clipboard generation. clipboard-admission.test.cjs runs the shared rows."
       },
       {
         "id": "localized-notices",
