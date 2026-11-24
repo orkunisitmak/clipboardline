@@ -152,6 +152,12 @@ test('new permanent notes leave incompatible Library filters and open unpinned i
  const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.key('KeyF');await f.click('new-note');await f.input('simple-input','A new permanent note');await f.click('confirm-modal');const note=f.state.items.find(value=>value.text==='A new permanent note');assert.ok(note?.retainedAt);assert.equal(note.pinned,false);assert.deepEqual(cards(f),[note.id,f.image]);assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);assert.match(f.main,/data-action="pinnedOnly"[^>]*aria-pressed="false"/);assert.match(f.overlay,/id="text-editor"[^>]*>A new permanent note<\/textarea>/);
 });
 
+test('New note resets the Library sort to newest like macOS',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000});f.api.emit({items:f.state.items});await f.ready();
+ await savedLibrary(f);await f.change('sort-filter','oldest');
+ await f.click('new-note');await f.input('simple-input','Fresh note');await f.click('confirm-modal');
+ const note=f.state.items.find(value=>value.text==='Fresh note');assert.equal(cards(f)[0],note.id);assert.match(f.main,/<option value="newest" selected>/);
+});
 test('Edit details chooses Saved for a retained shelf item excluded by Recent',async()=>{
  const f=fixture();await f.ready();f.state.items[0].retainedAt=0;f.api.emit({items:f.state.items});await f.ready();await recent(f);assert.ok(!cards(f).includes(f.image));await f.api.command('show');await f.click('edit-details');assert.deepEqual(cards(f),[f.image]);assert.equal(focusedCard(f),f.image);assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);
 });
