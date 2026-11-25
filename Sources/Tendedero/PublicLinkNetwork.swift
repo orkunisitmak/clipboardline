@@ -366,7 +366,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
 
     init(data: Data, url: URL, contentType: String = "") throws {
         guard data.count <= 512 * 1024 else { throw PublicLinkError.tooLarge }
-        let html = HTMLText(Self.decode(data, contentType: contentType)).removingCommentsScriptsAndStyles()
+        let html = HTMLText(Self.decode(data, contentType: contentType)).removingNonMetadata()
         // The value is optional so that a long name without one is consumed once, not retried from each of its characters.
         let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?"#)
         var metadata: [String: String] = [:]
@@ -455,6 +455,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
 /// `<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>`, `<meta\b([^>]{0,8192})>`,
 /// `<title\b[^>]*>(.{0,8192}?)</title\s*>` and `<[^>]*>` with (?is), but each search for a closing marker resumes
 /// from the one found last, so a page of opening tags that are never closed costs one pass, not one pass per tag.
+/// `removingNonMetadata` also drops textareas and reads other start tags whole, which no single pattern here expresses.
 private struct HTMLText {
     let scalars: [Unicode.Scalar]
     init(_ text: String) { scalars = Array(text.unicodeScalars) }
@@ -470,24 +471,40 @@ private struct HTMLText {
     }
 
     private static let comment = Array("<!--".utf8), commentEnd = Array("-->".utf8), script = Array("<script".utf8),
-        style = Array("<style".utf8), meta = Array("<meta".utf8), title = Array("<title".utf8), less = Array("<".utf8), greater = Array(">".utf8)
+        style = Array("<style".utf8), textarea = Array("<textarea".utf8), meta = Array("<meta".utf8), title = Array("<title".utf8),
+        less = Array("<".utf8), greater = Array(">".utf8)
     /// Built once: a literal inside the scan loop would allocate a new array for every `<` on the page.
     private static let rawTextElements: [(tag: [UInt8], name: String)] = [(Self.script, "script"), (Self.style, "style")]
 
-    func removingCommentsScriptsAndStyles() -> HTMLText {
+    /// Drops comments, scripts, styles and textareas: a meta or title inside a textarea is page text, and an unclosed
+    /// textarea hides the rest of the page, as in a browser. Other start tags are skipped whole, so a `<textarea>` or
+    /// `<!--` inside a quoted attribute value starts nothing.
+    func removingNonMetadata() -> HTMLText {
         var kept: [Unicode.Scalar] = [], copied = 0, index = 0
-        var commentClose = Resume(), tagClose = Resume(), scriptClose = Resume(), styleClose = Resume()
+        var commentClose = Resume(), tagClose = Resume(), scriptClose = Resume(), styleClose = Resume(), textareaClose = Resume()
+        let lastQuote = (double: scalars.lastIndex(of: "\"") ?? -1, single: scalars.lastIndex(of: "'") ?? -1)
         kept.reserveCapacity(scalars.count)
         while let open = first(Self.less, from: index) {
             var end: Int?
             if starts(Self.comment, at: open) {
                 end = commentClose.next(from: open + 4) { from in first(Self.commentEnd, from: from).map { $0..<$0 + 3 } }?.upperBound
+            } else if starts(Self.textarea, at: open), endsTextareaName(at: open + Self.textarea.count) {
+                if let tag = startTagEnd(from: open + Self.textarea.count, lastQuote: lastQuote) {
+                    end = textareaClose.next(from: tag + 1) { closing("textarea", from: $0) }?.upperBound ?? scalars.count
+                } else { end = scalars.count }
             } else {
+                var rawText = false
                 for (name, element) in Self.rawTextElements where starts(name, at: open) && endsWord(at: open + name.count) {
+                    rawText = true
                     if let tag = tagClose.next(from: open + name.count, { from in first(Self.greater, from: from).map { $0..<$0 + 1 } }) {
                         end = element == "script" ? scriptClose.next(from: tag.upperBound) { closing("script", from: $0) }?.upperBound
                             : styleClose.next(from: tag.upperBound) { closing("style", from: $0) }?.upperBound
                     }
+                }
+                if !rawText, open + 1 < scalars.count, Self.isASCIILetter(scalars[open + 1]) {
+                    guard let tag = startTagEnd(from: open + 2, lastQuote: lastQuote) else { break }
+                    index = tag + 1
+                    continue
                 }
             }
             if let end { kept += scalars[copied..<open]; copied = end; index = end } else { index = open + 1 }
@@ -495,6 +512,36 @@ private struct HTMLText {
         kept += scalars[copied...]
         return HTMLText(scalars: kept)
     }
+
+    /// The `>` that ends a start tag. A quoted attribute value may hold `>`; a quote that never closes is read as text, as the
+    /// meta and title scans do. Each scalar is read once, so skipping every tag on the page stays linear.
+    private func startTagEnd(from index: Int, lastQuote: (double: Int, single: Int)) -> Int? {
+        var index = index, value = false
+        while index < scalars.count {
+            let scalar = scalars[index]
+            if scalar == ">" { return index }
+            if value, scalar == "\"" || scalar == "'" {
+                guard index < (scalar == "\"" ? lastQuote.double : lastQuote.single) else { return first(Self.greater, from: index + 1) }
+                index += 1
+                while scalars[index] != scalar { index += 1 }
+                value = false
+            } else if scalar == "=" {
+                value = true
+            } else if !Self.isTagSpace(scalar) {
+                value = false
+            }
+            index += 1
+        }
+        return nil
+    }
+    /// `<textarea(?=[ \t\n\f\r/>])`: only ASCII spacing, `/` or `>` ends the name.
+    private func endsTextareaName(at index: Int) -> Bool {
+        index < scalars.count && (Self.isTagSpace(scalars[index]) || scalars[index] == "/" || scalars[index] == ">")
+    }
+    private static func isTagSpace(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value { case 0x20, 0x09, 0x0A, 0x0C, 0x0D: return true; default: return false }
+    }
+    private static func isASCIILetter(_ scalar: Unicode.Scalar) -> Bool { (65...90).contains(scalar.value) || (97...122).contains(scalar.value) }
 
     /// The attribute text of up to `limit` meta tags.
     func metaAttributes(limit: Int) -> [String] {

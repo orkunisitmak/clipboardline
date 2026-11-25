@@ -28,6 +28,49 @@ test('meta tags with unquoted attribute values are read like macOS',async()=>{
  assert.equal(metadata.title,'Real-Article-Title');assert.equal(metadata.thumbnail,'https://cdn.example.com/a.png');
 });
 
+test('markup inside a textarea is not the preview title',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page('<textarea><meta property="og:title" content="injected"></textarea><title>real</title>')).title,'real');
+ assert.equal((await page('<title>real</title><textarea><meta property="og:title" content="injected">')).title,'real');
+});
+
+test('a textarea tag inside a script or an attribute is not read as a textarea',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page(`<script>const t = '<textarea>';</script><title>real</title>`)).title,'real');
+ assert.equal((await page(`<textarea data-x="> </textarea>"><meta property="og:title" content="injected"></textarea><title>real</title>`)).title,'real');
+});
+
+test('a custom element named like a textarea is not a textarea and a pile of broken tags stays fast',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page('<textarea-x></textarea-x><title>real</title>')).title,'real');
+ const started=Date.now();
+ await page('<textarea "'.repeat(40000)+'<title>real</title>');
+ assert.ok(Date.now()-started<2000);
+});
+
+test('textarea start tags are read whole whatever their length, and only ASCII spacing ends the name',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page('<textarea data='+'x'.repeat(3000)+'><meta property="og:title" content="injected"></textarea><title>real</title>')).title,'real');
+ assert.equal((await page('<textarea\u00a0x><meta property="og:title" content="real">')).title,'real');
+ const started=Date.now();
+ await page('<script>'.repeat(60000)+'<!--'.repeat(60000)+'<title>real</title>');
+ assert.ok(Date.now()-started<2000);
+});
+
+test('a textarea or comment opener inside another tag\'s quoted attribute starts nothing',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page(`<meta name='k' content='a <textarea> b'><meta property='og:title' content='Real'>`)).title,'Real');
+ assert.equal((await page(`<div title="a <textarea> b"></div><title>real</title>`)).title,'real');
+ assert.equal((await page(`<meta name="k" content="a <!-- b"><meta property="og:title" content="Real">`)).title,'Real');
+ // Only a quote right after '=' starts a value: this apostrophe is text, so the comment after the tag is still dropped.
+ assert.equal((await page(`<a title=it's><!-- <meta property='og:title' content='hidden'> --><title>real</title>`)).title,'real');
+ const size=512*1024;
+ for(const html of ['<meta "'.repeat(size/7),'<a x=\'>\''.repeat(size/8)+'"','<a x="'.repeat(size/6)]){
+  const started=Date.now();await page(html);
+  assert.ok(Date.now()-started<2000,`parse took ${Date.now()-started} ms`);
+ }
+});
+
 test('unclosed tags at the 512 KiB fetch ceiling parse in linear time',async()=>{
  const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'}),size=512*1024;
  for(const html of ['<title'.repeat(size/6),'<meta'.repeat(size/5),('<meta '+'a'.repeat(4000)+'>').repeat(size/4007|0),('<title>'+'a'.repeat(2001)).repeat(size/2008|0),'<title>'.repeat((size-8)/7|0)+'</title>']){
