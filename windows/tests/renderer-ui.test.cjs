@@ -522,6 +522,16 @@ test('shortcut recorder rejects overlapping conflicts but allows a key owned by 
  await f.api.command('show');await f.key('KeyP',{ctrl:true});assert.equal(f.state.items.find(value=>value.id===f.image).pinned,false,'Reset restores the Ctrl+P alias');
 });
 
+test('a sideways drag of a text mark handle that keeps its size takes no undo step like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('KeyM');
+ await f.key('KeyT');await f.pointer('pointerdown',100,100);await f.pointer('pointerup',100,100);await f.input('simple-input','Hi');await f.click('confirm-modal');
+ await f.key('KeyR');await f.pointer('pointerdown',300,40);await f.pointer('pointermove',400,100);await f.pointer('pointerup',400,100);
+ await f.key('KeyZ',{ctrl:true});assert.deepEqual(markupHistory(f),{undo:true,redo:true});
+ await f.key('KeyV');await f.pointer('pointerdown',120,80);await f.pointer('pointerup',120,80);
+ await f.pointer('pointerdown',150,110);await f.pointer('pointermove',190,110);await f.pointer('pointerup',190,110);assert.deepEqual(markupHistory(f),{undo:true,redo:true},'Sideways');
+ await f.pointer('pointerdown',150,110);await f.pointer('pointermove',150,140);await f.pointer('pointerup',150,140);assert.deepEqual(markupHistory(f),{undo:true,redo:false},'Down');
+ await f.key('Escape');assert.deepEqual(f.state.items.find(value=>value.id===f.image).annotations.map(value=>value.fontSize),[50]);
+});
 test('remapped Actions works in native search but disabled Actions leaves editor typing alone',async()=>{
  const f=fixture();await f.ready();f.api.emit({settings:{...f.state.settings,localShortcuts:{actions:'Ctrl+J'}}});await f.ready();
  await f.key('KeyS',{shift:true});const editor=f.nodes.get('search-input');editor.matches=selector=>selector.includes('input');
