@@ -13,6 +13,7 @@ public static class FixtureFocus {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr window);
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT bounds);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left,top,right,bottom; }
   // The placement Windows reports for the fixture's own top-level window.
@@ -108,7 +109,10 @@ $timer.Add_Tick({
           [FixtureFocus]::ActivateExpectedWindow([IntPtr][Int64]::Parse([string]$command.handle),[uint32]$command.processId,[uint32]$PID)
         } elseif ($command.action -eq 'placement') {
           if ($command.state -notin @('Normal','Maximized','Minimized')) { throw 'Unknown fixture window placement.' }
-          $form.WindowState=[System.Windows.Forms.FormWindowState]$command.state
+          # WinForms minimizes with SW_MINIMIZE, which also activates the next
+          # window in the Z order. SW_SHOWMINNOACTIVE leaves the active window alone.
+          if ($command.state -eq 'Minimized') { [void][FixtureFocus]::ShowWindow($form.Handle,7) }
+          else { $form.WindowState=[System.Windows.Forms.FormWindowState]$command.state }
         } elseif ($command.action -eq 'report') {
           # Acknowledges the serial, so the reader knows the state below is current.
         } elseif ($command.action -eq 'keys') { [System.Windows.Forms.SendKeys]::SendWait([string]$command.keys) }

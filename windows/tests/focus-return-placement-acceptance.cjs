@@ -31,7 +31,9 @@ module.exports=async function focusReturnPlacementAcceptance({page,application,c
  const before=await place('Normal');
  const target=await open(before);
  await fixtureCommand({action:'placement',state:'Minimized'});
- await until(fixtureState,value=>value.placement.startsWith('minimized:'));
+ // The previous window is minimized behind the shelves, which stay in front.
+ const shelves=await application.evaluate(()=>global.__clipboardLineTest.getWindow().getNativeWindowHandle().readBigUInt64LE().toString());
+ await until(fixtureState,value=>value.placement.startsWith('minimized:')&&value.foreground===shelves);
  const restored=await application.evaluate(async(_electron,value)=>{try{return await global.__clipboardLineTest.native.restore(value);}catch(error){return{error:error.message};}},target);
  assert.equal(restored.ok,true,JSON.stringify(restored));
  const after=await fixtureCommand({action:'report'});
