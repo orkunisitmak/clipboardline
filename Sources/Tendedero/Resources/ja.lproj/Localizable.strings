@@ -199,6 +199,7 @@
 "Trash" = "Trash";
 "Try another filter or view your recent copies." = "Try another filter or view your recent copies.";
 "Turn on" = "オンにする";
+"Turn on Fetch link titles and thumbnails in Settings to refresh link previews" = "Turn on Fetch link titles and thumbnails in Settings to refresh link previews";
 "Unorganized" = "Unorganized";
 "Unpin" = "ピン留めを解除";
 "Unsaved copies are kept for %d days" = "Unsaved copies are kept for %d days";
@@ -449,6 +450,7 @@
 /* Searchable action bar. */
 "Actions" = "アクション";
 "Available on the shelves" = "シェルフで使用できます";
+"Available in Library" = "ライブラリで使用できます";
 "Available on the shelves or in Library" = "シェルフまたはライブラリで使用できます";
 "Edit item details" = "項目の詳細を編集";
 "Finish editing first" = "先に編集を完了してください";

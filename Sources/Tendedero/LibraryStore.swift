@@ -23,6 +23,8 @@ struct LibraryRecord: Codable, Equatable, Identifiable {
     /// records need no migration; every new trash transition gets a fresh value.
     var trashRevision: UUID?
     var retainedAt: Date?
+    /// Set on records made by New note; a capture never merges with or drops one, as on Windows.
+    var createdAsNote: Bool?
     var favorite = false
     var onShelf = true
     var deletedAt: Date?
@@ -45,6 +47,8 @@ struct LibraryRecord: Codable, Equatable, Identifiable {
     var author: String?
     var metadataState = "pending"
     var metadataAttemptedAt: Date?
+    /// The name the user gave, or nil when it is blank, so shelf cards fall back to the content like the Library card.
+    var shelfName: String? { let name = title.trimmingCharacters(in: .whitespacesAndNewlines); return name.isEmpty ? nil : name }
     var displayTitle: String {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !name.isEmpty { return name }
@@ -113,6 +117,8 @@ private enum LibrarySQL {
         if let days = query.days { whereParts.append("i.created>=?"); values.append(.real(now.addingTimeInterval(-Double(days) * 86400).timeIntervalSince1970)) }
         if !query.domain.isEmpty {
             var domain = query.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            // Stored hosts are ASCII (punycode), so an internationalized name typed as written is converted first; anything with a path, query, port or credentials is not a host name and stays as typed.
+            if domain.unicodeScalars.contains(where: { !$0.isASCII }), domain.rangeOfCharacter(from: CharacterSet(charactersIn: "/?#@:\\").union(.whitespaces)) == nil, let host = URL(string: "https://" + domain)?.host { domain = host }
             if domain.hasPrefix("www.") { domain.removeFirst(4) }
             let suffix = "." + domain
             // Literal host boundaries include subdomains without wildcard or
@@ -260,7 +266,10 @@ extension String {
         try backfillTextIdentity()
         try db.execute("PRAGMA user_version=1")
         drainMarkupGarbage()
+        expire()
     }
+    /// Copies past their retention leave the shelves at launch and after every capture, as in the Windows store.
+    private func expire() { try? prune() }
     private func migrateLegacy() throws {
         guard try db.rows("SELECT value FROM metadata WHERE key='migration-v1'").isEmpty else { return }
         // Decode before writing any record or applying expiry. A damaged
@@ -447,10 +456,11 @@ extension String {
     func imageSearchChanged() { searchRevision += 1 }
     @discardableResult func createNote() throws -> LibraryRecord {
         let date = now(); var record = LibraryRecord(id: UUID(), kind: .text, createdAt: date, updatedAt: date)
-        record.text = ""; record.retainedAt = date; record.title = L("Untitled note")
+        record.text = ""; record.retainedAt = date; record.createdAsNote = true
         try db.transaction { try put(record) }; changed(); return record
     }
     @discardableResult func captureImage(_ url: URL, capturedAt: Date? = nil) throws -> LibraryRecord {
+        defer { expire() }
         if let existing = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE path=? AND deleted IS NULL", [.text(url.standardizedFileURL.path)])).first { return existing }
         guard files.isRegularFile(url) else { throw HistoryFiles.Failure.unsafeFile }
         let date = capturedAt ?? now()
@@ -460,7 +470,7 @@ extension String {
         var moved: LibraryRecord?
         try db.transaction {
             if let match = try identicalImage(to: url), var existing = try item(match.id), existing.deletedAt == nil {
-                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.captureRevision = UUID()
+                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.lastCopiedAt = date; existing.captureRevision = UUID()
                 try put(existing); moved = existing
             } else { try put(fresh) }
         }
@@ -491,6 +501,7 @@ extension String {
         return nil
     }
     @discardableResult func captureText(_ text: String) throws -> LibraryRecord? {
+        defer { expire() }
         guard !text.isEmpty, text.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
         let date = now()
         var affected = [UUID]()
@@ -508,6 +519,7 @@ extension String {
             var canonical: LibraryRecord?
             for row in rows {
                 guard let id = row["id"]?.string.flatMap(UUID.init(uuidString:)), var duplicate = try item(id) else { throw HistoryFiles.Failure.unsafeFile }
+                guard duplicate.createdAsNote != true else { continue }
                 guard let candidate = duplicate.text, TextIdentity.key(candidate).utf8.elementsEqual(identity.utf8) else { continue }
                 guard var current = canonical else { canonical = duplicate; continue }
                 // Preserve personal organization on the surviving identity.
@@ -555,9 +567,12 @@ extension String {
         return captured
     }
     @discardableResult func captureLink(_ url: URL) throws -> LibraryRecord {
+        defer { expire() }
         guard let normalized = LinkIdentity.normalized(url) else { throw HistoryFiles.Failure.unsafeFile }
         if var item = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE normalized=? AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1", [.text(normalized)])).first {
             item.onShelf = true; item.updatedAt = now(); item.lastCopiedAt = now(); item.lastCapturedAt = now(); item.captureRevision = UUID()
+            // Copying a link again asks for its preview again, so a failed attempt does not hold the retry back for an hour.
+            if item.metadataState == "failed" { item.metadataAttemptedAt = nil }
             try db.transaction { try put(item) }; changed([item.id]); return item
         }
         let date = now(); var item = LibraryRecord(id: UUID(), kind: .link, createdAt: date, updatedAt: date)
@@ -728,7 +743,7 @@ extension String {
         if previous.deletedAt == nil, value.deletedAt != nil { value.trashRevision = UUID() }
         else if previous.deletedAt != nil, value.deletedAt == nil { value.trashRevision = nil }
         if value.retainedAt != nil { try ensureOwned(&value) }
-        guard (value.text?.utf8.count ?? 0) <= TextClipboardWatcher.maximumDataBytes, value.note.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
+        guard (value.text?.utf8.count ?? 0) <= TextClipboardWatcher.maximumDataBytes, value.note.utf8.count <= TextClipboardWatcher.maximumDataBytes, value.title.utf8.count <= TextClipboardWatcher.maximumDataBytes else { throw HistoryFiles.Failure.unsafeFile }
         let textFileRollback = value.kind == .text ? try rewriteMaterializedText(previous, to: value.text ?? "") : nil
         do { try db.transaction { try put(value) } }
         catch { if let rollback = textFileRollback { try? writePrivate(rollback.data, to: rollback.url) }; throw error }
@@ -770,6 +785,18 @@ extension String {
     }
     /// A mixed selection pins every item, as on Windows and as the action bar's
     /// Unpin title assumes; only a selection that is already fully pinned unpins.
+    /// True when every id exists and is pinned; reads only the favorite column, in chunks under SQLite's variable limit.
+    func allPinned(_ ids: [UUID]) throws -> Bool {
+        var seen = Set<UUID>(); let unique = ids.filter { seen.insert($0).inserted }
+        guard !unique.isEmpty else { return false }
+        var pinned = 0
+        for start in stride(from: 0, to: unique.count, by: 500) {
+            let chunk = unique[start..<min(start + 500, unique.count)]
+            let rows = try db.rows("SELECT COUNT(*) AS n FROM items WHERE favorite=1 AND id IN (" + chunk.map { _ in "?" }.joined(separator: ",") + ")", chunk.map { .text($0.uuidString) })
+            if case .integer(let count)? = rows.first?["n"] { pinned += Int(count) }
+        }
+        return pinned == unique.count
+    }
     func toggleFavorite(_ ids: [UUID]) throws {
         let pin = try records(ids).contains { !$0.favorite }
         try mutate(ids) { $0.favorite = pin; if pin && $0.retainedAt == nil { $0.retainedAt = self.now() } }
@@ -799,11 +826,30 @@ extension String {
                 return !record.onShelf && record.deletedAt == entry.removedAt
             }
             guard !values.isEmpty else { shelfRemovalUndo.removeLast(); continue }
-            let ids = values.map(\.id)
+            // Copying the same text or link again while it was off the shelf made a new card; Undo must not hang it twice.
+            let restorable = try values.filter { entry in try item(entry.id).map { try !hasLiveTwin($0) } ?? false }
+            guard !restorable.isEmpty else { shelfRemovalUndo.removeLast(); return [] }
+            let ids = restorable.map(\.id)
             try mutate(ids, owning: false) { $0.onShelf = true; $0.deletedAt = nil; $0.trashRevision = nil }
             shelfRemovalUndo.removeLast(); return ids
         }
         return []
+    }
+    private func hasLiveTwin(_ record: LibraryRecord) throws -> Bool {
+        guard record.deletedAt != nil else { return false }
+        let id = [SQLValue.text(record.id.uuidString)]
+        if record.kind == .link, let normalized = record.normalizedURL {
+            return try !db.rows("SELECT 1 FROM items WHERE normalized=? AND kind='link' AND deleted IS NULL AND shelf=1 AND id<>?", [.text(normalized)] + id).isEmpty
+        }
+        guard record.kind == .text, let text = record.text else { return false }
+        let key = TextIdentity.key(text)
+        // A rollback app can edit text while this app stays open; repair the index after another connection writes, as captureText does.
+        let observed = try db.rows("PRAGMA data_version").first?["data_version"]?.number
+        if observed != textIdentityDataVersion { try db.transaction { try repairTextIdentity() }; textIdentityDataVersion = observed }
+        for row in try db.rows("SELECT i.id FROM text_identity t JOIN items i ON i.id=t.item WHERE t.digest=? AND i.kind='text' AND i.deleted IS NULL AND i.shelf=1 AND i.id<>?", [.blob(Self.textDigest(text))] + id) {
+            if let other = row["id"]?.string.flatMap(UUID.init(uuidString:)), let candidate = try item(other)?.text, TextIdentity.key(candidate).utf8.elementsEqual(key.utf8) { return true }
+        }
+        return false
     }
     private func invalidateShelfUndo(_ ids: [UUID]) {
         let affected = Set(ids)
@@ -930,7 +976,7 @@ extension String {
         invalidateShelfUndo(eligible); invalidateTrashUndo(eligible); changed(eligible)
         return eligible
     }
-    func restore(_ ids: [UUID]) throws { try mutate(ids, owning: false) { $0.deletedAt = nil; $0.onShelf = true; $0.trashRevision = nil }; invalidateShelfUndo(ids) }
+    func restore(_ ids: [UUID]) throws { try mutate(ids, owning: false) { $0.deletedAt = nil; $0.onShelf = true; $0.trashRevision = nil; $0.lastCapturedAt = self.now() }; invalidateShelfUndo(ids) }
     func markCopied(_ ids: [UUID]) throws { try mutate(ids) { $0.lastCopiedAt = self.now(); $0.captureRevision = UUID() } }
     func prune() throws {
         var expired = [LibraryRecord]()
@@ -1019,15 +1065,19 @@ extension String {
     func removeTag(_ tag: UUID, from itemID: UUID? = nil) throws {
         let affected = try db.rows("SELECT item FROM item_tags WHERE tag=?", [.text(tag.uuidString)]).compactMap { $0["item"]?.string.flatMap(UUID.init(uuidString:)) }
         try db.transaction {
-            if let itemID { try db.execute("DELETE FROM item_tags WHERE tag=? AND item=?", [.text(tag.uuidString), .text(itemID.uuidString)]) }
+            if let itemID {
+                try db.execute("DELETE FROM item_tags WHERE tag=? AND item=?", [.text(tag.uuidString), .text(itemID.uuidString)])
+                try db.execute("DELETE FROM tags WHERE id=? AND NOT EXISTS(SELECT 1 FROM item_tags WHERE tag=?)", [.text(tag.uuidString), .text(tag.uuidString)])
+            }
             else { try db.execute("DELETE FROM item_tags WHERE tag=?", [.text(tag.uuidString)]); try db.execute("DELETE FROM tags WHERE id=?", [.text(tag.uuidString)]) }
             for id in affected { if let value = try item(id) { try put(value) } }
         }; changed()
     }
     func renameTag(_ id: UUID, name: String) throws {
-        let name = try cleanedName(name)
+        let name = try cleanedName(name.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "#")))
         let existing = try tags()
         guard existing.contains(where: { $0.id == id }), !existing.contains(where: { $0.id != id && $0.name.libraryFolded == name.libraryFolded }) else { throw HistoryFiles.Failure.invalidDestination }
+        if existing.first(where: { $0.id == id })?.name == name { return }
         let affected = try db.rows("SELECT item FROM item_tags WHERE tag=?", [.text(id.uuidString)]).compactMap { $0["item"]?.string.flatMap(UUID.init(uuidString:)) }
         try db.transaction { try db.execute("UPDATE tags SET name=?,folded=? WHERE id=?", [.text(name), .text(name.libraryFolded), .text(id.uuidString)]); for id in affected { if let value = try item(id) { try put(value) } } }; changed()
     }

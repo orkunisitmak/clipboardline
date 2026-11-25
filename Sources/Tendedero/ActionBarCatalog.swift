@@ -93,6 +93,13 @@ enum ActionBarMenuAction: String, CaseIterable {
     }
 
     static func entries(context c: Context, bindings: KeyboardBindings) -> [Entry] {
+        // Each folder's path is built once per call and shared by its Open, Add, Move and Remove rows.
+        let foldersByID = Dictionary(c.collections.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var paths = [UUID: String]()
+        func path(_ folder: LibraryCollection) -> String {
+            if let known = paths[folder.id] { return known }
+            let built = folderPath(folder, foldersByID); paths[folder.id] = built; return built
+        }
         var result = [Entry]()
         // Frequently used operations lead the unfiltered list. Every other
         // browsing shortcut remains discoverable, including navigation.
@@ -124,13 +131,13 @@ enum ActionBarMenuAction: String, CaseIterable {
         }
         for folder in c.collections {
             let action = ActionBarAction.openFolder(folder.id)
-            result.append(Entry(action: action, command: .init(id: action.id, title: L("Open folder") + ": " + folder.name,
+            result.append(Entry(action: action, command: .init(id: action.id, title: L("Open folder") + ": " + path(folder),
                 subtitle: L("Library"), systemImage: "folder", isEnabled: c.libraryAvailable,
                 group: L("Folders"), keywords: ["folder", "klasör", "open", "aç"],
                 disabledReason: c.libraryAvailable ? "" : L("Library unavailable"), isActive: c.libraryScope == .collection(folder.id))))
             let assign = ActionBarAction.assignFolder(folder.id)
             let canAssign = c.hasSelection && !c.isDeleted
-            result.append(Entry(action: assign, command: .init(id: assign.id, title: L("Add to folder") + ": " + folder.name,
+            result.append(Entry(action: assign, command: .init(id: assign.id, title: L("Add to folder") + ": " + path(folder),
                 subtitle: L("Selected item"), systemImage: "folder.badge.plus", isEnabled: canAssign,
                 group: L("Organization"), keywords: ["add", "folder", "organize", "ekle", "klasör", "düzenle"],
                 disabledReason: canAssign ? "" : L("Select an item first"))))
@@ -138,7 +145,7 @@ enum ActionBarMenuAction: String, CaseIterable {
             let canMove: Bool
             if case let .collection(source) = c.libraryScope { canMove = c.isLibrary && canAssign && source != folder.id }
             else { canMove = false }
-            result.append(Entry(action: move, command: .init(id: move.id, title: L("Move to folder") + ": " + folder.name,
+            result.append(Entry(action: move, command: .init(id: move.id, title: L("Move to folder") + ": " + path(folder),
                 subtitle: L("Selected item"), systemImage: "folder", isEnabled: canMove,
                 group: L("Organization"), keywords: ["move", "folder", "taşı", "klasör"],
                 disabledReason: canMove ? "" : L("Select items in a different folder first"))))
@@ -153,7 +160,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         for folder in c.itemFolders {
             let action = ActionBarAction.unassignFolder(folder.id)
             let enabled = c.singleSelection && !c.isDeleted
-            result.append(Entry(action: action, command: .init(id: action.id, title: L("Remove from folder") + ": " + folder.name,
+            result.append(Entry(action: action, command: .init(id: action.id, title: L("Remove from folder") + ": " + path(folder),
                 subtitle: L("Selected item"), systemImage: "folder.badge.minus", isEnabled: enabled,
                 group: L("Organization"), keywords: ["remove", "folder", "klasörden", "çıkar"],
                 disabledReason: enabled ? "" : L("Select one item first"))))
@@ -190,9 +197,9 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .export: return require(c.hasSelection, L("Select an item first"))
         case .trash: return require(selected, L("Select an item first"))
         case .removeFromLine: return require(!c.isLibrary && selected, c.isLibrary ? L("Available on the shelves") : L("Select an item first"))
-        case .undoRemoveFromLine: return require(!c.isLibrary && c.canUndoShelfRemoval, L("Nothing to undo"))
-        case .undoTrash: return require(c.isLibrary && c.canUndoLibraryTrash, L("Nothing to undo"))
-        case .focusNextPane, .focusPreviousPane: return require(c.origin == .library, L("Library unavailable"))
+        case .undoRemoveFromLine: return require(!c.isLibrary && c.canUndoShelfRemoval, c.isLibrary ? L("Available on the shelves") : L("Nothing to undo"))
+        case .undoTrash: return require(c.isLibrary && c.canUndoLibraryTrash, c.isLibrary ? L("Nothing to undo") : L("Available in Library"))
+        case .focusNextPane, .focusPreviousPane: return require(c.origin == .library, L("Available in Library"))
         case .newNote, .newFolder: return require(c.libraryAvailable, L("Library unavailable"))
         case .close: return require(browsing && (c.lineRevealed || c.isLibrary || c.isPreview), L("Open a shelf or Library first"))
         case .switchShelf: return require(c.origin == .line, L("Available on the shelves"))
@@ -236,6 +243,7 @@ enum ActionBarMenuAction: String, CaseIterable {
             return c.isPreview ? hint : sequence([context.map { bindings.title(.preview, in: $0) } ?? "", hint])
         }
         if action == .markup {
+            if context == .line { return bindings.title(action, in: .line) }
             if c.origin == .library { return bindings.title(action, in: .library) }
             let hint = bindings.title(.markup, in: c.isMarkupEditing ? .imageMarkup : .imagePreview)
             return c.isPreview ? hint : sequence([context.map { bindings.title(.preview, in: $0) } ?? "", hint])
@@ -243,7 +251,7 @@ enum ActionBarMenuAction: String, CaseIterable {
         if tools.contains(action) {
             let tool = bindings.title(action, in: .imageMarkup)
             if c.isMarkupEditing { return tool }
-            let prefix = c.isPreview ? [] : [context.map { bindings.title(.preview, in: $0) } ?? ""]
+            let prefix = c.isPreview || context == .line ? [] : [context.map { bindings.title(.preview, in: $0) } ?? ""]
             return sequence(prefix + [bindings.title(.markup, in: .imagePreview), tool])
         }
         if action == .editText && !c.isPreview {
@@ -366,6 +374,12 @@ enum ActionBarMenuAction: String, CaseIterable {
         }
     }
 
+    /// A subfolder reads "Parent / Child" (the whole parent chain, cycle-safe), as in the Library window and on Windows.
+    private static func folderPath(_ folder: LibraryCollection, _ byID: [UUID: LibraryCollection]) -> String {
+        var names = [folder.name], visited: Set<UUID> = [folder.id], next = folder.parentID
+        while let id = next, visited.insert(id).inserted, let parent = byID[id] { names.insert(parent.name, at: 0); next = parent.parentID }
+        return names.joined(separator: " / ")
+    }
     private static func menuAvailability(_ action: ActionBarMenuAction, _ c: Context) -> (Bool, String) {
         func require(_ enabled: Bool, _ reason: String) -> (Bool, String) { (enabled, enabled ? "" : reason) }
         switch action {
@@ -391,8 +405,10 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .refreshLink: return require(c.isLink, L("Select a link first"))
         case .openFile, .quickLook, .revealFile: return require(c.singleSelection && c.kind == .image && c.hasFile, L("Select one image first"))
         case .saveToDesktop: return require(!c.isLibrary && c.singleSelection && c.kind == .image && c.inInbox && !c.isDeleted, L("Select an image in the screenshots inbox first"))
-        case .takeDownLeft: return require(!c.isLibrary && c.singleSelection && c.kind == .image && c.canTakeDownLeft, L("No items to the left"))
-        case .takeDownRight: return require(!c.isLibrary && c.singleSelection && c.kind == .image && c.canTakeDownRight, L("No items to the right"))
+        case .takeDownLeft, .takeDownRight:
+            let canTakeDown = action == .takeDownLeft ? c.canTakeDownLeft : c.canTakeDownRight
+            let reason = c.isLibrary ? L("Available on the shelves") : !(c.singleSelection && c.kind == .image) ? L("Select one image first") : action == .takeDownLeft ? L("No items to the left") : L("No items to the right")
+            return require(!c.isLibrary && c.singleSelection && c.kind == .image && canTakeDown, reason)
         case .trimVideo: return require(c.singleSelection && c.kind == .image && c.hasFile && c.isRecording && !c.isDeleted, L("Select a video first"))
         case .resetZoom, .markupStyles: return require(c.isImage, L("Select one image first"))
         case .markupUndo: return require((c.isMarkupEditing || (c.isPreview && c.isImage)) && c.canUndoMarkup, L("Nothing to undo"))

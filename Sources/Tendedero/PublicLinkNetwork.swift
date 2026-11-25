@@ -327,7 +327,16 @@ struct PublicLinkNetwork: Sendable {
          exchange: @escaping Exchange = { plan, limit in try await PublicLinkExchange(limit: limit).run(plan) }) {
         self.resolve = resolve; self.exchange = exchange
     }
-    func fetch(_ url: URL, limit: Int, allowed: @Sendable (URL) -> Bool = { _ in true }) async throws -> PublicLinkResponse {
+    /// `deadline` bounds the whole call, redirects and DNS included, like Windows' 20 s metadata fetch.
+    func fetch(_ url: URL, limit: Int, deadline: Duration = .seconds(20), allowed: @escaping @Sendable (URL) -> Bool = { _ in true }) async throws -> PublicLinkResponse {
+        return try await withThrowingTaskGroup(of: PublicLinkResponse.self) { group in
+            group.addTask { try await follow(url, limit: limit, allowed: allowed) }
+            group.addTask { try await Task.sleep(for: deadline); throw PublicLinkError.timeout }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
+    }
+    private func follow(_ url: URL, limit: Int, allowed: @Sendable (URL) -> Bool) async throws -> PublicLinkResponse {
         guard (1...5 * 1024 * 1024).contains(limit) else { throw PublicLinkError.tooLarge }
         var current = url
         for hop in 0...3 {
@@ -357,14 +366,12 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
 
     init(data: Data, url: URL, contentType: String = "") throws {
         guard data.count <= 512 * 1024 else { throw PublicLinkError.tooLarge }
-        let source = Self.decode(data, contentType: contentType)
-        let html = Self.withoutNonMetadata(source)
-        let tags = try NSRegularExpression(pattern: #"(?is)<meta\b([^>]{0,8192})>"#)
-        let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)
+        let html = HTMLText(Self.decode(data, contentType: contentType)).removingNonMetadata()
+        // The value is optional so that a long name without one is consumed once, not retried from each of its characters.
+        let attributes = try NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?"#)
         var metadata: [String: String] = [:]
-        for tag in tags.matches(in: html, range: NSRange(html.startIndex..., in: html)).prefix(256) {
-            guard let range = Range(tag.range(at: 1), in: html) else { continue }
-            let raw = String(html[range]); var values: [String: String] = [:]
+        for raw in html.metaAttributes(limit: 256) {
+            var values: [String: String] = [:]
             for attribute in attributes.matches(in: raw, range: NSRange(raw.startIndex..., in: raw)) {
                 guard let key = Range(attribute.range(at: 1), in: raw),
                       let value = (2...4).compactMap({ Range(attribute.range(at: $0), in: raw) }).first else { continue }
@@ -372,9 +379,7 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
             }
             if let key = values["property"] ?? values["name"], let value = values["content"], metadata[key.lowercased()] == nil { metadata[key.lowercased()] = String(value.prefix(2000)) }
         }
-        let titleTag = try NSRegularExpression(pattern: #"(?is)<title\b[^>]*>(.{0,8192}?)</title\s*>"#)
-        let titleMatch = titleTag.firstMatch(in: html, range: NSRange(html.startIndex..., in: html))
-            .flatMap { Range($0.range(at: 1), in: html) }.map { Self.entities(Self.replacing(#"<[^>]*>"#, in: String(html[$0]), with: "")) }
+        let titleMatch = html.titleText().map { Self.entities(HTMLText($0).removingTags()) }
         title = Self.clean(metadata["og:title"], limit: 500)
             ?? Self.clean(metadata["twitter:title"], limit: 500)
             ?? Self.clean(titleMatch, limit: 500)
@@ -416,51 +421,14 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
         guard converted != 0xFFFF_FFFF else { return nil }
         return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(converted))
     }
-    /// Comments, scripts and styles are not page metadata. A textarea holds text, so a meta or title inside it isn't either;
-    /// its start tag may hold a quoted ">" and an unclosed one hides the rest, as in a browser.
-    /// One left-to-right scan: each search starts where the last ended and a missing closer is looked up once, so cost stays linear.
-    private static func withoutNonMetadata(_ source: String) -> String {
-        guard let opener = try? NSRegularExpression(pattern: #"<!--|<script\b|<style\b|<textarea(?=[ \t\n\f\r/>])"#, options: [.caseInsensitive]) else { return source }
-        let text = source as NSString
-        var closers: [String: NSRegularExpression] = [:], missing = Set<String>()
-        var output = "", last = 0, position = 0
-        while position < text.length, let match = opener.firstMatch(in: source, range: NSRange(location: position, length: text.length - position)) {
-            let name = text.substring(with: match.range).dropFirst().lowercased()
-            let skip = match.range.location + match.range.length
-            var from = skip, end = -1
-            if name == "textarea" {
-                var quote: unichar = 0
-                while from < text.length {
-                    let c = text.character(at: from)
-                    if quote != 0 { if c == quote { quote = 0 } } else if c == 0x22 || c == 0x27 { quote = c } else if c == 0x3E { break }
-                    from += 1
-                }
-                if from >= text.length { end = text.length }
-            } else if name != "!--" {
-                let gt = text.range(of: ">", range: NSRange(location: from, length: text.length - from))
-                if gt.location == NSNotFound { break }
-                from = gt.location
-            }
-            if end < 0, !missing.contains(name) {
-                let closer = closers[name] ?? (try? NSRegularExpression(pattern: name == "!--" ? "-->" : "</\(name)[ \\t\\n\\f\\r]*>", options: [.caseInsensitive]))
-                closers[name] = closer
-                let start = min(name == "!--" ? from : from + 1, text.length)
-                if let found = closer?.firstMatch(in: source, range: NSRange(location: start, length: text.length - start)) { end = found.range.location + found.range.length } else { missing.insert(name) }
-            }
-            if end < 0, name == "textarea" { end = text.length }
-            if end < 0 { position = skip; continue }
-            output += text.substring(with: NSRange(location: last, length: match.range.location - last))
-            last = end; position = end
-        }
-        return output + text.substring(from: last)
-    }
-    private static func replacing(_ pattern: String, in value: String, with replacement: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return value }
-        return regex.stringByReplacingMatches(in: value, range: NSRange(value.startIndex..., in: value), withTemplate: replacement)
-    }
     private static func clean(_ value: String?, limit: Int) -> String? {
         guard let value else { return nil }
-        let clean = value.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) || CharacterSet.whitespacesAndNewlines.contains($0) }
+        // Drop Cc and the bidirectional marks, overrides, embeddings and isolates that can reorder a title to spoof another one.
+        // CharacterSet.controlCharacters also holds Cf, which includes the joiners emoji and Persian text need.
+        let clean = value.unicodeScalars.filter {
+            let bidi = [0x061C, 0x200E, 0x200F].contains($0.value) || (0x202A...0x202E).contains($0.value) || (0x2066...0x2069).contains($0.value)
+            return ($0.properties.generalCategory != .control && !bidi) || CharacterSet.whitespacesAndNewlines.contains($0)
+        }
         let result = String(String.UnicodeScalarView(clean)).split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return result.isEmpty ? nil : String(result.prefix(limit))
     }
@@ -469,14 +437,160 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
     private static func entities(_ value: String) -> String {
         let named = namedEntities, names = named.keys.joined(separator: "|")
         guard let regex = try? NSRegularExpression(pattern: #"&(#[xX][0-9A-Fa-f]{1,6}|#[0-9]{1,7}|\#(names));"#) else { return value }
-        var result = value
-        for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
-            guard let whole = Range(match.range, in: result), let nameRange = Range(match.range(at: 1), in: value) else { continue }
+        // Built front to back: replacing each entity in place would move the rest of the text once per entity.
+        var result = "", copied = value.startIndex
+        for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)) {
+            guard let whole = Range(match.range, in: value), let nameRange = Range(match.range(at: 1), in: value) else { continue }
             let name = String(value[nameRange]); var replacement = named[name]
-            if name.lowercased().hasPrefix("#x"), let number = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
-            else if name.hasPrefix("#"), let number = UInt32(name.dropFirst()), let scalar = UnicodeScalar(number), !CharacterSet.controlCharacters.contains(scalar) { replacement = String(scalar) }
-            if let replacement { result.replaceSubrange(whole, with: replacement) }
+            if name.lowercased().hasPrefix("#x"), let number = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(number), scalar.properties.generalCategory != .control { replacement = String(scalar) }
+            else if name.hasPrefix("#"), let number = UInt32(name.dropFirst()), let scalar = UnicodeScalar(number), scalar.properties.generalCategory != .control { replacement = String(scalar) }
+            guard let replacement else { continue }
+            result += value[copied..<whole.lowerBound]; result += replacement; copied = whole.upperBound
         }
-        return result
+        return result + value[copied...]
+    }
+}
+
+/// The page as Unicode scalars, the unit NSRegularExpression quantifiers count. The scans below find the same tags as
+/// `<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>`, `<meta\b([^>]{0,8192})>`,
+/// `<title\b[^>]*>(.{0,8192}?)</title\s*>` and `<[^>]*>` with (?is), but each search for a closing marker resumes
+/// from the one found last, so a page of opening tags that are never closed costs one pass, not one pass per tag.
+/// `removingNonMetadata` also drops textareas and reads other start tags whole, which no single pattern here expresses.
+private struct HTMLText {
+    let scalars: [Unicode.Scalar]
+    init(_ text: String) { scalars = Array(text.unicodeScalars) }
+    private init(scalars: [Unicode.Scalar]) { self.scalars = scalars }
+
+    /// The first match at or after a position, reused while later searches start at or before it.
+    private struct Resume {
+        private var searchedFrom = Int.max, found: Range<Int>?
+        mutating func next(from index: Int, _ search: (Int) -> Range<Int>?) -> Range<Int>? {
+            if searchedFrom <= index, found.map({ $0.lowerBound >= index }) ?? true { return found }
+            searchedFrom = index; found = search(index); return found
+        }
+    }
+
+    private static let comment = Array("<!--".utf8), commentEnd = Array("-->".utf8), script = Array("<script".utf8),
+        style = Array("<style".utf8), textarea = Array("<textarea".utf8), meta = Array("<meta".utf8), title = Array("<title".utf8),
+        less = Array("<".utf8), greater = Array(">".utf8)
+    /// Built once: a literal inside the scan loop would allocate a new array for every `<` on the page.
+    private static let rawTextElements: [(tag: [UInt8], name: String)] = [(Self.script, "script"), (Self.style, "style")]
+
+    /// Drops comments, scripts, styles and textareas: a meta or title inside a textarea is page text. A textarea start tag
+    /// may hold a quoted `>`, and an unclosed textarea hides the rest of the page, as in a browser.
+    func removingNonMetadata() -> HTMLText {
+        var kept: [Unicode.Scalar] = [], copied = 0, index = 0
+        var commentClose = Resume(), tagClose = Resume(), scriptClose = Resume(), styleClose = Resume(), textareaClose = Resume()
+        kept.reserveCapacity(scalars.count)
+        while let open = first(Self.less, from: index) {
+            var end: Int?
+            if starts(Self.comment, at: open) {
+                end = commentClose.next(from: open + 4) { from in first(Self.commentEnd, from: from).map { $0..<$0 + 3 } }?.upperBound
+            } else if starts(Self.textarea, at: open), endsTextareaName(at: open + Self.textarea.count) {
+                if let tag = startTagEnd(from: open + Self.textarea.count) {
+                    end = textareaClose.next(from: tag + 1) { closing("textarea", from: $0) }?.upperBound ?? scalars.count
+                } else { end = scalars.count }
+            } else {
+                for (name, element) in Self.rawTextElements where starts(name, at: open) && endsWord(at: open + name.count) {
+                    if let tag = tagClose.next(from: open + name.count, { from in first(Self.greater, from: from).map { $0..<$0 + 1 } }) {
+                        end = element == "script" ? scriptClose.next(from: tag.upperBound) { closing("script", from: $0) }?.upperBound
+                            : styleClose.next(from: tag.upperBound) { closing("style", from: $0) }?.upperBound
+                    }
+                }
+            }
+            if let end { kept += scalars[copied..<open]; copied = end; index = end } else { index = open + 1 }
+        }
+        kept += scalars[copied...]
+        return HTMLText(scalars: kept)
+    }
+
+    /// The `>` that ends a start tag, skipping any that sit inside quotes.
+    private func startTagEnd(from index: Int) -> Int? {
+        var index = index, quote: Unicode.Scalar?
+        while index < scalars.count {
+            let scalar = scalars[index]
+            if let open = quote { if scalar == open { quote = nil } } else if scalar == "\"" || scalar == "'" { quote = scalar } else if scalar == ">" { return index }
+            index += 1
+        }
+        return nil
+    }
+    /// `<textarea(?=[ \t\n\f\r/>])`: only ASCII spacing, `/` or `>` ends the name.
+    private func endsTextareaName(at index: Int) -> Bool {
+        guard index < scalars.count else { return false }
+        switch scalars[index].value { case 0x20, 0x09, 0x0A, 0x0C, 0x0D, 0x2F, 0x3E: return true; default: return false }
+    }
+
+    /// The attribute text of up to `limit` meta tags.
+    func metaAttributes(limit: Int) -> [String] {
+        var tags: [String] = [], tagClose = Resume(), index = 0
+        while tags.count < limit, let open = first(Self.meta, from: index) {
+            let body = open + Self.meta.count
+            if endsWord(at: body), let tag = tagClose.next(from: body, { from in first(Self.greater, from: from).map { $0..<$0 + 1 } }),
+               tag.lowerBound - body <= 8192 {
+                tags.append(string(body..<tag.lowerBound)); index = tag.upperBound
+            } else { index = open + 1 }
+        }
+        return tags
+    }
+
+    /// The text of the first title element whose text is at most 8192 scalars long.
+    func titleText() -> String? {
+        var tagClose = Resume(), titleClose = Resume(), index = 0
+        while let open = first(Self.title, from: index) {
+            let body = open + Self.title.count
+            if endsWord(at: body), let tag = tagClose.next(from: body, { from in first(Self.greater, from: from).map { $0..<$0 + 1 } }),
+               let close = titleClose.next(from: tag.upperBound, { closing("title", from: $0) }), close.lowerBound - tag.upperBound <= 8192 {
+                return string(tag.upperBound..<close.lowerBound)
+            }
+            index = open + 1
+        }
+        return nil
+    }
+
+    func removingTags() -> String {
+        var kept = String.UnicodeScalarView(), tagClose = Resume(), index = 0
+        while index < scalars.count {
+            if scalars[index] == "<", let tag = tagClose.next(from: index + 1, { from in first(Self.greater, from: from).map { $0..<$0 + 1 } }) {
+                index = tag.upperBound
+            } else { kept.append(scalars[index]); index += 1 }
+        }
+        return String(kept)
+    }
+
+    private func string(_ range: Range<Int>) -> String {
+        var view = String.UnicodeScalarView(); view.append(contentsOf: scalars[range]); return String(view)
+    }
+    /// Whether the lowercase ASCII `literal` starts at `index`, ignoring case as (?i) does, which also folds ſ to s.
+    private func starts(_ literal: [UInt8], at index: Int) -> Bool {
+        guard index + literal.count <= scalars.count else { return false }
+        for (offset, byte) in literal.enumerated() {
+            let value = scalars[index + offset].value
+            guard (65...90).contains(value) ? value + 32 == UInt32(byte) : value == UInt32(byte) || (byte == 0x73 && value == 0x17F) else { return false }
+        }
+        return true
+    }
+    private func first(_ literal: [UInt8], from index: Int) -> Int? {
+        var index = max(index, 0)
+        while index + literal.count <= scalars.count { if starts(literal, at: index) { return index }; index += 1 }
+        return nil
+    }
+    /// The range of the first `</name\s*>` at or after `index`.
+    private func closing(_ name: String, from index: Int) -> Range<Int>? {
+        let marker = Array("</\(name)".utf8); var index = index
+        while let found = first(marker, from: index) {
+            var end = found + marker.count
+            while end < scalars.count, scalars[end].properties.isWhitespace { end += 1 }
+            if end < scalars.count, scalars[end] == ">" { return found..<end + 1 }
+            index = found + 1
+        }
+        return nil
+    }
+    /// `\b` after a tag name: the next scalar is not an ICU word character.
+    private func endsWord(at index: Int) -> Bool {
+        guard index < scalars.count else { return true }
+        let scalar = scalars[index], category = scalar.properties.generalCategory
+        let word = scalar.properties.isAlphabetic || [.decimalNumber, .connectorPunctuation, .nonspacingMark, .spacingMark, .enclosingMark].contains(category)
+            || scalar.value == 0x200C || scalar.value == 0x200D
+        return !word
     }
 }
