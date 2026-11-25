@@ -12,8 +12,8 @@ Görseller, metinler ve linkler elinin altında. Son kopyalarını üç askıda 
 
 ## İlk beş dakikan
 
-1. **Kur ve aç.** Son Mac sürümünü indir, uygulamayı Applications klasörüne taşı ve aç. ClipBoardLine menü çubuğunda yaşar.
-2. **Ne toplamak istediğini seç.** Ayarlar → Kaynaklar’dan istersen görsel veya metin yakalamayı aç. Tek URL yakalama varsayılan açık gelir ve kapatılabilir. Ekran görüntüsü yönetimini ayrıca seç.
+1. **Kur ve aç.** Son Mac sürümünü indir, uygulamayı Applications klasörüne taşı ve aç. ClipBoardLine menü çubuğunda yaşar. Windows’ta x64 kurulum dosyasını çalıştır; ClipBoardLine sistem tepsisinde yaşar.
+2. **Ne toplamak istediğini seç.** Ayarlar → Kaynaklar’dan görsel veya metin yakalamayı aç. Windows’ta ikisi de kapalı gelir; açana kadar yalnızca linkler toplanır. Tek URL yakalama varsayılan açık gelir ve kapatılabilir. Ekran görüntüsü yönetimini ayrıca seç.
 3. **Akışını bozmadan gezin.** ⌃⌥T’ye bas, oklarla gezin, Space ile önizle. Enter kopyalar ve askıları kapatır; odak önceki uygulamaya döner.
 4. **İşe yarayanları sakla.** P ile sabitle, ⇧P ile klasör seç veya ⌥P ile anlamlı bir ad ver. Etiketlenen ya da klasöre eklenen kayıtlar normal geçmiş süresi sonunda kalır.
 5. **Kendine göre ayarla.** Her içerik türünün geçmiş süresini, kısayolları, renkleri ve otomatik güncelleme kontrolünü Ayarlar’dan düzenle.
