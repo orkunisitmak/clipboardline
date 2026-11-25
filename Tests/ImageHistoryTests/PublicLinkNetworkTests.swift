@@ -188,7 +188,8 @@ import XCTest
 
     func testPagesOfQuotedAttributesParseInLinearTime() throws {
         let url = URL(string: "https://public.example.org/page")!
-        func filled(_ unit: String) -> String { String(repeating: unit, count: 512 * 1024 / unit.utf8.count) }
+        // One byte is left for the trailing quote, so every page stays within the 512 KiB parse limit.
+        func filled(_ unit: String) -> String { String(repeating: unit, count: (512 * 1024 - 1) / unit.utf8.count) }
         for page in [filled("<meta \""), filled("<a x='>'") + "\"", filled("<a x=\"")] {
             let start = Date()
             _ = try PublicLinkHTMLMetadata(data: Data(page.utf8), url: url)
