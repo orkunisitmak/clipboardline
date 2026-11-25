@@ -154,7 +154,7 @@ async function show(next='shelves',event=null,{focus=true,peekMs=0}={}) {
     try{window.setIgnoreMouseEvents(false);}catch{}
     const shouldPeek=peeking&&pendingPeekGeneration===generation&&peek.pending&&!window.isFocused?.();
     if(!focus&&shouldPeek&&typeof window.showInactive==='function')window.showInactive();
-    else{window.show();if(focus||!shouldPeek)window.focus();}
+    else{window.show();if(focus)window.focus();}
     if(shouldPeek&&!window.isFocused?.())peek.commitPending(generation,peekMs);
     else peek.clearPending(generation);
     pendingPeekGeneration=0;pendingPeekEvent=null;
