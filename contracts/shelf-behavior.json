@@ -232,6 +232,12 @@
         "behavior": "A note made with New note is never taken over by a copy: copying text equal to a note's text makes a separate item, and every note with that text keeps its name, date added and place in the Library instead of moving to the shelf or to Trash. Text that was copied, not typed as a note, still deduplicates on the next copy.",
         "macos": "LibraryStore.createNote marks the record (createdAsNote) and LibraryStore.captureText skips marked records when it looks for a match; records stored before the marker open unchanged and keep deduplicating. TextDedupStoreTests.testCopyingANotesTextNeverMergesOrTrashesNotes and testRecordsStoredBeforeTheNoteMarkerOpenAndStillTakeTheCopy cover it.",
         "windows": "Store.createNote marks the item (createdAsNote) in its first write and Store.insert never matches a marked item; model.test.cjs 'a capture or import of a note's text never merges or removes notes, also after reopening' covers it."
+      },
+      {
+        "id": "clipboard-image-limit",
+        "behavior": "A copied image larger than 40,000,000 pixels or 32 MB is not captured, and no notice is shown, so the same copy is skipped on both platforms; a copied image within both limits lands on the Image shelf.",
+        "macos": "ClipboardWatcher.validatedPNG rejects data over maximumDataBytes (32 MB) and images over maximumPixelCount (40,000,000); ClipboardWatcherTests.testValidationRejectsEmptyOversizedAndMislabeledData covers it.",
+        "windows": "readClipboardContent in lib/clipboard-policy.cjs skips a PNG over 32 MB or 40,000,000 pixels and Store.insert refuses one, while files imported from disk keep the larger limit; clipboard-admission.test.cjs and model.test.cjs cover it."
       }
     ]
   },

@@ -1,5 +1,7 @@
 'use strict';
 const crypto=require('node:crypto');
+// Same bounds as macOS ClipboardWatcher.maximumDataBytes and maximumPixelCount.
+const CAPTURED_IMAGE_BYTES=32*1024*1024,CAPTURED_IMAGE_PIXELS=40_000_000;
 
 // Exclusion markers apply to the entire native copy, including markers carried
 // by a different item or wrapped in Electron's raw-format MIME type.
@@ -31,8 +33,10 @@ async function readClipboardContent({clipboard,sequence,marker,plainURL,captureL
   const image=entries.find(item=>item.types.includes('image/png'));
   let kind,value,bytes;
   if(image){
-    const blob=await image.getType('image/png');if(blob.size>64*1024*1024)return null;
-    bytes=Buffer.from(await blob.arrayBuffer());kind='image';value=bytes;
+    const blob=await image.getType('image/png');if(blob.size>CAPTURED_IMAGE_BYTES)return null;
+    bytes=Buffer.from(await blob.arrayBuffer());
+    if(bytes.length>=24&&bytes.readUInt32BE(16)*bytes.readUInt32BE(20)>CAPTURED_IMAGE_PIXELS)return null;
+    kind='image';value=bytes;
   }else{
     // Use this item's payload, never a second live readText() of a replacement
     // clipboard whose private formats have not been inspected.
@@ -49,4 +53,4 @@ async function readClipboardContent({clipboard,sequence,marker,plainURL,captureL
 // A notification is a repeat only for the same native generation. An identical later copy is a new copy
 // (it re-adds an item the user deleted or hid), as macOS changeCount does.
 function repeatedGeneration(state,content){if(content.sequence===state.sequence)return true;state.sequence=content.sequence;return false;}
-module.exports={privateClipboard,readClipboardContent,repeatedGeneration};
+module.exports={CAPTURED_IMAGE_BYTES,CAPTURED_IMAGE_PIXELS,privateClipboard,readClipboardContent,repeatedGeneration};
