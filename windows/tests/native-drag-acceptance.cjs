@@ -18,4 +18,36 @@ module.exports=async({page,application,check})=>{
   const files=receipt.actual.files;assert.equal(files[0].text,receipt.expected.second);assert.equal(files[0].name,'0001-'+receipt.expected.ids[0]+'.txt');
   assert.equal(files[1].managed,true);assert.ok(files[1].bytes>0);assert.equal(files[2].text,'[InternetShortcut]\r\nURL='+receipt.expected.link+'\r\n');assert.equal(files[2].name,'0003-'+receipt.expected.ids[2]+'.url');assert.equal(files[3].text,receipt.expected.first);
   check('native drag handoff supplies captured ordered text/image/link files with private generated labels (external drop not asserted)');
+  const mouseEventsReceipt=await application.evaluate(async()=>{
+    const h=global.__clipboardLineTest,win=h.getWindow();
+    const image=h.store.data.items.find(value=>value.kind==='image'&&!value.trashedAt);
+    const originalIgnore=win.setIgnoreMouseEvents,events=[];
+    win.setIgnoreMouseEvents=(ignore,options)=>{events.push(ignore);return originalIgnore.call(win,ignore,options);};
+    const contents=win.webContents,originalStart=contents.startDrag;
+    let thrownError=null;
+    try{
+      contents.startDrag=()=>{};
+      await h.command('startDrag',{ids:[image.id]});
+      const afterSuccess=events[events.length-1];
+
+      contents.startDrag=()=>{throw new Error('synthetic startDrag error');};
+      try{await h.command('startDrag',{ids:[image.id]});}catch(e){thrownError=e.message;}
+      const afterThrow=events[events.length-1];
+
+      await h.command('dragStartOverlay');
+      const duringOverlay=events[events.length-1];
+      await h.command('dragEndOverlay',{completed:false});
+      const afterOverlay=events[events.length-1];
+
+      return{afterSuccess,afterThrow,thrownError,duringOverlay,afterOverlay};
+    }finally{
+      win.setIgnoreMouseEvents=originalIgnore;
+      contents.startDrag=originalStart;
+    }
+  });
+  assert.equal(mouseEventsReceipt.afterSuccess,false,'mouse events must be restored (false) after successful startDrag');
+  assert.equal(mouseEventsReceipt.afterThrow,false,'mouse events must be restored (false) when startDrag throws');
+  assert.equal(mouseEventsReceipt.duringOverlay,true,'mouse events must be ignored (true) during dragStartOverlay');
+  assert.equal(mouseEventsReceipt.afterOverlay,false,'mouse events must be restored (false) after dragEndOverlay');
+  check('mouse events are restored after startDrag (including when it throws) and after dragEndOverlay');
 };
