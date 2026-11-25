@@ -199,6 +199,7 @@
 "Trash" = "Trash";
 "Try another filter or view your recent copies." = "Try another filter or view your recent copies.";
 "Turn on" = "Activer";
+"Turn on Fetch link titles and thumbnails in Settings to refresh link previews" = "Turn on Fetch link titles and thumbnails in Settings to refresh link previews";
 "Unorganized" = "Unorganized";
 "Unpin" = "Désépingler";
 "Unsaved copies are kept for %d days" = "Unsaved copies are kept for %d days";
@@ -449,6 +450,7 @@
 /* Searchable action bar. */
 "Actions" = "Actions";
 "Available on the shelves" = "Disponible dans les étagères";
+"Available in Library" = "Disponible dans la bibliothèque";
 "Available on the shelves or in Library" = "Disponible dans les étagères ou la bibliothèque";
 "Edit item details" = "Modifier les détails de l’élément";
 "Finish editing first" = "Terminez d’abord la modification";

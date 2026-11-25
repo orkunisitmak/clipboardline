@@ -193,7 +193,7 @@ private final class LibraryNativeTable: NSTableView {
         let menu = NSMenu()
         menu.addItem(ClosureMenuItem(L("Preview")) { [weak model] in model?.onPreview?(id) })
         menu.addItem(ClosureMenuItem(L("Copy")) { [weak model] in model?.copy() })
-        menu.addItem(ClosureMenuItem(L("Pin favorite")) { [weak model] in model?.favorite() })
+        menu.addItem(ClosureMenuItem(model.actionsArePinned ? L("Unpin") : L("Pin favorite")) { [weak model] in model?.favorite() })
         if model.query.scope != .trash {
             menu.addItem(ClosureMenuItem(L("Name and pin…")) { [weak model] in model?.onNameAndPinRequested?(id) })
         }

@@ -48,7 +48,7 @@ function fixture({deferInitialState=false,initialVisible=true}={}){
   if(action==='folder'){if(folderFailures){folderFailures--;cleanupError='Synthetic folder commit failure';}else{selected.forEach(item=>{item.folderIds=[...new Set([...item.folderIds,payload.folderId])];if(payload.pinning!==false)item.pinned=true;item.retainedAt??=Date.now();});if(payload.rememberRecent)state.settings.recentPinFolderIds=[payload.folderId,...(state.settings.recentPinFolderIds||[]).filter(id=>id!==payload.folderId)].slice(0,8);}}
   if(action==='unassign')selected.forEach(item=>item.folderIds=item.folderIds.filter(id=>id!==payload.folderId));
   if(action==='removeTag')selected.forEach(item=>item.tags=item.tags.filter(tag=>tag!==payload.tag));
-  if(action==='renameTag')state.items.forEach(item=>item.tags=item.tags.map(tag=>tag===payload.tag?payload.name:tag));
+  let renamedTag;if(action==='renameTag'){renamedTag=payload.name.trim().replace(/^#+|#+$/g,'').trim();state.items.forEach(item=>item.tags=item.tags.map(tag=>tag===payload.tag?renamedTag:tag));}
   if(action==='deleteTag')state.items.forEach(item=>item.tags=item.tags.filter(tag=>tag!==payload.tag));
   if(action==='pin')selected.forEach(item=>item.pinned=typeof payload.value==='boolean'?payload.value:!item.pinned);
    if(action==='restore')selected.forEach(item=>{item.trashedAt=null;item.trashRevision=null;item.retainedAt??=Date.now();});
@@ -58,7 +58,7 @@ function fixture({deferInitialState=false,initialVisible=true}={}){
   if(action==='copy'&&!payload.keepOpen||action==='paste'||action==='hide')state.windowVisible=false;
   if(action==='show'){state.view='shelves';state.windowVisible=true;state.viewEvent={serial:String(commands.length)};}
   if(action==='library'||action==='settings'){state.view=action;state.windowVisible=true;}
-  const output=clone(state);if(newNote)output.result={id:newNote.id};if(action==='searchImages')output.result=await visualSearch(clone(payload));if(cleanupError)output.result={error:cleanupError};subscriber?.(output);
+  const output=clone(state);if(newNote)output.result={id:newNote.id};if(renamedTag!==undefined)output.result={name:renamedTag};if(action==='searchImages')output.result=await visualSearch(clone(payload));if(cleanupError)output.result={error:cleanupError};subscriber?.(output);
   if(delayedReply?.action===action){const pending=delayedReply;delayedReply=null;await pending.promise;}
   return output;
  }};
@@ -111,6 +111,12 @@ test('inspector Add to folder preserves pin state and memberships while ShiftP s
  await f.key('KeyP',{shift:true});assert.match(f.overlay,/Pin without folder/);await f.click('choose-folder',{folder:b});assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:b,rememberRecent:true});assert.equal(f.state.items[0].pinned,true);
 });
 
+test('the action list Add to folder keeps an unpinned item unpinned',async()=>{
+ const f=fixture();await f.ready();const a='20000000-0000-4000-8000-000000000001';f.state.folders=[{id:a,name:'Work'}];Object.assign(f.state.items[0],{retainedAt:1000,folderIds:[],pinned:false});f.api.emit({folders:f.state.folders,items:f.state.items});await f.ready();await savedLibrary(f);await f.key('KeyK',{ctrl:true});await f.click('execute-command',{command:'folder.assign.'+a});
+ assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:a,pinning:false});
+ const value=f.state.items.find(entry=>entry.id===f.image);assert.deepEqual(value.folderIds,[a]);assert.equal(value.pinned,false);
+});
+
 test('ShiftP starts on the first real folder and keeps Pin without folder last like the native picker',async()=>{
  const f=fixture();await f.ready();const first='20000000-0000-4000-8000-000000000001',second='20000000-0000-4000-8000-000000000002';f.api.emit({folders:[{id:first,name:'References'},{id:second,name:'Video ideas'}]});await f.ready();await f.key('KeyP',{shift:true});assert.deepEqual([...f.overlay.matchAll(/data-action="choose-folder" data-folder="([^"]*)"/g)].map(match=>match[1]),[first,second,'']);await f.key('Enter');assert.deepEqual(f.commands.findLast(value=>value.action==='folder').payload,{ids:[f.image],folderId:first,rememberRecent:true});await f.key('KeyP',{shift:true});await f.key('ArrowDown');await f.key('ArrowDown');await f.key('Enter');assert.deepEqual(f.commands.at(-1),{action:'pin',payload:{ids:[f.image],value:true}});
 });
@@ -146,6 +152,12 @@ test('new permanent notes leave incompatible Library filters and open unpinned i
  const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.key('KeyF');await f.click('new-note');await f.input('simple-input','A new permanent note');await f.click('confirm-modal');const note=f.state.items.find(value=>value.text==='A new permanent note');assert.ok(note?.retainedAt);assert.equal(note.pinned,false);assert.deepEqual(cards(f),[note.id,f.image]);assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);assert.match(f.main,/data-action="pinnedOnly"[^>]*aria-pressed="false"/);assert.match(f.overlay,/id="text-editor"[^>]*>A new permanent note<\/textarea>/);
 });
 
+test('New note resets the Library sort to newest like macOS',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000});f.api.emit({items:f.state.items});await f.ready();
+ await savedLibrary(f);await f.change('sort-filter','oldest');
+ await f.click('new-note');await f.input('simple-input','Fresh note');await f.click('confirm-modal');
+ const note=f.state.items.find(value=>value.text==='Fresh note');assert.equal(cards(f)[0],note.id);assert.match(f.main,/<option value="newest" selected>/);
+});
 test('Edit details chooses Saved for a retained shelf item excluded by Recent',async()=>{
  const f=fixture();await f.ready();f.state.items[0].retainedAt=0;f.api.emit({items:f.state.items});await f.ready();await recent(f);assert.ok(!cards(f).includes(f.image));await f.api.command('show');await f.click('edit-details');assert.deepEqual(cards(f),[f.image]);assert.equal(focusedCard(f),f.image);assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);
 });
@@ -186,6 +198,29 @@ test('the action list keeps Copy enabled for Trash items while editing actions a
  const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image]);
  await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="copy" >/);assert.match(f.overlay,/data-command="pin" disabled>/);assert.match(f.overlay,/data-command="paste" disabled>/);assert.match(f.overlay,/data-command="preview" disabled>/);
 });
+test('edit actions need exactly one selected item',async()=>{
+ const f=fixture();await f.ready();await recent(f);await f.key('ArrowRight');await f.key('ArrowRight',{shift:true});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="edit" disabled>/);await f.key('Escape');
+ await f.key('KeyE');assert.doesNotMatch(f.main+f.overlay,/text-editor/);
+});
+test('image actions need exactly one selected item',async()=>{
+ const f=fixture();await f.ready();const other='00000000-0000-4000-8000-000000000005';f.state.items.push({...structuredClone(f.state.items[0]),id:other,createdAt:2000,mediaUrl:'appmedia://media/'+other,originalMediaUrl:'appmedia://media/'+other+'/original'});f.api.emit({items:f.state.items});await f.ready();await recent(f);await f.key('ArrowRight',{shift:true});
+ await f.key('KeyK',{ctrl:true});for(const id of ['crop','markup','pen','copyOCR'])assert.match(f.overlay,new RegExp('data-command="'+id+'" disabled>'));await f.key('Escape');
+ await f.key('KeyC');assert.doesNotMatch(f.main+f.overlay,/markup-canvas/);
+});
+test('the Open key acts on the focused link of a multi-selection like macOS',async()=>{
+ const f=fixture();await f.ready();const other='00000000-0000-4000-8000-000000000006',source=f.state.items.find(value=>value.kind==='link');f.state.items.push({...structuredClone(source),id:other,url:'https://example.com/other'});f.api.emit({items:f.state.items});await f.ready();await recent(f);await f.key('Digit3',{ctrl:true});await f.key('ArrowRight',{shift:true});
+ await f.key('KeyO',{ctrl:true});assert.equal(f.commands.at(-1).action,'openLink');assert.equal(f.commands.at(-1).payload.id,other);
+});
+test('Name and pin leaves the length of a name to the shared validation',async()=>{
+ const f=fixture();await f.ready();await f.key('KeyP',{alt:true});assert.match(f.overlay,/id="name-input"/);assert.doesNotMatch(f.overlay,/id="name-input"[^>]*maxlength/);
+});
+test('the action list disables item details and Remove from folder for an item in Trash',async()=>{
+ const f=fixture();await f.ready();const a='20000000-0000-4000-8000-000000000001';f.state.folders=[{id:a,name:'Work'}];Object.assign(f.state.items[0],{trashedAt:1000,folderIds:[a]});f.api.emit({folders:f.state.folders,items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="edit-details" disabled>/);assert.match(f.overlay,new RegExp('data-command="folder.remove.'+a+'" disabled>'));assert.match(f.overlay,/Restore this item first/);
+ await f.key('Escape');f.state.items[0].trashedAt=null;f.state.items[0].retainedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.click('scope',{scope:'saved'});
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="edit-details" >/);assert.match(f.overlay,new RegExp('data-command="folder.remove.'+a+'" >'));
+});
 test('the action list disables Move to Trash for an item already in Trash',async()=>{
  const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
  await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/data-command="trash" disabled>/);
@@ -221,6 +256,13 @@ test('Title sort does not fold ligatures or circled digits, like the Mac',async(
  f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'saved'});await f.change('sort-filter','title');
  assert.deepEqual(cards(f).map(id=>f.state.items.find(item=>item.id===id).name),['1','2','fj','fz','\u2460','\ufb01sh']);
 });
+test('disabled undo rows name the surface before saying there is nothing to undo',async()=>{
+ const f=fixture();await f.ready();
+ const detail=id=>f.overlay.match(new RegExp('<button[^>]*data-command="'+id+'"[^>]*>[\\s\\S]*?</button>'))[0].match(/<small>([^<]*)<\/small>/)[1];
+ await f.key('KeyK',{ctrl:true});assert.equal(detail('undoTrash'),'Available in Library');assert.equal(detail('undo'),'Nothing to undo.');
+ await f.key('Escape');await savedLibrary(f);await f.key('KeyK',{ctrl:true});
+ assert.equal(detail('undo'),'Available on the shelves');assert.equal(detail('undoTrash'),'Nothing to undo.');
+});
 test('restoring from Trash moves focus and selection to the first remaining item',async()=>{
  const f=fixture();await f.ready();for(const value of f.state.items.slice(0,3))value.trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);
  await f.key('ArrowRight');assert.equal(focusedCard(f),f.text1);await f.click('restore');assert.deepEqual(cards(f),[f.image,f.text2]);assert.equal(focusedCard(f),f.image);assert.match(f.main,/<article class="[^"]*\bselected\b[^"]*"[^>]*data-item-id="00000000-0000-4000-8000-000000000001"/);
@@ -242,6 +284,11 @@ test('Library tags are listed in folded-name order like the Mac library',async()
 test('global tag menu keyboard rename follows the selected scope and filters while deletion requires confirmation',async()=>{
  const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client'],pinned:true});Object.assign(f.state.items[1],{retainedAt:900,tags:['client'],pinned:false});Object.assign(f.state.items[2],{retainedAt:800,tags:['other']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('tag-scope',{tag:'client'});await f.change('filter-client','',{dataset:{filterTag:'client'},checked:true});assert.deepEqual(cards(f),[f.image,f.text1]);await f.click('tag-menu',{tag:'client'});assert.match(f.overlay,/Rename tag/);assert.match(f.overlay,/Remove tag/);await f.key('Enter');assert.match(f.overlay,/Rename tag/);await f.input('simple-input','Renamed client');await f.key('Enter');assert.deepEqual(f.commands.findLast(command=>command.action==='renameTag').payload,{tag:'client',name:'Renamed client'});assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,/data-action="tag-scope" data-tag="Renamed client" class="active"/);assert.deepEqual(f.state.items[0].tags,['Renamed client']);assert.deepEqual(f.state.items[1].tags,['Renamed client']);assert.equal(f.state.items[1].pinned,false);
  await f.click('tag-menu',{tag:'Renamed client'});await f.key('ArrowDown');await f.key('Enter');assert.match(f.overlay,/Remove this tag\?/);assert.equal(f.commands.some(command=>command.action==='deleteTag'),false);await f.key('Escape');assert.deepEqual(f.state.items[0].tags,['Renamed client']);await f.click('tag-menu',{tag:'Renamed client'});await f.key('ArrowDown');await f.key('Enter');await f.click('confirm-modal');assert.deepEqual(f.commands.findLast(command=>command.action==='deleteTag').payload,{tag:'Renamed client'});assert.deepEqual(f.state.items[0].tags,[]);assert.deepEqual(f.state.items[1].tags,[]);assert.deepEqual(f.state.items[2].tags,['other']);assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);assert.doesNotMatch(f.main,/data-action="tag-scope" data-tag="Renamed client"/);
+});
+test('renaming the open, filtered tag to a hashtag keeps its cards visible under the stored name',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client'],pinned:true});Object.assign(f.state.items[1],{retainedAt:900,tags:['client']});Object.assign(f.state.items[2],{retainedAt:800,tags:['other']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('tag-scope',{tag:'client'});await f.change('filter-client','',{dataset:{filterTag:'client'},checked:true});assert.deepEqual(cards(f),[f.image,f.text1]);
+ await f.click('tag-menu',{tag:'client'});await f.key('Enter');await f.input('simple-input','#Renamed');await f.key('Enter');assert.deepEqual(f.commands.findLast(command=>command.action==='renameTag').payload,{tag:'client',name:'#Renamed'});assert.deepEqual(f.state.items[0].tags,['Renamed']);assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,/data-action="tag-scope" data-tag="Renamed" class="active"/);assert.doesNotMatch(f.main,/data-tag="#Renamed"/);
+ await f.click('tag-menu',{tag:'Renamed'});await f.key('Enter');await f.input('simple-input',' #Renamed ');await f.key('Enter');assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,/data-action="tag-scope" data-tag="Renamed" class="active"/);
 });
 
 test('Library title descending and best match order actual result identities',async()=>{
@@ -435,4 +482,61 @@ test('Library domain filter ignores case, surrounding spaces and dots, www and a
  for(const value of ['example.com',' Example.COM ','WWW.example.com','.example.com.'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[f.link],JSON.stringify(value));
  await f.input('domain-filter','other.org');assert.deepEqual(cards(f),[]);
  await f.input('domain-filter','  ');assert.deepEqual(cards(f),[f.image,f.link]);
+});
+test('the multi-selection inspector says Unpin when every selected item is pinned',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});Object.assign(f.state.items[1],{retainedAt:900,pinned:true});Object.assign(f.state.items[2],{retainedAt:800,pinned:false});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ const pinLabel=()=>f.main.match(/<aside class="inspector"[\s\S]*?<\/aside>/)[0].match(/<button[^>]*data-action="pin"[^>]*>([\s\S]*?)<\/button>/)[1].replace(/<[^>]*>/g,'').trim();
+ await f.key('KeyA',{ctrl:true});assert.equal(pinLabel(),'Pin');
+ f.state.items[2].pinned=true;f.api.emit({items:f.state.items});await f.ready();assert.equal(pinLabel(),'Unpin');
+});
+test('Library domain filter matches a typed number literally and does not rewrite it to an IP address',async()=>{
+ const f=fixture();await f.ready();const link=f.state.items.find(item=>item.id===f.link);link.url='http://127.0.0.1/page';link.retainedAt=1;f.state.items[0].tags=['x'];f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('toggle-filters');
+ await f.input('domain-filter','127.0.0.1');assert.deepEqual(cards(f),[f.link]);
+ for(const value of ['0x7f.1','2130706433'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[],value);
+});
+test('Library domain filter finds an internationalized link typed as written',async()=>{
+ const f=fixture();await f.ready();const link=f.state.items.find(item=>item.id===f.link);link.url='https://bücher.de/katalog';link.retainedAt=1;f.state.items[0].tags=['x'];f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('toggle-filters');
+ for(const value of ['bücher.de','BÜCHER.de','www.bücher.de','xn--bcher-kva.de'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[f.link],value);
+ await f.input('domain-filter','bücher.org');assert.deepEqual(cards(f),[]);
+ for(const value of ['bücher.de/katalog','bücher.de?x','bücher.de#x'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[],value);
+});
+test('removing a tag that is not open keeps the open tag view',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client']});Object.assign(f.state.items[1],{retainedAt:900,tags:['client']});Object.assign(f.state.items[2],{retainedAt:800,tags:['other']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ await f.click('tag-scope',{tag:'client'});await f.key('ArrowRight');const selectedCard=/<article class="[^"]*\bselected\b[^"]*"[^>]*data-item-id="00000000-0000-4000-8000-000000000002"/;assert.match(f.main,selectedCard);assert.equal(focusedCard(f),f.text1);await f.click('tag-menu',{tag:'other'});await f.key('ArrowDown');await f.key('Enter');await f.click('confirm-modal');
+ assert.deepEqual(f.commands.findLast(command=>command.action==='deleteTag').payload,{tag:'other'});
+ assert.match(f.main,/data-action="tag-scope" data-tag="client" class="active"/);assert.deepEqual(cards(f),[f.image,f.text1]);assert.match(f.main,selectedCard);assert.equal(focusedCard(f),f.text1);
+});
+test('removing a tag that is not open drops only that tag filter',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client','keep']});Object.assign(f.state.items[1],{retainedAt:900,tags:['client']});Object.assign(f.state.items[2],{retainedAt:800,tags:['other','keep']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ await f.click('tag-scope',{tag:'client'});await f.click('toggle-filters');await f.change('filter-keep','',{dataset:{filterTag:'keep'},checked:true});await f.change('filter-other','',{dataset:{filterTag:'other'},checked:true});assert.deepEqual(cards(f),[]);
+ await f.click('tag-menu',{tag:'other'});await f.key('ArrowDown');await f.key('Enter');await f.click('confirm-modal');
+ assert.deepEqual(f.commands.findLast(command=>command.action==='deleteTag').payload,{tag:'other'});
+ assert.match(f.main,/data-filter-tag="keep" checked/);assert.doesNotMatch(f.main,/data-filter-tag="other"/);assert.deepEqual(cards(f),[f.image]);
+});
+test('changing the Library sort keeps the selected item like macOS setSort',async()=>{
+ const f=fixture();await f.ready();await recent(f);
+ await f.key('ArrowRight');assert.equal(focusedCard(f),f.text1);
+ await f.change('sort-filter','oldest');assert.deepEqual(cards(f),[f.link,f.text2,f.text1,f.image]);assert.equal(focusedCard(f),f.text1);
+ await f.click('view-mode');await f.click('sort-column',{column:'title'});assert.equal(focusedCard(f),f.text1);
+});
+test('Library cards do not offer the shelf-only Take down button',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ assert.match(f.main,/data-action="card-pin"/);assert.doesNotMatch(f.main,/data-action="card-remove"/);
+});
+test('copying several Library items says how many were copied',async()=>{
+ const f=fixture();await f.ready();await recent(f);
+ await f.key('ArrowRight');await f.key('KeyC',{ctrl:true});assert.equal(f.nodes.get('toast').textContent,'Copied');
+ await f.key('ArrowRight',{shift:true});await f.key('ArrowRight',{shift:true});await f.key('KeyC',{ctrl:true});
+ assert.equal(f.commands.findLast(command=>command.action==='copy').payload.ids.length,3);assert.equal(f.nodes.get('toast').textContent,'3 items copied');
+});
+test('the Trash inspector offers no pin, folder or tag actions for a trashed item',async()=>{
+ const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.state.items[1].trashedAt=900;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ await f.key('ArrowDown');
+ const inspector=()=>f.main.match(/<aside class="inspector"[\s\S]*?<\/aside>/)[0],actions=()=>[...inspector().matchAll(/data-action="([^"]+)"/g)].map(match=>match[1]);
+ assert.ok(actions().includes('copy')&&actions().includes('restore'),actions().join());
+ for(const action of ['pin','add-to-folder','tag'])assert.ok(!actions().includes(action),action);
+ assert.doesNotMatch(inspector(),/<h2>/,'a single selection has no multi-selection heading');
+ await f.key('KeyA',{ctrl:true});assert.equal(f.main.match(/class="[^"]*\bselected\b[^"]*"[^>]*data-item-id/g).length,2,'both trashed items are selected');
+ for(const action of ['pin','add-to-folder','tag'])assert.ok(!actions().includes(action),action+' multi');
+ assert.match(inspector(),/<h2>[^<]+<\/h2>/,'the inspector shows the multi-selection heading');
 });

@@ -15,6 +15,7 @@ struct Pegged: Identifiable, Equatable {
     var managedCopy = false
     var originalPath: String?
     var title: String?
+    var exportName: String { HistoryFiles.exportName(for: url, originalPath: originalPath, title: title) }
     /// Every photo hangs a little crooked, like on a real line.
     let tilt = Double.random(in: -2.5...2.5)
     var falling = false
@@ -370,7 +371,11 @@ final class Line: ObservableObject {
             do { try library.removeFromShelf(ids) } catch { notice = error.localizedDescription; return }
         } else {
             switch shelf {
-            case .images: for id in ids { discard(id) }
+            case .images:
+                guard onFlushPreview() else { return }
+                for id in ids {
+                    if items.first(where: { $0.id == id })?.pinned == true { drop(id) } else { discard(id) }
+                }
             case .texts: for id in ids { texts.removeFromShelf(id) }
             case .links: for id in ids { links.removeFromShelf(id) }
             }
@@ -509,6 +514,37 @@ final class Line: ObservableObject {
                 case .links: if links.focusedID == nil { links.moveSelection(1, width: viewportWidth) }
                 }
             }
+        }
+    }
+
+    private func menuPinTargets(_ id: UUID, shelf: Shelf) -> Set<UUID> {
+        let selected: Set<UUID>
+        switch shelf {
+        case .texts: selected = texts.selectedIDs
+        case .links: selected = links.selectedIDs
+        case .images: selected = selectedIDs
+        }
+        return selected.count > 1 && selected.contains(id) ? selected : [id]
+    }
+
+    /// The menu says Unpin only when every card it will act on is pinned.
+    func menuPinIsUnpin(_ id: UUID, shelf: Shelf) -> Bool {
+        let pinned: Set<UUID>
+        switch shelf {
+        case .texts: pinned = Set(texts.entries.filter(\.pinned).map(\.id))
+        case .links: pinned = Set(links.entries.filter(\.favorite).map(\.id))
+        case .images: pinned = Set(items.filter(\.pinned).map(\.id))
+        }
+        return menuPinTargets(id, shelf: shelf).allSatisfy(pinned.contains)
+    }
+
+    /// Right-click Pin favorite on a card inside a multi-selection acts on the whole selection, like the P key.
+    func pinFromMenu(_ id: UUID, shelf: Shelf) {
+        if menuPinTargets(id, shelf: shelf).count > 1 { focusShelf(shelf); pinActiveSelection(); return }
+        switch shelf {
+        case .texts: texts.togglePin(id)
+        case .links: links.togglePin(id)
+        case .images: pinFromUI(id)
         }
     }
 
@@ -655,7 +691,12 @@ final class Line: ObservableObject {
         }
     }
     func discardAction(_ id: UUID) {
-        if actionItems(for: id).count > 1 { focusShelf(.images); onTrashRequested?() }
+        let items = actionItems(for: id)
+        if items.count > 1 {
+            guard onFlushPreview() else { return }
+            focusShelf(.images)
+            removeFromShelf(items.map(\.id), on: .images, focusedID: id)
+        }
         else { discard(id) }
     }
 
@@ -691,7 +732,7 @@ final class Line: ObservableObject {
         guard let folder else { return nil }
         guard onFlushPreview() else { throw HistoryFiles.Failure.unsafeFile }
         let sources = selectedItems.map { item in
-            (url: item.url, name: HistoryFiles.exportName(for: item.url, originalPath: item.originalPath))
+            (url: item.url, name: item.exportName)
         }
         return try history.files.export(sources, to: folder)
     }
@@ -957,9 +998,7 @@ final class Line: ObservableObject {
         guard onFlushPreview() else { return }
         let images = neighbours(of: id, toTheLeft: toTheLeft)
         guard !images.isEmpty else { return }
-        // The same snapshot/confirmation policy as other local batch actions.
-        onImageTrashRequested?(TrashSelection(images: images,
-            appCopies: images.filter { history.files.isAppCopy($0.url) }.count))
+        removeFromShelf(images.map(\.id), on: .images, focusedID: id)
     }
 
     /// Photos whose file was deleted or moved away fall off by themselves.
@@ -1042,13 +1081,14 @@ final class Line: ObservableObject {
     /// of that folder. If the Trash refuses it, it still leaves the line.
     /// Moves along a line that holds more than fit, from a scroll gesture.
     /// Inbox mode: keep a screenshot by moving it to the Desktop.
-    func saveToDesktop(_ id: UUID) {
+    func saveToDesktop(_ id: UUID, desktop: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")) {
         guard onFlushPreview() else { return }
         guard let item = items.first(where: { $0.id == id }) else { return }
-        let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
         let target = uniqueURL(in: desktop, for: item.url.lastPathComponent)
         do {
-            try FileManager.default.moveItem(at: item.url, to: target)
+            // With the Library the record keeps pointing at the app's file, so it is copied, not moved.
+            if library != nil { try FileManager.default.copyItem(at: item.url, to: target) }
+            else { try FileManager.default.moveItem(at: item.url, to: target) }
             drop(id, quietly: true)
         } catch {
             log.error("Could not save to Desktop: \(error.localizedDescription, privacy: .public)")
