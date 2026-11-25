@@ -54,3 +54,17 @@ test('adding a tag reuses the existing spelling and drops surrounding # like mac
  store.modify('tag',{id:third.id,tags:['Work','résumé','new']});assert.deepEqual(store.item(third.id).tags,['Work','résumé','new']);
  assert.throws(()=>store.modify('tag',{id:third.id,tags:['#'+'x'.repeat(65)]}),/Invalid tag name/);
 }));
+test('tag and folder names that differ by a kana, Devanagari or Thai mark stay distinct like on the Mac',()=>fixture(store=>{
+ for(const [a,b] of [['は','ば'],['क','कि'],['ก','กิ']]){const first=store.insert('text','one '+a+b),second=store.insert('text','two '+a+b);store.modify('tag',{ids:[first.id],tags:[a]});store.modify('tag',{ids:[second.id],tags:[b]});assert.deepEqual(store.item(second.id).tags,[b]);const folder=store.modify('createFolder',{name:a});store.modify('createFolder',{name:b});store.modify('removeFolder',{id:folder.id});}
+}));
+
+test('renaming a tag to a hashtag stores the name without the hash and later adds reuse it',()=>fixture(store=>{
+ const first=store.insert('text','One'),second=store.insert('text','Two');
+ store.modify('tag',{id:first.id,tags:['draft']});
+ store.modify('renameTag',{tag:'draft',name:'#urgent'});assert.deepEqual(store.item(first.id).tags,['urgent']);
+ store.modify('tag',{id:second.id,tags:['#urgent']});assert.deepEqual(store.item(second.id).tags,['urgent']);
+ assert.throws(()=>store.modify('renameTag',{tag:'urgent',name:'##'}),/Invalid tag name/);
+ assert.throws(()=>store.modify('renameTag',{tag:'urgent',name:' ## '}),/Invalid tag name/);
+ const revision=store.revision;assert.deepEqual(store.modify('renameTag',{tag:'urgent',name:' #urgent '}),{name:'urgent'});assert.equal(store.revision,revision);assert.deepEqual(store.item(first.id).tags,['urgent']);
+ assert.deepEqual(store.modify('renameTag',{tag:'urgent',name:' #Later# '}),{name:'Later'});assert.deepEqual(store.item(second.id).tags,['Later']);
+}));

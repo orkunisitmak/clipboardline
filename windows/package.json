@@ -1,6 +1,6 @@
 {
   "name": "clipboardline-desktop",
-  "version": "1.7.8",
+  "version": "1.7.9",
   "description": "Keyboard-first local clipboard shelves and saved library for Windows",
   "author": "ClipBoardLine contributors",
   "license": "MIT",
@@ -113,5 +113,5 @@
       "node_modules/onnxruntime-common/**"
     ]
   },
-  "clipboardLineBuild": 71
+  "clipboardLineBuild": 72
 }

@@ -7,7 +7,7 @@ struct PublicUpdateChannel: Equatable {
     static let legacyRepository = "orkunisitmak/clipboardline-app"
     static let legacyFeed = "https://github.com/orkunisitmak/clipboardline-app/releases/latest/download/appcast.xml"
     static let feed = "https://github.com/orkunisitmak/clipboardline-desktop/releases/latest/download/appcast.xml"
-    static let publicKey = "s9DO901wav4VK/hfnLROxJYk4+oNFYvxdOK974E3PgI="
+    static let publicKey = "ASY6h/Y7xsg4fUmA8TleW6XhbhOtn5M6ql4eqq8o3sE="
 
     let feedURL: URL
 

@@ -104,7 +104,7 @@ Bu tablo macOS varsayılanlarını gösterir. Aşağıdaki [Windows kısayol tab
 | `E` | Metin önizlemesini düzenle | Düzenlerken Enter satır ekler; ⌘Enter veya Esc kaydeder ve bitirir. |
 | `⌘O` | Linki tarayıcıda aç | Kütüphanedeki seçili link veya link önizlemesi; ⌘Enter yapıştırma içindir. |
 | `⇧⌘C` | Görselde tanınan yazıyı kopyala | Görsel seçimi veya görsel önizlemesi; yerel OCR. |
-| `M` | İşaretlemeyi aç / bitir | Görsel önizlemesinde. |
+| `M` | İşaretlemeyi aç / bitir | Askıdaki odaklı fotoğraf veya görsel önizlemesi. H işaretleyiciyi seçer; sürükleyerek çiz. |
 | `C` | Kırpmayı aç | Görsel önizlemesi veya işaretleme. Alanı çiz/taşı/boyutlandır; Enter uygular; Esc iptal eder. |
 | `⌘Z / ⇧⌘Z` | Görsel düzenlemesini geri al / yinele | Kırpma ve işaretleme; metin düzenleyicilerin kendi geri alma işlemleri korunur. |
 | `⌘S` | İşaretlemeyi kaydet | İşaretlemeden çıkmadan kaydeder. Esc veya ⌘Enter kaydedip bitirir. |
@@ -191,7 +191,7 @@ Bunlar macOS tablosundan ayrı Windows varsayılanlarıdır. Command yerine Cont
 | `Ctrl+O` | Seçili linki tarayıcıda aç | Kütüphanede seçili link veya link önizlemesi; Ctrl+Enter yapıştırma içindir. |
 | `Ctrl+Shift+C` | Görselde tanınan yazıyı kopyala | Seçili görsel veya görsel önizlemesi; yerel İngilizce/Türkçe OCR. Gezinme açık kalır. |
 | `E` | Metni düzenle | Metin önizlemesinde. Enter satır ekler; Ctrl+Enter veya Esc kaydedip bitirir. |
-| `M` | Görsel işaretlemeyi aç / bitir | Fotoğraf önizlemesinde işaretlemeyi açar/bitirir. Kayıt önizlemesinde kırpmayı açar. Yerel kayıt kabul testi bekleniyor. |
+| `M` | Görsel işaretlemeyi aç / bitir | Askıdaki odaklı fotoğrafta doğrudan açar; fotoğraf önizlemesinde işaretlemeyi açar/bitirir. Kayıt önizlemesinde kırpmayı açar. Yerel kayıt kabul testi bekleniyor. |
 | `C` | Görsel kırpmayı aç | Görsel önizlemesi veya işaretleme; özgün pikseller korunur. |
 | `Enter / Esc (kırpma)` | Kırpmayı uygula / iptal et | Enter uygular, Esc iptal eder. Doğrudan kırpma önizleme gezinmesine, işaretlemeden açılan kırpma işaretlemeye döner. |
 | `Ctrl+Enter / Esc (işaretleme)` | İşaretlemeyi kaydet ve bitir | Kırpma aracı dışındayken ikisi de kaydedip bitirir. Düzenlerken tek Enter kopyalamaz. Kaydetme başarısızsa taslak açık kalır. |
