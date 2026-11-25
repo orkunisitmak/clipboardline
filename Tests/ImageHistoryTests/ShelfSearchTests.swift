@@ -36,6 +36,13 @@ import XCTest
         XCTAssertTrue(try store.item(hidden.id)?.retainedAt != nil)
         XCTAssertTrue(try store.item(deleted.id)?.deletedAt != nil)
     }
+    func testShelfSearchKeepsAVoicedKanaAndAHangulSyllableWholeLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+        let note = try XCTUnwrap(store.captureText("ばら 한국 バス"))
+        for query in ["は", "하", "ハ"] { XCTAssertTrue(try matches(store, .text, query).isEmpty, query) }
+        for query in ["ば", "한", "バ", "ばら"] { XCTAssertEqual(try matches(store, .text, query), Set([note.id]), query) }
+    }
     func testShelfSearchUsesTitlesTextNotesURLsTagsAndCurrentImageOCRWithLiteralUnicodeTerms() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })

@@ -24,6 +24,19 @@ import XCTest
         XCTAssertEqual(try store(f).query(LibraryQuery()).map(\.id), values.map(\.id))
         XCTAssertTrue(FileManager.default.fileExists(atPath: library.root.appendingPathComponent("Backups").path))
     }
+    func testRemovingTagFromItsLastItemDropsTheTagButKeepsItWhileAnotherItemHasIt() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }
+        let library = try store(f)
+        let first = try XCTUnwrap(library.captureText("one")), second = try XCTUnwrap(library.captureText("two"))
+        try library.addTag("draft", to: [first.id, second.id])
+        let tag = try XCTUnwrap(library.tags().first)
+        try library.removeTag(tag.id, from: first.id)
+        XCTAssertEqual(try library.tags().map(\.name), ["draft"])
+        try library.removeTag(tag.id, from: second.id)
+        XCTAssertTrue(try library.tags().isEmpty)
+        try library.addTag("draft", to: [first.id])
+        XCTAssertEqual(try library.tags(for: first.id).map(\.name), ["draft"])
+    }
     func testCorruptSourceBlocksMigrationAndDoesNotOverwriteArchive() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }
         let texts = f.texts(); texts.add("original"); let bad = Data("broken".utf8); try bad.write(to: texts.archive)
@@ -42,6 +55,21 @@ import XCTest
         XCTAssertEqual(Set(try library.query(LibraryQuery()).map(\.id)), Set([first.id,second.id,third.id]))
         XCTAssertTrue(try library.item(temporary.id)?.deletedAt != nil)
         XCTAssertEqual(try library.query(LibraryQuery(scope: .unorganized)).count, 3)
+    }
+    func testAllPinnedNeedsEveryIdPinnedAndExisting() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try XCTUnwrap(library.captureText("first")), second = try XCTUnwrap(library.captureText("second"))
+        XCTAssertFalse(try library.allPinned([]))
+        XCTAssertFalse(try library.allPinned([first.id, second.id]))
+        try library.toggleFavorite([first.id])
+        XCTAssertFalse(try library.allPinned([first.id, second.id]))
+        try library.toggleFavorite([second.id])
+        XCTAssertTrue(try library.allPinned([first.id, second.id, first.id]))
+        XCTAssertFalse(try library.allPinned([first.id, UUID()]))
+        let many = try (0..<501).map { try XCTUnwrap(library.captureText("note \($0)")).id }
+        try library.toggleFavorite(many)
+        XCTAssertTrue(try library.allPinned(many + [many[0]]))
+        XCTAssertFalse(try library.allPinned(many + [UUID()] + [many[0]]))
     }
     func testCollectionsAreManyToManyNestedAndRemovalDoesNotDeleteContent() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
@@ -83,6 +111,25 @@ import XCTest
         XCTAssertTrue(try library.query(LibraryQuery(scope: .collection(parent))).isEmpty)
         XCTAssertEqual(try Data(contentsOf: url), bytes)
     }
+    func testDomainFilterMatchesAnInternationalizedNameTypedAsWritten() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let link = try library.captureLink(URL(string: "https://b\u{FC}cher.de/katalog")!)
+        for typed in ["b\u{FC}cher.de", "B\u{DC}CHER.de", "www.b\u{FC}cher.de", "xn--bcher-kva.de"] {
+            XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, domain: typed)).map(\.id), [link.id], typed)
+        }
+        XCTAssertTrue(try library.query(LibraryQuery(scope: .recent, domain: "b\u{FC}cher.org")).isEmpty)
+        for typed in ["b\u{FC}cher.de/katalog", "b\u{FC}cher.de?x", "b\u{FC}cher.de#x"] {
+            XCTAssertTrue(try library.query(LibraryQuery(scope: .recent, domain: typed)).isEmpty, typed)
+        }
+    }
+    func testDomainFilterMatchesATypedNumberLiterallyInsteadOfAnIPAddress() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let link = try library.captureLink(URL(string: "http://127.0.0.1/page")!)
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, domain: "127.0.0.1")).map(\.id), [link.id])
+        for typed in ["0x7f.1", "2130706433"] {
+            XCTAssertTrue(try library.query(LibraryQuery(scope: .recent, domain: typed)).isEmpty, typed)
+        }
+    }
     func testDomainFilterIncludesSubdomainsWithLiteralHostBoundaries() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let expected = try ["https://youtube.com/one", "https://www.youtube.com/two", "https://m.youtube.com/three"].map { try library.captureLink(URL(string: $0)!).id }
@@ -101,6 +148,23 @@ import XCTest
         try library.update(plan.id) { $0.title = "  Zulu \n" }
         XCTAssertEqual(try library.item(plan.id)?.displayTitle, "Zulu")
         XCTAssertEqual(try library.query(LibraryQuery(scope: .saved, sort: .title)).map(\.id), [other.id, plan.id])
+    }
+    func testRenamingATagToAHashtagStoresTheNameWithoutTheHash() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try XCTUnwrap(library.captureText("one")), second = try XCTUnwrap(library.captureText("two"))
+        try library.addTag("draft", to: [first.id])
+        let tag = try XCTUnwrap(library.tags().first); try library.renameTag(tag.id, name: "#urgent")
+        XCTAssertEqual(try library.tags().map(\.name), ["urgent"])
+        try library.addTag("#urgent", to: [second.id])
+        XCTAssertEqual(try library.tags().map(\.name), ["urgent"])
+        XCTAssertThrowsError(try library.renameTag(tag.id, name: "##"))
+        let revision = library.revision
+        try library.renameTag(tag.id, name: "#urgent"); try library.renameTag(tag.id, name: "urgent")
+        try library.renameTag(tag.id, name: " #urgent ")
+        XCTAssertThrowsError(try library.renameTag(tag.id, name: " ## "))
+        XCTAssertEqual(try library.tags().map(\.name), ["urgent"]); XCTAssertEqual(library.revision, revision)
+        try library.renameTag(tag.id, name: "Urgent")
+        XCTAssertEqual(try library.tags().map(\.name), ["Urgent"]); XCTAssertEqual(library.revision, revision + 1)
     }
     func testTagRenameSearchTurkishAndLiteralSQLCharacters() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
@@ -242,6 +306,64 @@ import XCTest
         XCTAssertEqual(try library.shelfItems(.link).first?.id, first.id)
         try library.prune(); XCTAssertNil(try library.item(first.id)?.deletedAt); XCTAssertTrue(try library.item(second.id)?.deletedAt != nil)
         f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(first.id)?.deletedAt != nil)
+    }
+    func testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let item = try library.captureLink(URL(string: "https://example.com/old")!)
+        f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(item.id)?.deletedAt != nil)
+        try library.restore([item.id]); try library.prune(); XCTAssertNil(try library.item(item.id)?.deletedAt)
+        f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(item.id)?.deletedAt != nil)
+    }
+    func testUndoTakeDownDoesNotHangATextOrLinkTwiceAfterItWasCopiedAgain() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let text = try XCTUnwrap(library.captureText("Hang once")), link = try library.captureLink(URL(string: "https://example.com/hang-once")!)
+        try library.removeFromShelf([text.id]); try library.removeFromShelf([link.id])
+        f.date.addTimeInterval(10)
+        let freshText = try XCTUnwrap(library.captureText("Hang once")), freshLink = try library.captureLink(URL(string: "https://example.com/hang-once")!)
+        XCTAssertNotEqual(freshText.id, text.id); XCTAssertNotEqual(freshLink.id, link.id)
+        XCTAssertEqual(try library.undoShelfRemoval(), []); XCTAssertEqual(try library.undoShelfRemoval(), [])
+        XCTAssertEqual(try library.shelfItems(.text).map(\.id), [freshText.id]); XCTAssertEqual(try library.shelfItems(.link).map(\.id), [freshLink.id])
+        let other = try XCTUnwrap(library.captureText("Plain take down")); try library.removeFromShelf([other.id])
+        XCTAssertEqual(try library.undoShelfRemoval(), [other.id])
+    }
+    func testUndoTakeDownLeavesALinkOffTheShelfWhenTheCopyDiffersOnlyByTrackingParameters() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let old = try library.captureLink(URL(string: "https://example.com/a?utm_source=old")!); try library.removeFromShelf([old.id])
+        f.date.addTimeInterval(10); let fresh = try library.captureLink(URL(string: "https://example.com/a?utm_source=new")!)
+        XCTAssertNotEqual(fresh.id, old.id); XCTAssertEqual(try library.undoShelfRemoval(), [])
+        XCTAssertEqual(try library.shelfItems(.link).map(\.id), [fresh.id])
+        let other = try library.captureLink(URL(string: "https://example.com/a?page=1")!); try library.removeFromShelf([other.id])
+        f.date.addTimeInterval(10); _ = try library.captureLink(URL(string: "https://example.com/a?page=2")!)
+        XCTAssertEqual(try library.undoShelfRemoval(), [other.id])
+    }
+    func testUndoTakeDownSeesATextEditedByAnOlderAppWhileOpen() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let old = try XCTUnwrap(library.captureText("Hang once")), edited = try XCTUnwrap(library.captureText("Something else"))
+        try library.removeFromShelf([old.id])
+        let db = try LibraryDatabase(url: library.databaseURL)
+        var legacy = edited; legacy.text = "Hang once"; legacy.updatedAt = f.date
+        try db.execute("UPDATE items SET payload=? WHERE id=?", [.blob(try JSONEncoder().encode(legacy)), .text(edited.id.uuidString)])
+        XCTAssertEqual(try library.undoShelfRemoval(), [])
+        XCTAssertEqual(try library.shelfItems(.text).map(\.id), [edited.id])
+    }
+    func testCopyingAStoredImageAgainRecordsTheCopyLikeText() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try library.captureImage(try f.image(owned: false, identicalPixels: true))
+        f.date.addTimeInterval(10); try library.markCopied([first.id])
+        f.date.addTimeInterval(10); _ = try library.captureImage(try f.image(owned: false))
+        f.date.addTimeInterval(10); let again = try library.captureImage(try f.image(owned: false, identicalPixels: true))
+        XCTAssertEqual(again.id, first.id); XCTAssertEqual(try library.item(first.id)?.lastCopiedAt, f.date)
+    }
+    func testLastCopiedViewLeadsWithAnImageCopiedAgain() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let first = try library.captureImage(try f.image(owned: false, identicalPixels: true))
+        f.date.addTimeInterval(10); let second = try library.captureImage(try f.image(owned: false))
+        f.date.addTimeInterval(10); try library.markCopied([first.id])
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, sort: .copied)).map(\.id), [first.id, second.id])
+        f.date.addTimeInterval(10); try library.markCopied([second.id])
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, sort: .copied)).map(\.id), [second.id, first.id])
+        f.date.addTimeInterval(10); _ = try library.captureImage(try f.image(owned: false, identicalPixels: true))
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, sort: .copied)).map(\.id), [first.id, second.id])
     }
     func testRestoringOldCopyAfterRecapturePreservesBothRecordsAndPinsExactImageID() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)

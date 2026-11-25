@@ -13,14 +13,11 @@ import XCTest
         let order = line.displayItems
         XCTAssertEqual(line.neighbours(of: order[2].id, toTheLeft: true).map(\.id), Array(order.prefix(2)).map(\.id))
         XCTAssertEqual(line.neighbours(of: order[2].id, toTheLeft: false).map(\.id), Array(order.suffix(2)).map(\.id))
-        var snapshot: Line.TrashSelection?
-        line.onImageTrashRequested = { snapshot = $0 }
         line.takeDown(order[2].id, toTheLeft: true)
-        XCTAssertEqual(line.items.count, 5) // opening confirmation never removes anything
-        XCTAssertEqual(snapshot?.images.count, 2)
+        // the two photos on the left come off the shelf at once
+        XCTAssertEqual(line.items.filter { !$0.falling }.map(\.id).sorted { $0.uuidString < $1.uuidString }, order.suffix(3).map(\.id).sorted { $0.uuidString < $1.uuidString })
         line.hang(try f.image(), quietly: true)
-        line.trashSelection(try XCTUnwrap(snapshot), confirmed: true)
-        XCTAssertEqual(line.items.count, 4) // a later capture is outside the approved snapshot
+        XCTAssertEqual(line.items.filter { !$0.falling }.count, 4)
         _ = try line.togglePin(order[3].id); _ = try line.togglePin(order[4].id)
         line.setFavoritesOnly(true)
         XCTAssertEqual(line.neighbours(of: order[3].id, toTheLeft: false).map(\.id), [order[4].id])

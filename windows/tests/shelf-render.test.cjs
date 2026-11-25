@@ -60,3 +60,9 @@ test('title and tag order keep ı apart from i, only search folds them together'
  const f=fixture();await f.ready();
  assert.deepEqual(['ılık','zebra','sıra','sinek'].sort(f.api.compareFolded),['sinek','sıra','zebra','ılık']);
 });
+test('search does not find a bare kana or Hangul jamo inside a voiced kana or syllable, like the Mac',async()=>{
+ const f=fixture();await f.ready();const {api}=f;const kana={...structuredClone(f.initial.items[1]),id:'71000000-0000-4000-8000-000000000011',createdAt:5100,text:'ばら 한국 バス'};
+ f.emit([kana,...f.raw.items]);
+ for(const query of ['は','하','ハ'])api.ui.search=query,assert.ok(!plain(api.rowItems('text')).includes(kana.id),query);
+ for(const query of ['ば','한','バ','ばら'])api.ui.search=query,assert.ok(plain(api.rowItems('text')).includes(kana.id),query);
+});
