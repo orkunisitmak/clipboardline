@@ -60,6 +60,19 @@ struct HistoryFiles {
         return original.deletingPathExtension().lastPathComponent + (url.pathExtension.isEmpty ? "" : "." + url.pathExtension)
     }
 
+    /// An item the user named exports under that name, as on Windows; the file keeps its extension.
+    static func exportName(for url: URL, originalPath: String?, title: String?) -> String {
+        let base = exportName(for: url, originalPath: originalPath)
+        var label = (title ?? "").components(separatedBy: CharacterSet(charactersIn: "/\\:").union(.controlCharacters)).joined(separator: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let ext = (base as NSString).pathExtension
+        // File names are limited to 255 bytes, so cut on whole characters within what the extension leaves.
+        var budget = 255 - (ext.isEmpty ? 0 : ext.utf8.count + 1)
+        label = String(label.prefix(100).prefix { budget -= String($0).utf8.count; return budget >= 0 }).trimmingCharacters(in: CharacterSet(charactersIn: ".").union(.whitespaces))
+        guard !label.isEmpty else { return base }
+        return ext.isEmpty ? label : label + "." + ext
+    }
+
     private func isNamedCopy(_ url: URL, prefix: String, folder: URL, allowed: Set<String>) -> Bool {
         let folder = folder.standardizedFileURL
         guard url.standardizedFileURL.deletingLastPathComponent().path == folder.path,

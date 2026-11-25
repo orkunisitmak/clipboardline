@@ -288,6 +288,7 @@ public static class ClipBoardLineNative {
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
   [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int key);
   [DllImport("user32.dll")] public static extern uint SendInput(uint count, INPUT[] inputs, int size);
@@ -325,7 +326,7 @@ try {
   if ($Mode -eq 'CopyImages') {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
-    $payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    $payload = (New-Object IO.StreamReader([Console]::OpenStandardInput(),[Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
     if ($payload.files.Count -lt 1 -or $payload.files.Count -gt 1000) { throw 'Invalid image batch.' }
     foreach ($file in $payload.files) { if (-not [System.IO.File]::Exists($file) -or [System.IO.Path]::GetExtension($file) -ne '.png') { throw 'Managed image is unavailable.' } }
     $data = New-Object System.Windows.Forms.DataObject
@@ -367,7 +368,7 @@ try {
     $captureInfo | ConvertTo-Json -Compress
   } else {
     $phase=@{started=[DateTime]::UtcNow.ToString('o')}
-    $expected = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    $expected = (New-Object IO.StreamReader([Console]::OpenStandardInput(),[Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
     if ($expected.handle -notmatch '^\d+$' -or $expected.processId -le 0) { throw 'No previous application was captured.' }
     $window = [IntPtr][Int64]::Parse($expected.handle)
     [uint32]$owner = 0
@@ -413,7 +414,9 @@ try {
     if ($Mode -in @('Paste','ValidatePaste') -and $expected.prepared) {
       if ([ClipBoardLineNative]::GetForegroundWindow() -ne $window) { throw 'Focus changed before paste. No keys were sent.' }
     } else {
-      [void][ClipBoardLineNative]::ShowWindow($window,9)
+      # SW_RESTORE also takes a maximized window back to its normal size, so
+      # only a minimized window is restored; any other keeps its placement.
+      if ([ClipBoardLineNative]::IsIconic($window)) { [void][ClipBoardLineNative]::ShowWindow($window,9) }
       [void][ClipBoardLineNative]::SetForegroundWindow($window)
     }
     $phase.activationRequested=[DateTime]::UtcNow.ToString('o')
