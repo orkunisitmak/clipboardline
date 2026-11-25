@@ -30,10 +30,22 @@
     ],
     "sharedBehaviors": [
       {
+        "id": "shortcut-recorder-focus-return",
+        "behavior": "Closing a shortcut recorder ends its modal state and restores owned global registrations without keeping focus trapped; the precise return target follows the native window model documented in contracts/shortcut-recording.json.",
+        "macos": "ShortcutRecorder presents a separate nonactivating NSPanel and ends its key-window lifecycle on cancel, save, close or loss of focus; AppKit chooses the returning key native window.",
+        "windows": "Shortcut recorder overlay resolves the newly rendered Settings Record button by stable ID; renderer-ui.test.cjs verifies Escape returns focus to a connected new button instead of a detached element."
+      },
+      {
         "id": "localized-notices",
         "behavior": "Main-process notices (copy, export, import and error results) and the browsing-shortcut conflict message are shown in the language selected in Settings, using the shared catalog keys, including the \"Exported %d · failed %d\" and \"This shortcut is already used for %@\" templates with their real counts and action names.",
         "macos": "Notices and the shortcut conflict use L(...) and String(format:) with the shared Localizable.strings catalog.",
         "windows": "The renderer looks main-process notices up in the shared catalog, refills numeric templates, and formats the conflict with the catalog key; renderer-ui.test.cjs runs the shipped export through the Export shortcut in Turkish."
+      },
+      {
+        "id": "refresh-link-preview-needs-fetching",
+        "behavior": "Refresh link preview with link fetching turned off does nothing to the item and tells the user to turn on the link fetching setting in Settings.",
+        "macos": "LinkMetadataService.request(force:) sets the Library notice when fetching is off; LibraryInteractionTests.testRefreshLinkPreviewTellsWhyWhenFetchingIsOff covers it.",
+        "windows": "The refreshLink action in main.cjs refuses with a notice naming the Sources setting when fetchLinkMetadata is off."
       },
       {
         "id": "localized-selection-count",
@@ -43,9 +55,9 @@
       },
       {
         "id": "width-insensitive-search",
-        "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I.",
-        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift).",
-        "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac; shelf-render.test.cjs checks both through the shipped renderer."
+        "behavior": "Shelf and Library text search ignore accents and character width, so full-width Latin (ＡＢＣ) and half-width katakana (ﾃｽﾄ) are found by typing abc or テスト, with a locale-independent lower case for Turkish I. A voiced kana or a Hangul syllable is one letter, so は does not find ばら and 하 does not find 한국.",
+        "macos": "Search compares libraryFolded strings: folding with .diacriticInsensitive and .widthInsensitive, then lowercased (LibraryStore.swift); ShelfSearchTests.testShelfSearchKeepsAVoicedKanaAndAHangulSyllableWholeLikeWindows covers the kana and Hangul cases.",
+        "windows": "The renderer fold applies compatibility mapping only to the ideographic space and the Halfwidth and Fullwidth Forms block (plus Hangul compatibility jamo, so half-width ﾡ matches ㄱ, and ￣ mapped to ¯ as on the Mac), strips combining accents and lower-cases without a locale, so ligatures and circled digits stay distinct as on the Mac, and recomposes the text so a bare は or 하 does not match inside ば or 한; shelf-render.test.cjs checks these through the shipped renderer."
       },
       {
         "id": "link-title-charset",
@@ -78,6 +90,12 @@
         "windows": "Store.insert matches a live image by its managed PNG hash and moves it to the front; model.test.cjs 'exact image recopy moves the image in front of another image and preserves saved organization' covers it."
       },
       {
+        "id": "link-tracking-parameters",
+        "behavior": "Copying a link again that differs only by tracking query parameters (names starting with utm_, fbclid or gclid, in any letter case) is the same item: it is refreshed and keeps its first stored address, and links whose other parameters or fragment differ stay separate.",
+        "macos": "LinkIdentity.normalized drops those parameters before LibraryStore.captureLink matches an existing item; CrossPlatformBehaviorContractTests runs the tracking-parameter-links scenario through LibraryStore.captureLink, and LibraryStoreTests.testLinkIdentityPreservesMeaningfulParametersAndDeduplicatesVideoForms covers it.",
+        "windows": "linkIdentity in lib/model.cjs applies the same rule when Store.insert matches an existing link, and merges older duplicates whose name and note do not clash into the kept item, which takes the oldest stored address; renderer-ui.test.cjs runs the tracking-parameter-links scenario through Store.insert, and model.test.cjs covers it."
+      },
+      {
         "id": "mixed-selection-pin",
         "behavior": "Pin on a selection that contains both pinned and unpinned items pins every item; only a selection that is already fully pinned unpins.",
         "macos": "LibraryStore.toggleFavorite and Line.pinActiveSelection compute one target for the whole selection, matching the action bar, which offers Unpin only when every selected item is pinned; LibraryKeyboardContractTests runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json.",
@@ -88,6 +106,12 @@
         "behavior": "The Library title of a subfolder is the names of all its ancestors and its own name, outermost first, joined with \" / \" (for example Parent / Child, or Parent / Middle / Child for imported deeper folders), so same-named subfolders of different parents can be told apart; a top-level folder shows only its name.",
         "macos": "LibraryModel.title builds the path by walking the whole LibraryCollection.parentID chain (cycle-safe) and shows it as the Library window title; LibraryInteractionTests.testSubfolderTitleIncludesItsParentLikeWindows covers it.",
         "windows": "libraryTitle() in renderer.js shows folderPath() for the folder scope; library-ui.test.cjs checks the toolbar title of a subfolder."
+      },
+      {
+        "id": "link-title-format-characters",
+        "behavior": "An HTML page title and its Open Graph text (not a YouTube oEmbed title) keep the zero-width joiner and non-joiner, so emoji sequences and Persian words are not split, and numeric references to them are decoded. Numeric references to control code points (C0, DEL, C1) stay literal. Bidirectional marks, embeddings, overrides and isolates (U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069) are removed, raw or as numeric references, so a title cannot be reordered to spoof another one.",
+        "macos": "PublicLinkHTMLMetadata.clean drops general category Cc and those bidirectional controls and marks, and entities only refuses Cc; PublicLinkNetworkTests.testHTMLTitleKeepsJoinersButDropsControlsAndBidirectionalOverrides covers it.",
+        "windows": "entities() in lib/network.cjs refuses the C0 and C1 controls and collapse() removes the bidirectional controls and marks; security.test.cjs covers joiners and bidirectional controls."
       },
       {
         "id": "trash-restore-selection",
@@ -102,6 +126,24 @@
         "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
       },
       {
+        "id": "undo-take-down-no-duplicate",
+        "behavior": "Undo take down does not bring back a text or link when the same content is on the shelf again because it was copied after the take down, so that Undo never hangs the same text or link twice. Links that differ only by tracking parameters count as the same content. An item Undo leaves off the shelf does not take the selection or the open preview. Images and a copy that is off the shelf do not block it, and restoring from Trash by hand is not limited.",
+        "macos": "LibraryStore.undoShelfRemoval skips a text or link record that has a live twin on the shelf (hasLiveTwin, which matches links by normalizedURL, repairs the text index first and never matches images) and returns only the restored ids, so the shelf and preview keep their selection when nothing came back; LibraryStoreTests.testUndoTakeDownDoesNotHangATextOrLinkTwiceAfterItWasCopiedAgain, testUndoTakeDownLeavesALinkOffTheShelfWhenTheCopyDiffersOnlyByTrackingParameters and testUndoTakeDownSeesATextEditedByAnOlderAppWhileOpen cover it.",
+        "windows": "Store.modify('undo') leaves a trashed text or link in Trash when a live item of the same kind and content (linkIdentity for links) is on the shelf, and ignores images and copies hidden from the shelf; undoTakeDown() in renderer.js selects and previews the item only when it is back on the shelf. model.test.cjs and renderer-ui.test.cjs cover it."
+      },
+      {
+        "id": "recopy-last-copied",
+        "behavior": "Copying a stored text, link or image again records the copy, so it leads Library Last copied.",
+        "macos": "LibraryStore.captureText, captureLink and captureImage set lastCopiedAt when they match a stored item; LibraryStoreTests.testCopyingAStoredImageAgainRecordsTheCopyLikeText covers the image.",
+        "windows": "Store.insert sets lastCopiedAt and lastCapturedAt for any kind that matches a stored item; model.test.cjs covers text and image."
+      },
+      {
+        "id": "pin-recent-selection",
+        "behavior": "Pinning the selected item in Recent copies saves it and removes it from the list; focus and selection move to a remaining item and the details panel keeps showing an item.",
+        "macos": "LibraryModel.favorite() queues the neighbouring item as the keyboard selection, like Move to Trash; LibraryInteractionTests.testPinningInRecentCopiesSelectsARemainingItemLikeWindows covers it.",
+        "windows": "reconcileLibraryFocus() in renderer.js focuses a remaining item after the pin."
+      },
+      {
         "id": "item-name-trimming",
         "behavior": "An item name is used without its surrounding whitespace, and a name that is only whitespace counts as no name, so the card, the title ordering and the search index fall back to the item's content instead of showing a blank title.",
         "macos": "LibraryRecord.displayTitle trims the stored title and ignores a blank one; LibraryStoreTests.testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows covers it.",
@@ -114,10 +156,22 @@
         "windows": "The confirm handler sets activeFolderRemoved from folderSubtreeContains() and resets the scope only then; library-ui.test.cjs covers an unrelated folder and the active ancestor."
       },
       {
+        "id": "tag-removal-view",
+        "behavior": "Removing a tag returns the Library to My library only when the open view is that tag; removing any other tag leaves the current view and selection as they are, and only drops that tag from the active filters.",
+        "macos": "LibraryModel.deleteTag(_:) calls changeScope(.saved) only after a successful removal of the tag whose view is open; LibraryInteractionTests.testRemovingAnotherTagKeepsTheOpenViewLikeFolders covers it.",
+        "windows": "The confirm handler sets activeTagRemoved from the open tag scope and resets the scope only then; library-ui.test.cjs covers removing a tag that is not open."
+      },
+      {
         "id": "item-display-title",
         "behavior": "An item without a name is titled by its content: a text by its first line that is not blank, with surrounding spaces and tabs removed and at most 120 grapheme clusters (lines end at LF or CRLF) and the localized \"Untitled note\" when every line is blank, a link by its fetched page title or else its host name and the localized \"Link\" when the stored URL does not parse, so an indented snippet or a long copied URL reads the same on both platforms.",
         "macos": "LibraryRecord.displayTitle returns the first non-blank line, trimmed and capped at 120 characters (Characters are grapheme clusters), or L(\"Untitled note\") for an all-blank text, and the metadata title, the URL host or L(\"Link\") for a link; LibraryInteractionTests.testUnnamedItemTitlesAreTheTrimmedFirstLineAndLinkHostLikeWindows covers it.",
         "windows": "title() in renderer.js applies the same rule (t('Untitled note') and t('Link') as fallbacks) to cards, title sorting and best-match ranking; library-ui.test.cjs runs the unnamed item titles scenario."
+      },
+      {
+        "id": "inspector-title-length",
+        "behavior": "A Library inspector title is not cut at 200 characters: a title of any length is saved until it passes the same 1 MiB of UTF-8 bytes as a text or a note. The Name and pin field keeps its own short limit.",
+        "macos": "LibraryModel.flushEdits saves the draft title through LibraryStore.update, which refuses a title over 1 MiB of UTF-8 bytes and applies no character cap below that; LibraryInteractionTests.testInspectorTitleOverTwoHundredCharactersSavesUntilOneMiBOfUTF8 covers it; the Name and pin field keeps its own limit.",
+        "windows": "The details command stores the title through sizedText() in model.cjs, so it counts UTF-8 bytes against 1 MiB like a note; model.test.cjs 'a Library inspector title over 200 characters is saved like on the Mac' covers a 249 character title and a title over 1 MiB of UTF-8 bytes."
       },
       {
         "id": "text-and-note-size-limit",
@@ -136,6 +190,48 @@
         "behavior": "Clear filters is available in the action list only while the Library has a filter to clear (favorites only, a search, a type, a date range, a domain, a tag or a search mode other than all); with no filter it is disabled with the reason \"No filters to clear\", and with the Library closed it keeps the Library reason.",
         "macos": "ActionBarMenuAction.clearFilters requires libraryAvailable and hasLibraryFilters and otherwise names \"No filters to clear\"; ActionBarCatalogTests covers it.",
         "windows": "The clear-filters entry of actionCommands() in renderer.js uses libraryHasFilters() and the shared \"No filters to clear\" catalog entry; library-ui.test.cjs checks the action list with and without a type filter."
+      },
+      {
+        "id": "item-name-validation",
+        "behavior": "Name and pin trims the name and accepts 1 to 160 characters (grapheme clusters), at most 1024 UTF-8 bytes, with no control, line-separator or paragraph-separator characters. Any other name, including an empty one, is rejected with the shared \"Enter a name (1–160 characters)\" message and the item is left unchanged.",
+        "macos": "LibraryStore.nameAndPin validates the trimmed name with these limits and throws the localized \"Enter a name (1–160 characters)\" error.",
+        "windows": "The Store 'name' action validates through itemName with the same limits and error; model.test.cjs checks accepted names at the limits and rejects empty, oversized, multi-line, control-character, NUL and non-string names with the exact message."
+      },
+      {
+        "id": "unavailable-watched-folder",
+        "behavior": "A watched folder that is unavailable (for example on an unmounted volume) is skipped while watching but stays in the saved list, so adding or removing another watched folder does not forget it.",
+        "macos": "AppDelegate.extraFolders returns every saved folder and existingExtraFolders is the subset that is watched, re-evaluated when a volume mounts; SettingsTests.testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable covers it.",
+        "windows": "main.cjs skips a watchFolders entry that is not a directory without changing the list; model.test.cjs checks that adding and removing folders keeps an unavailable entry."
+        },
+        {
+        "id": "disabled-undo-names-the-surface",
+        "behavior": "A disabled undo row first says where it is available: Undo trash on the shelves reads \"Available in Library\" and Undo take down in the Library reads \"Available on the shelves\"; \"Nothing to undo\" is shown only on the surface where the undo exists.",
+        "macos": "ActionBarMenuAction.undoRemoveFromLine and .undoTrash pick the surface reason before \"Nothing to undo\"; ActionBarCatalogTests.testDisabledRowsNameTheSurfaceOrSelectionThatIsMissing covers it.",
+        "windows": "actionCommands() in renderer.js runs the surface check before the \"Nothing to undo.\" branch; library-ui.test.cjs checks both rows on the shelves and in the Library."
+      },
+      {
+        "id": "restored-item-retention",
+        "behavior": "Restoring an item from Trash gives it a full retention period from the restore, and capturing it again from the clipboard later renews that period for text, images, links and recordings. Copying an item from inside the app records the copy but does not change retention.",
+        "macos": "LibraryStore.restore sets lastCapturedAt, every capture path renews it, markCopied leaves it alone and prune reads it first; LibraryStoreTests.testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain covers the restore.",
+        "windows": "Store 'restore', Store.insert and Store.insertRecording set lastCapturedAt on an existing item, markCopied leaves it alone and expire reads it first; model.test.cjs and recording-model.test.cjs cover restore, copy again and expiry for every kind."
+      },
+      {
+        "id": "shelf-image-markup-shortcut",
+        "behavior": "M on the focused selected still photo in the active image shelf opens its editable markup preview directly. Hover alone does not retarget keyboard actions. H selects the translucent marker; pointer drags draw editable marks. Escape saves and finishes markup (a later Escape closes preview); crop Escape cancels the crop. Saved marks survive reopening. M in search, note, annotation text and rename editors stays native text input. Empty and non-image shelves do not open markup. Remapped or disabled markup keys remain respected.",
+        "macos": "LineKeyboard routes markup to Line.markup for the focused visible still image. MarkupKeyboardTests and ImageMarkupInteractionTests execute typing guards, remapping, real preview-panel sendEvent mouse delivery, hit testing, composited marker pixels, Escape/save and reopen. The nonactivating panel's canvas accepts the first mouse click while editing. CrossPlatformBehaviorContractTests executes the shared shelf M scenarios.",
+        "windows": "The shipped renderer allows markup in the shelves shortcut context and opens the existing image editor for the focused still image. renderer-ui.test.cjs executes the shared shelf M scenarios plus marker pointer drawing, Escape/save, reopen and native editor guards. Native Windows acceptance remains a separate release gate."
+      },
+      {
+        "id": "domain-filter-parses-only-non-ascii",
+        "behavior": "The Library domain filter ignores case, surrounding dots and a leading www, and matches the host and its subdomains. A typed name is converted to its host form only when it has non-ASCII characters and no path, query, fragment, port, credentials, backslash or space, so bücher.de finds xn--bcher-kva.de; an ASCII entry such as 0x7f.1 is compared as typed and is not rewritten to 127.0.0.1.",
+        "macos": "LibraryStore.query builds the domain match from the typed name and calls URL(string:) only when it has a non-ASCII scalar; LibraryStoreTests.testDomainFilterMatchesATypedNumberLiterallyInsteadOfAnIPAddress and testDomainFilterMatchesAnInternationalizedNameTypedAsWritten cover it.",
+        "windows": "libraryBaseItems() in renderer.js runs new URL on the typed name only when it has a non-ASCII character; library-ui.test.cjs 'Library domain filter matches a typed number literally and does not rewrite it to an IP address' and 'Library domain filter finds an internationalized link typed as written' cover it."
+      },
+      {
+        "id": "note-survives-matching-copy",
+        "behavior": "A note made with New note is never taken over by a copy: copying text equal to a note's text makes a separate item, and every note with that text keeps its name, date added and place in the Library instead of moving to the shelf or to Trash. Text that was copied, not typed as a note, still deduplicates on the next copy.",
+        "macos": "LibraryStore.createNote marks the record (createdAsNote) and LibraryStore.captureText skips marked records when it looks for a match; records stored before the marker open unchanged and keep deduplicating. TextDedupStoreTests.testCopyingANotesTextNeverMergesOrTrashesNotes and testRecordsStoredBeforeTheNoteMarkerOpenAndStillTakeTheCopy cover it.",
+        "windows": "Store.createNote marks the item (createdAsNote) in its first write and Store.insert never matches a marked item; model.test.cjs 'a capture or import of a note's text never merges or removes notes, also after reopening' covers it."
       }
     ]
   },
@@ -1083,6 +1179,22 @@
             ],
             "searchEditing": false
           }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "image",
+            "focused": null,
+            "selected": [],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
         }
       ]
     },
@@ -1758,6 +1870,245 @@
             ],
             "searchEditing": false,
             "effects": []
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "text",
+            "focused": null,
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "shelf-markup-opens-focused-photo",
+      "itemSet": "standard",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i1",
+            "selected": [
+              "i1"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "right",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i2",
+            "selected": [
+              "i2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "image",
+            "focused": "i2",
+            "selected": [
+              "i2"
+            ],
+            "visibleKinds": [
+              "image",
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": [
+              "markup"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "non-image-shelves-ignore-markup",
+      "itemSet": "standard",
+      "visibleKinds": [
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "open",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "text",
+            "focused": "t1",
+            "selected": [
+              "t1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        },
+        {
+          "action": "down",
+          "expect": {
+            "activeKind": "link",
+            "focused": "l1",
+            "selected": [
+              "l1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false
+          }
+        },
+        {
+          "action": "command",
+          "code": "KeyM",
+          "expect": {
+            "activeKind": "link",
+            "focused": "l1",
+            "selected": [
+              "l1"
+            ],
+            "visibleKinds": [
+              "text",
+              "link"
+            ],
+            "searchEditing": false,
+            "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "tracking-parameter-links",
+      "itemSet": "empty",
+      "visibleKinds": [
+        "image",
+        "text",
+        "link"
+      ],
+      "pinnedOnlyKinds": [],
+      "steps": [
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7&utm_source=news",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?fbclid=x&id=7&GCLID=y&UTM_Campaign=z",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=8",
+          "expect": {
+            "link": {
+              "item": "link-2",
+              "address": "https://example.com/a?id=8"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7&ref=x",
+          "expect": {
+            "link": {
+              "item": "link-3",
+              "address": "https://example.com/a?id=7&ref=x"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?id=7#top",
+          "expect": {
+            "link": {
+              "item": "link-4",
+              "address": "https://example.com/a?id=7#top"
+            }
+          }
+        },
+        {
+          "action": "copyLink",
+          "url": "https://example.com/a?utm_medium=mail&id=7",
+          "expect": {
+            "link": {
+              "item": "link-1",
+              "address": "https://example.com/a?id=7&utm_source=news"
+            }
           }
         }
       ]

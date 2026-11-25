@@ -199,6 +199,7 @@
 "Trash" = "Trash";
 "Try another filter or view your recent copies." = "Try another filter or view your recent copies.";
 "Turn on" = "Turn on";
+"Turn on Fetch link titles and thumbnails in Settings to refresh link previews" = "Turn on Fetch link titles and thumbnails in Settings to refresh link previews";
 "Unorganized" = "Unorganized";
 "Unpin" = "Unpin";
 "Unsaved copies are kept for %d days" = "Unsaved copies are kept for %d days";
@@ -449,6 +450,7 @@
 /* Searchable action bar. */
 "Actions" = "Actions";
 "Available on the shelves" = "Available on the shelves";
+"Available in Library" = "Available in Library";
 "Available on the shelves or in Library" = "Available on the shelves or in Library";
 "Edit item details" = "Edit item details";
 "Finish editing first" = "Finish editing first";
