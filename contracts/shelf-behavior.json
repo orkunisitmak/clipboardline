@@ -67,9 +67,9 @@
       },
       {
         "id": "link-title-ignores-textarea",
-        "behavior": "Markup inside a textarea, including an unclosed one, is page text and never the link preview title or image; a literal textarea tag inside a script, comment or quoted attribute does not start one.",
-        "macos": "PublicLinkHTMLMetadata drops textarea contents with comments, scripts and styles before reading meta tags; PublicLinkPolicyTests.testTextareaMarkupIsNotPageMetadata covers it.",
-        "windows": "linkMetadata in lib/network.cjs drops the same ranges; link-metadata-embed.test.cjs covers it."
+        "behavior": "Markup inside a textarea, including an unclosed one, is page text and never the link preview title or image; a literal textarea tag inside a script, a comment or another tag's quoted attribute value does not start one, and neither does a comment opener inside a quoted attribute value.",
+        "macos": "HTMLText.removingNonMetadata drops textarea contents with comments, scripts and styles and reads other start tags whole before meta tags are read; PublicLinkPolicyTests.testTextareaMarkupIsNotPageMetadata covers it.",
+        "windows": "withoutNonMetadata in lib/network.cjs drops the same ranges and reads other start tags whole; link-metadata-embed.test.cjs covers it."
       },
       {
         "id": "link-blank-thumbnail",

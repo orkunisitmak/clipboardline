@@ -174,9 +174,25 @@ import XCTest
             "<textarea data=\(String(repeating: "x", count: 3000))><meta property='og:title' content='injected'></textarea><title>real</title>",
             "<textarea\u{A0}x><meta property='og:title' content='real'>",
             "<textarea data-x=\"> </textarea>\"><meta property='og:title' content='injected'></textarea><title>real</title>",
+            // A textarea or comment opener inside another tag's quoted attribute starts nothing.
+            "<meta name='k' content='a <textarea> b'><meta property='og:title' content='real'>",
+            "<div title=\"a <textarea> b\"></div><title>real</title>",
+            "<meta name=\"k\" content=\"a <!-- b\"><meta property=\"og:title\" content=\"real\">",
+            // Only a quote right after = starts a value: this apostrophe is text, so the comment after the tag is still dropped.
+            "<a title=it's><!-- <meta property='og:title' content='hidden'> --><title>real</title>",
         ]
         for page in pages {
             XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(page.utf8), url: url).title, "real", page)
+        }
+    }
+
+    func testPagesOfQuotedAttributesParseInLinearTime() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        func filled(_ unit: String) -> String { String(repeating: unit, count: 512 * 1024 / unit.utf8.count) }
+        for page in [filled("<meta \""), filled("<a x='>'") + "\"", filled("<a x=\"")] {
+            let start = Date()
+            _ = try PublicLinkHTMLMetadata(data: Data(page.utf8), url: url)
+            XCTAssertLessThan(Date().timeIntervalSince(start), 10, String(page.prefix(12)))
         }
     }
 

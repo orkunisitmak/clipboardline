@@ -133,17 +133,30 @@ function meta(html, name) {
   }
   return '';
 }
-// As on macOS, comments, scripts and styles are not page metadata. A textarea holds text, so a meta or title inside it isn't either; its start tag may hold quoted ">" and an unclosed one hides the rest, as in a browser.
+// As on macOS, comments, scripts and styles are not page metadata. A textarea holds text, so a meta or title inside it isn't either; an unclosed one hides the rest, as in a browser.
+// Other start tags are skipped whole, so a "<textarea>" or "<!--" inside a quoted attribute value starts nothing.
 // One left-to-right scan: every search starts where the last one ended, and a missing closer is looked up once, so cost stays linear.
 function withoutNonMetadata(html) {
-  const opener = /<!--|<script\b|<style\b|<textarea(?=[ \t\n\f\r\/>])/gi, closers = {}, missing = new Set();
+  const opener = /<!--|<script\b|<style\b|<textarea(?=[ \t\n\f\r\/>])|<[A-Za-z]/gi, closers = {}, missing = new Set();
+  const lastQuote = {'"': html.lastIndexOf('"'), "'": html.lastIndexOf("'")};
+  // The '>' that ends a start tag. A value quoted after '=' may hold '>'; a quote that never closes is read as text, as the tag scans in meta() and titleText() do.
+  const tagEnd = from => {
+    for (let i = from, value = false; i < html.length; i++) {
+      const c = html[i];
+      if (c === '>') return i;
+      if (value && (c === '"' || c === "'")) { if (i >= lastQuote[c]) return html.indexOf('>', i + 1); i = html.indexOf(c, i + 1); value = false; }
+      else if (c === '=') value = true;
+      else if (!' \t\n\f\r'.includes(c)) value = false;
+    }
+    return -1;
+  };
   let out = '', last = 0, match;
   while ((match = opener.exec(html))) {
-    const name = match[0].slice(1).toLowerCase(), skip = match.index + match[0].length; let from = skip, end = -1;
-    if (name === 'textarea') {
-      for (let quote = ''; from < html.length; from++) { const c = html[from]; if (quote) { if (c === quote) quote = ''; } else if (c === '"' || c === "'") quote = c; else if (c === '>') break; }
-      if (from >= html.length) end = html.length;
-    } else if (name !== '!--') { from = html.indexOf('>', from); if (from < 0) { opener.lastIndex = html.length; continue; } }
+    const skip = match.index + match[0].length;
+    if (match[0].length === 2) { const close = tagEnd(skip); if (close < 0) break; opener.lastIndex = close + 1; continue; }
+    const name = match[0].slice(1).toLowerCase(); let from = skip, end = -1;
+    if (name === 'textarea') { from = tagEnd(skip); if (from < 0) end = html.length; }
+    else if (name !== '!--') { from = html.indexOf('>', from); if (from < 0) { opener.lastIndex = html.length; continue; } }
     if (end < 0 && !missing.has(name)) {
       const closer = closers[name] ??= name === '!--' ? /-->/g : new RegExp('</' + name + '[ \\t\\n\\f\\r]*>', 'gi'); closer.lastIndex = name === '!--' ? from : from + 1;
       const close = closer.exec(html); if (close) end = close.index + close[0].length; else missing.add(name);

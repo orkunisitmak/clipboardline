@@ -476,26 +476,35 @@ private struct HTMLText {
     /// Built once: a literal inside the scan loop would allocate a new array for every `<` on the page.
     private static let rawTextElements: [(tag: [UInt8], name: String)] = [(Self.script, "script"), (Self.style, "style")]
 
-    /// Drops comments, scripts, styles and textareas: a meta or title inside a textarea is page text. A textarea start tag
-    /// may hold a quoted `>`, and an unclosed textarea hides the rest of the page, as in a browser.
+    /// Drops comments, scripts, styles and textareas: a meta or title inside a textarea is page text, and an unclosed
+    /// textarea hides the rest of the page, as in a browser. Other start tags are skipped whole, so a `<textarea>` or
+    /// `<!--` inside a quoted attribute value starts nothing.
     func removingNonMetadata() -> HTMLText {
         var kept: [Unicode.Scalar] = [], copied = 0, index = 0
         var commentClose = Resume(), tagClose = Resume(), scriptClose = Resume(), styleClose = Resume(), textareaClose = Resume()
+        let lastQuote = (double: scalars.lastIndex(of: "\"") ?? -1, single: scalars.lastIndex(of: "'") ?? -1)
         kept.reserveCapacity(scalars.count)
         while let open = first(Self.less, from: index) {
             var end: Int?
             if starts(Self.comment, at: open) {
                 end = commentClose.next(from: open + 4) { from in first(Self.commentEnd, from: from).map { $0..<$0 + 3 } }?.upperBound
             } else if starts(Self.textarea, at: open), endsTextareaName(at: open + Self.textarea.count) {
-                if let tag = startTagEnd(from: open + Self.textarea.count) {
+                if let tag = startTagEnd(from: open + Self.textarea.count, lastQuote: lastQuote) {
                     end = textareaClose.next(from: tag + 1) { closing("textarea", from: $0) }?.upperBound ?? scalars.count
                 } else { end = scalars.count }
             } else {
+                var rawText = false
                 for (name, element) in Self.rawTextElements where starts(name, at: open) && endsWord(at: open + name.count) {
+                    rawText = true
                     if let tag = tagClose.next(from: open + name.count, { from in first(Self.greater, from: from).map { $0..<$0 + 1 } }) {
                         end = element == "script" ? scriptClose.next(from: tag.upperBound) { closing("script", from: $0) }?.upperBound
                             : styleClose.next(from: tag.upperBound) { closing("style", from: $0) }?.upperBound
                     }
+                }
+                if !rawText, open + 1 < scalars.count, Self.isASCIILetter(scalars[open + 1]) {
+                    guard let tag = startTagEnd(from: open + 2, lastQuote: lastQuote) else { break }
+                    index = tag + 1
+                    continue
                 }
             }
             if let end { kept += scalars[copied..<open]; copied = end; index = end } else { index = open + 1 }
@@ -504,21 +513,35 @@ private struct HTMLText {
         return HTMLText(scalars: kept)
     }
 
-    /// The `>` that ends a start tag, skipping any that sit inside quotes.
-    private func startTagEnd(from index: Int) -> Int? {
-        var index = index, quote: Unicode.Scalar?
+    /// The `>` that ends a start tag. A quoted attribute value may hold `>`; a quote that never closes is read as text, as the
+    /// meta and title scans do. Each scalar is read once, so skipping every tag on the page stays linear.
+    private func startTagEnd(from index: Int, lastQuote: (double: Int, single: Int)) -> Int? {
+        var index = index, value = false
         while index < scalars.count {
             let scalar = scalars[index]
-            if let open = quote { if scalar == open { quote = nil } } else if scalar == "\"" || scalar == "'" { quote = scalar } else if scalar == ">" { return index }
+            if scalar == ">" { return index }
+            if value, scalar == "\"" || scalar == "'" {
+                guard index < (scalar == "\"" ? lastQuote.double : lastQuote.single) else { return first(Self.greater, from: index + 1) }
+                index += 1
+                while scalars[index] != scalar { index += 1 }
+                value = false
+            } else if scalar == "=" {
+                value = true
+            } else if !Self.isTagSpace(scalar) {
+                value = false
+            }
             index += 1
         }
         return nil
     }
     /// `<textarea(?=[ \t\n\f\r/>])`: only ASCII spacing, `/` or `>` ends the name.
     private func endsTextareaName(at index: Int) -> Bool {
-        guard index < scalars.count else { return false }
-        switch scalars[index].value { case 0x20, 0x09, 0x0A, 0x0C, 0x0D, 0x2F, 0x3E: return true; default: return false }
+        index < scalars.count && (Self.isTagSpace(scalars[index]) || scalars[index] == "/" || scalars[index] == ">")
     }
+    private static func isTagSpace(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value { case 0x20, 0x09, 0x0A, 0x0C, 0x0D: return true; default: return false }
+    }
+    private static func isASCIILetter(_ scalar: Unicode.Scalar) -> Bool { (65...90).contains(scalar.value) || (97...122).contains(scalar.value) }
 
     /// The attribute text of up to `limit` meta tags.
     func metaAttributes(limit: Int) -> [String] {
