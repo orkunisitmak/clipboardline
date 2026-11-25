@@ -99,7 +99,7 @@ final class TextHistory: ObservableObject {
     private func reloadFromLibrary() {
         guard let library else { return }
         do {
-            let updated = try library.shelfItems(.text).map { Entry(id: $0.id, text: $0.text ?? "", capturedAt: $0.createdAt, pinned: $0.favorite, title: $0.title.isEmpty ? nil : $0.title) }
+            let updated = try library.shelfItems(.text).map { Entry(id: $0.id, text: $0.text ?? "", capturedAt: $0.createdAt, pinned: $0.favorite, title: $0.shelfName) }
             if updated != entries { entries = updated; sanitizeFocus() }
         }
         catch { notice = L("Library could not be saved or opened") }
@@ -296,7 +296,7 @@ final class TextHistory: ObservableObject {
     func exportSources(_ values: [Entry]) throws -> [(url: URL, name: String)] {
         try values.map { entry in
             let url = try materialize(entry)
-            return (url, url.lastPathComponent)
+            return (url, HistoryFiles.exportName(for: url, originalPath: nil, title: entry.title))
         }
     }
     func dragItems(_ id: UUID) -> [ShelfDragItem] {
