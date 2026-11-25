@@ -423,6 +423,15 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
  assert.deepEqual(errors,[]);
 });
 
+test('changing the markup tool clears the selection like macOS setTool',async()=>{
+ for(const [label,change] of [['Tool key',f=>f.key('KeyB')],['Toolbar tool',f=>f.click('image-tool',{tool:'ellipse'})],['Toolbar crop',f=>f.click('image-tool',{tool:'crop'})]]){
+  const f=fixture({imageDocument:true});await f.ready();await f.key('KeyM');
+  await f.key('KeyR');await f.pointer('pointerdown',60,40);await f.pointer('pointermove',200,100);await f.pointer('pointerup',200,100);
+  await f.key('KeyV');await f.pointer('pointerdown',60,40);await f.pointer('pointerup',60,40);await change(f);await f.key('Delete');
+  if(label==='Toolbar crop')await f.key('Escape');await f.key('Escape');
+  assert.equal(f.state.items.find(value=>value.id===f.image).annotations.length,1,label);
+ }
+});
 test('folder menu arrows retain folder operations and Enter creates a subfolder under the chosen folder',async()=>{
  const f=fixture();await f.ready();const folderId='10000000-0000-4000-8000-000000000000';
  f.api.emit({folders:[{id:folderId,name:'Chosen folder',parentId:null}]});
