@@ -350,10 +350,9 @@ final class Line: ObservableObject {
     }
     /// Right-click "Name and pin…": a card inside a multi-selection names the whole selection, like the key.
     func requestNameAndPin(_ id: UUID, on shelf: Shelf) {
-        let selected: Set<UUID>
-        switch shelf { case .images: selected = selectedIDs; case .texts: selected = texts.selectedIDs; case .links: selected = links.selectedIDs }
-        let ids = selectableIDs(for: shelf).filter { selected.contains($0) }
-        if selected.contains(id), ids.count > 1 { onNameAndPinBatchRequested?(ids) } else { onNameAndPinRequested?(id) }
+        let targets = menuPinTargets(id, shelf: shelf)
+        let ids = selectableIDs(for: shelf).filter(targets.contains)
+        if ids.count > 1 { onNameAndPinBatchRequested?(ids) } else { onNameAndPinRequested?(id) }
     }
     func removeActiveSelectionFromShelf() {
         let shelf = activeShelf
