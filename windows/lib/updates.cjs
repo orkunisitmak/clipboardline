@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {boundedFetch} = require('./network.cjs');
 const FEED = 'https://github.com/orkunisitmak/clipboardline-desktop/releases/latest/download/windows-update.json';
-const PUBLIC_KEY = 's9DO901wav4VK/hfnLROxJYk4+oNFYvxdOK974E3PgI=';
+const PUBLIC_KEY = 'ASY6h/Y7xsg4fUmA8TleW6XhbhOtn5M6ql4eqq8o3sE=';
 const REPOSITORY = 'orkunisitmak/clipboardline-desktop';
 const UPDATE_ARGUMENTS=Object.freeze(['/S','--updated','--force-run']);
 const REFRESH_THROTTLE=60_000;

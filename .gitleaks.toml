@@ -6,13 +6,14 @@ useDefault = true
 description = "Ignored build caches; audit-public.py separately forbids tracking these paths"
 paths = ['''^(\.git|\.build|build|dist|node_modules|local|test-results|playwright-report)/''']
 
-# Exact public verification key and pinned upstream source revisions. These
+# Exact public verification keys and pinned upstream source revisions. These
 # cannot sign an update or authenticate a client. No credential-shaped wildcard
-# or whole test/source directory is excluded.
+# or whole test/source directory is excluded. The retired 1.7.8 key remains in
+# public history; 1.7.9 and later pin the 2026-11 key.
 [[allowlists]]
-description = "Published Ed25519 verification key, not a signing secret"
+description = "Published Ed25519 verification keys, not signing secrets"
 regexTarget = "secret"
-regexes = ['''^s9DO901wav4VK/hfnLROxJYk4\+oNFYvxdOK974E3PgI=$''']
+regexes = ['''^s9DO901wav4VK/hfnLROxJYk4\+oNFYvxdOK974E3PgI=$''', '''^ASY6h/Y7xsg4fUmA8TleW6XhbhOtn5M6ql4eqq8o3sE=$''']
 
 [[allowlists]]
 description = "Pinned public Apple tokenizer commit"
