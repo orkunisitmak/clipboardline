@@ -557,6 +557,13 @@ test('action bar snapshots the focused member of a batch for Preview and keeps o
  assert.equal(f.state.items.find(value=>value.id===f.text1).name,'First batched note');assert.match(f.overlay,/2 \/ 2/);
 });
 
+test('the shelf action bar opens a selected link in the browser like macOS',async()=>{
+ const row=(f,id)=>{const start=f.overlay.indexOf('data-command="'+id+'"'),html=f.overlay.slice(start,f.overlay.indexOf('</button>',start));return{disabled:html.startsWith('data-command="'+id+'" disabled>'),title:html.match(/<span class="title">([^<]*)</)[1],detail:html.match(/<small>([^<]*)</)[1]};};
+ const f=fixture();await f.ready();await f.cardClick(f.link);await f.key('KeyK',{ctrl:true});
+ assert.deepEqual(row(f,'open'),{disabled:false,title:'Open in browser',detail:''});
+ await f.click('execute-command',{command:'open'});assert.deepEqual(f.commands.filter(value=>value.action==='openLink').map(value=>value.payload.id),[f.link]);
+ await f.cardClick(f.text1);await f.key('KeyK',{ctrl:true});assert.deepEqual(row(f,'open'),{disabled:true,title:'Open in browser',detail:'Select a link first.'});
+});
 test('action bar exposes real navigation, image tools, Library views and Settings destinations without synthetic key presses',async()=>{
  const f=fixture();await f.ready();await f.key('KeyK',{ctrl:true});await f.input('modal-query','Marker');await f.key('Enter');assert.match(f.overlay,/id="markup-canvas"/);assert.match(f.overlay,/data-tool="marker" aria-pressed="true"/);
  await f.key('Enter',{ctrl:true});await f.key('KeyK',{ctrl:true});await f.input('modal-query','Next item');assert.match(f.overlay,/data-command="next"/);await f.key('Escape');await f.key('Escape');
@@ -840,6 +847,13 @@ test('Tab onto an empty shelf leaves copy, take down, pin and preview with nothi
  await f.key('Tab');assert.equal(activeKind(f),'text');const commands=f.commands.length;
  for(const [code,extra]of [['Enter',{}],['KeyS',{}],['KeyP',{}],['Space',{}],['KeyC',{ctrl:true}]])await f.key(code,extra);
  assert.deepEqual(f.commands.slice(commands),[]);assert.equal(f.overlay,'');assert.equal(f.state.items.find(value=>value.id===f.image).trashedAt,null);assert.equal(f.state.windowVisible,true);
+});
+test('the Library action bar keeps the Take down title on its disabled row like macOS',async()=>{
+ const row=(f,id)=>{const start=f.overlay.indexOf('data-command="'+id+'"'),html=f.overlay.slice(start,f.overlay.indexOf('</button>',start));return{disabled:html.startsWith('data-command="'+id+'" disabled>'),title:html.match(/<span class="title">([^<]*)</)[1],detail:html.match(/<small>([^<]*)</)[1]};};
+ const f=fixture();await f.ready();f.state.items.find(value=>value.id===f.text1).retainedAt=1000;f.api.emit({items:f.state.items});await f.ready();
+ await f.key('KeyL');await f.click('scope',{scope:'saved'});await f.cardClick(f.text1);await f.key('KeyK',{ctrl:true});
+ assert.deepEqual(row(f,'remove'),{disabled:true,title:'Take down',detail:'Available on the shelves'});
+ assert.deepEqual(row(f,'trash'),{disabled:false,title:'Move to Trash',detail:'1 selected'});
 });
 test('Library selection counts use the shared "%d selected" catalog entry in the chosen language',async()=>{
  const f=fixture();await f.ready();await f.key('KeyP');await f.key('ArrowDown');await f.key('KeyP');await f.api.command('library');await f.ready();await f.key('KeyA',{ctrl:true});
