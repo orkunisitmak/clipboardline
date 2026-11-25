@@ -104,7 +104,7 @@ This table lists macOS defaults. The complete [Windows keymap](#windows-default-
 | `E` | Edit text preview | Enter adds a newline while editing; ⌘Enter or Esc saves and finishes. |
 | `⌘O` | Open link in browser | Selected link in Library or a link preview; ⌘Enter is reserved for paste. |
 | `⇧⌘C` | Copy recognized text from image | Image selection or image preview; local OCR. |
-| `M` | Enter / finish markup | Image preview. |
+| `M` | Enter / finish markup | Focused shelf photo or image preview. H selects the marker; drag to draw. |
 | `C` | Open crop | Image preview or markup. Drag/move/resize the area; Enter applies; Esc cancels. |
 | `⌘Z / ⇧⌘Z` | Undo / redo image edits | Crop and markup; native text editors keep their own undo. |
 | `⌘S` | Save markup | Saves without leaving markup. Esc or ⌘Enter saves and finishes markup. |
@@ -191,7 +191,7 @@ These are the Windows defaults, separate from the macOS table. Control replaces 
 | `Ctrl+O` | Open selected link in browser | Selected link in Library or a link preview; Ctrl+Enter remains paste. |
 | `Ctrl+Shift+C` | Copy recognized image text | Selected image or image preview; local English/Turkish OCR. Keeps browsing open. |
 | `E` | Edit text | In a text preview. Enter adds a newline; Ctrl+Enter or Esc saves and finishes. |
-| `M` | Enter / finish image markup | Still-image preview: enter/finish markup. Recording preview: open Trim. Native recording acceptance is pending. |
+| `M` | Enter / finish image markup | Focused shelf photo: open markup directly. Still-image preview: enter/finish markup. Recording preview: open Trim. Native recording acceptance is pending. |
 | `C` | Open image crop | Image preview or markup; original pixels remain available. |
 | `Enter / Esc in crop` | Apply / cancel crop | Enter applies and Esc cancels. Direct crop returns to preview browsing; crop entered from markup returns to markup. |
 | `Ctrl+Enter / Esc in markup` | Save and finish markup | Outside the Crop tool, either saves and finishes. Plain Enter does not copy while editing. Save failures keep the draft open. |

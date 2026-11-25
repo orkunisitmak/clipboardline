@@ -39,6 +39,17 @@ Running `swift run` directly is not the packaged development workflow: it lacks 
 
 Windows has its own implementation and build instructions. A macOS build/test cannot certify a Windows installer, clipboard interaction or global keyboard hook. State which platform and package you actually exercised.
 
+### How pull requests are reviewed
+
+This project is maintained by one person, with automated help. To keep reviews fair and fast:
+
+- **Features start with an issue.** Before building a new feature or changing how the app looks or behaves, open an issue that describes the idea. Once the maintainer accepts it (the `accepted` label or a maintainer comment), a pull request is welcome. Feature pull requests opened without an accepted issue are closed with a friendly note and can be reopened once the issue is accepted.
+- **Bug fixes, translations, documentation and tests** can go straight to a pull request.
+- **At most 5 open pull requests per contributor.** If you already have 5 open, please wait until some are merged or closed. Newer pull requests over the limit are closed with a note.
+- **One change per pull request.** Small, focused pull requests are reviewed first; large mixed ones are asked to be split.
+- **Keep your branch current.** Pull requests that conflict with `main` or fail CI wait for their author. If a useful fix stays stuck for a long time, the maintainer may finish it and credit you as co-author.
+- Pull requests are reviewed about a day after their last commit, a few per day, oldest first. New dependencies, CI, release, signing and update changes always get a closer look.
+
 ## Türkçe
 
 Bu public repo, bağımsız ClipBoardLine projesinin incelenmiş kaynak kod kopyasıdır. Bir dalda çalışıp sorunu, yeni davranışı ve doğrulamayı anlatan PR açın. Klavye akışını, düzenlenebilir önizlemeleri, geçmiş sürelerini, geri alınabilir silmeyi ve gizlilik tercihlerini koruyun.
