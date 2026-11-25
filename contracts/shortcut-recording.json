@@ -15,6 +15,14 @@
     "focus",
     "close"
   ],
+  "nativeExceptions": [
+    {
+      "id": "shortcut-recorder-return-focus",
+      "macos": "The shortcut recorder uses a separate nonactivating NSPanel. AppKit controls which native window and first responder becomes key after closing; the app does not force focus back to an initiating Settings button.",
+      "windows": "The shortcut recorder is an in-page modal and restores focus to the current Settings Record button resolved by its stable ID after the renderer replaces old DOM nodes.",
+      "reason": "Separate native window versus re-rendered DOM control. On macOS, focus can return to the containing native window rather than precisely the initiating Settings button. Both platforms close the recorder and release global shortcuts."
+    }
+  ],
   "requiredBehaviors": [
     "nested leases",
     "owned registrations only",
