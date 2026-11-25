@@ -49,12 +49,38 @@ def audit(root):
         manifest.append({'file': name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
         # This scanner's own expressions are patterns, not real credentials.
         # Runtime-generated test keys remain in ignored temporary directories.
+        # UTF-16 stores one NUL byte per ASCII character, so also scan each decoding (even or odd start, either byte order).
+        # Decoding the real code units keeps a character like U+010A, whose bytes include 0x0A, on its own line.
+        # An even start comes first; the same text read from a shifted start is skipped, as its line count is unreliable.
+        views = [(data, 0, 0)]
+        if b'\0' in data:
+            # A byte-order mark names the only byte order the file can have, so no other reading is scanned.
+            if data[:2] == b'\xff\xfe':
+                readings = ((0, 'utf-16-le', 0),)
+            elif data[:2] == b'\xfe\xff':
+                readings = ((0, 'utf-16-be', 1),)
+            else:
+                readings = tuple((start, codec, low) for start in (0, 1) for codec, low in (('utf-16-le', 0), ('utf-16-be', 1)))
+            for start, codec, low in readings:
+                chunk = data[start:len(data) - (len(data) - start) % 2]
+                views.append((chunk.decode(codec, 'surrogatepass').encode('ascii', 'replace'), start + low, 2))
+        seen, seen_offsets = set(), set()
         for rule, pattern in PATTERNS.items():
-            for match in re.finditer(pattern, data):
-                if (rule == 'url-userinfo' and name == 'Tests/ImageHistoryTests/AppUpdateControllerTests.swift' and
-                    match.group() == b'https://user' + b':password@'):
-                    continue  # Exact synthetic credential-rejection test, never a real credential.
-                findings.append({'file': name, 'line': data[:match.start()].count(b'\n') + 1, 'rule': rule})
+            for view, base, step in views:
+                line, offset = 1, 0
+                for match in re.finditer(pattern, view):
+                    line += view.count(b'\n', offset, match.start()); offset = match.start()
+                    if step:
+                        key = (rule, base + step * match.start())
+                        if key in seen_offsets:
+                            continue
+                        seen_offsets.add(key)
+                    if (rule == 'url-userinfo' and name == 'Tests/ImageHistoryTests/AppUpdateControllerTests.swift' and
+                        match.group() == b'https://user' + b':password@'):
+                        continue  # Exact synthetic credential-rejection test, never a real credential.
+                    if (rule, line) not in seen:
+                        seen.add((rule, line))
+                        findings.append({'file': name, 'line': line, 'rule': rule})
     return {'filesScanned': len(manifest), 'findings': findings, 'files': manifest}
 
 
