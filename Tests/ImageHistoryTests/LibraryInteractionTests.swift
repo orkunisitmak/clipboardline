@@ -79,6 +79,28 @@ import XCTest
         wait { model.focusedID != nil }
         XCTAssertEqual(model.focusedID, order[1]); XCTAssertEqual(model.selectedIDs, [order[1]])
     }
+    func testUnpinningWithPinnedOnlyFilterMovesFocusToNeighbour() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        var ids = [UUID]()
+        for n in 1...3 {
+            f.date += 60
+            let record = try XCTUnwrap(store.captureText("Pinned note \(n)"))
+            try store.retain([record.id])
+            ids.append(record.id)
+        }
+        try store.toggleFavorite(ids)
+        let model = LibraryModel(store: store)
+        model.setFavorites(true)
+        wait { model.ids.count == 3 && !model.loading }
+        XCTAssertEqual(model.query.scope, .saved); XCTAssertTrue(model.showingPinnedOnly)
+        let order = model.ids
+        XCTAssertTrue(model.select(order[0])); wait { model.inspected?.id == order[0] }
+        model.favorite()
+        wait { model.ids.count == 2 && !model.loading }
+        XCTAssertEqual(model.focusedID, order[1])
+        XCTAssertEqual(model.selectedIDs, [order[1]])
+        wait { model.inspected?.id == order[1] }
+    }
     func testPagedTagSummariesRefreshAfterRenameAndRemovalWithoutChangingSelection() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let plain = try XCTUnwrap(store.captureText("plain note")), tagged = try XCTUnwrap(store.captureText("tagged note İstanbul 中文"))
