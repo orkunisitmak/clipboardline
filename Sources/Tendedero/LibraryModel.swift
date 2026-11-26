@@ -9,7 +9,8 @@ import Combine
     @Published private(set) var ids = [UUID]()
     @Published private(set) var selectedIDs = Set<UUID>()
     @Published private(set) var focusedID: UUID?
-    @Published private(set) var collections = [LibraryCollection]()
+    @Published private(set) var collections = [LibraryCollection]() { didSet { folderPaths = nil } }
+    private var folderPaths: [UUID: String]?
     @Published private(set) var tags = [LibraryTag]()
     @Published private(set) var loading = false
     @Published private(set) var notice: String?
@@ -110,13 +111,17 @@ import Combine
         }
     }
     /// A subfolder reads "Parent / Middle / Child" (the whole parent chain, cycle-safe), as on Windows.
-    private func folderPath(_ id: UUID) -> String? {
-        guard collections.contains(where: { $0.id == id }) else { return nil }
-        var names: [String] = [], visited = Set<UUID>(), next: UUID? = id
-        while let current = next, visited.insert(current).inserted, let folder = collections.first(where: { $0.id == current }) {
-            names.insert(folder.name, at: 0); next = folder.parentID
+    func folderPath(_ id: UUID) -> String? {
+        if let folderPaths { return folderPaths[id] }
+        let byID = Dictionary(collections.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var paths = [UUID: String]()
+        for folder in collections {
+            var names: [String] = [], visited = Set<UUID>(), next: UUID? = folder.id
+            while let current = next, visited.insert(current).inserted, let item = byID[current] { names.insert(item.name, at: 0); next = item.parentID }
+            paths[folder.id] = names.joined(separator: " / ")
         }
-        return names.joined(separator: " / ")
+        folderPaths = paths
+        return paths[id]
     }
     func clearNotice() { notice = nil; store.notice = nil }
     func report(_ message: String) { notice = message }
@@ -365,6 +370,11 @@ import Combine
         if selectedIDs.isEmpty { return focusedID.map { [$0] } ?? [] }
         if selectedIDs.count == ids.count { return ids }
         return selectedIDs.filter { indices[$0] != nil }.sorted { indices[$0]! < indices[$1]! }
+    }
+    /// Right-click "Name and pin…": a row inside a multi-selection names the whole selection, like the key.
+    func requestNameAndPin(_ id: UUID) {
+        let ids = actionIDs
+        if selectedIDs.contains(id), ids.count > 1 { onNameAndPinBatchRequested?(ids) } else { onNameAndPinRequested?(id) }
     }
     func copy(to board: NSPasteboard? = nil) {
         guard flushEdits(), !actionIDs.isEmpty else { return }
