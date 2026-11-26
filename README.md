@@ -13,7 +13,7 @@ Images, text and links, close at hand. Keep recent copies on three shelves, save
 ## Your first five minutes
 
 1. **Install and open.** Download the latest Mac release, move the app to Applications and open it. ClipBoardLine lives in the menu bar. On Windows, run the x64 installer; ClipBoardLine lives in the system tray.
-2. **Choose what to collect.** In Settings → Sources, enable image or text capture. On Windows both start off, so only links are collected until you turn them on. Standalone-link capture defaults on and can be disabled. Choose screenshot handling separately.
+2. **Choose what to collect.** In Settings → Sources, enable image or text capture. Both start off on Mac and Windows, so only links are collected until you turn them on. Standalone-link capture defaults on and can be disabled. Choose screenshot handling separately.
 3. **Browse without breaking your flow.** Press ⌃⌥T, use the arrow keys and press Space to preview. Enter copies and closes the shelves; focus returns to the previous app.
 4. **Keep the useful things.** Press P to pin, ⇧P to choose a folder or ⌥P to add a useful name. Tagged or filed records remain after normal history expires.
 5. **Make it your own.** Set retention for each content type, record shortcuts, choose colors and toggle automatic update checks in Settings.
