@@ -200,10 +200,84 @@ import XCTest
         XCTAssertNil(literalTitle.title)
     }
 
+    func testUnclosedStyleOgTitleIsNotThePreviewTitle() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let unclosed = try PublicLinkHTMLMetadata(data: Data(#"<html><title>Real</title><style><meta property='og:title' content='Sahte'>"#.utf8), url: url)
+        XCTAssertEqual(unclosed.title, "Real")
+        let afterTitle = try PublicLinkHTMLMetadata(data: Data(#"<style>h1{color:red}<title></title><meta property='og:title' content='Sahte'>"#.utf8), url: url)
+        XCTAssertNil(afterTitle.title)
+    }
+
+    func testUnclosedCommentRunsToTheEndAndQuotedCommentStartKeepsTheThumbnail() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        for hidden in ["<!-- <div><meta property='og:image' content='https://public.example.org/hidden.png'>", "<!-- a > b <meta property='og:image' content='https://public.example.org/hidden.png'>"] {
+            XCTAssertNil(try PublicLinkHTMLMetadata(data: Data(hidden.utf8), url: url).thumbnailURL)
+        }
+        for empty in ["<!-->", "<!--->", "<!-- a --!>"] {
+            let parsed = try PublicLinkHTMLMetadata(data: Data((empty + "<meta property='og:image' content='https://public.example.org/real.png'>").utf8), url: url)
+            XCTAssertEqual(parsed.thumbnailURL?.absoluteString, "https://public.example.org/real.png", empty)
+        }
+        let quoted = try PublicLinkHTMLMetadata(data: Data("<meta name='description' content='a <!-- b'><meta property='og:image' content='https://public.example.org/real.png'>".utf8), url: url)
+        XCTAssertEqual(quoted.thumbnailURL?.absoluteString, "https://public.example.org/real.png")
+    }
+
+    func testTextareaContentIsNotThePreviewTitle() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let parsed = try PublicLinkHTMLMetadata(data: Data("<title>gerçek</title><textarea><meta property='og:title' content='Sahte'></textarea>".utf8), url: url)
+        XCTAssertEqual(parsed.title, "gerçek")
+        let closedFirst = try PublicLinkHTMLMetadata(data: Data("<textarea><meta property='og:title' content='fake'></textarea><title>Real</title>".utf8), url: url)
+        XCTAssertEqual(closedFirst.title, "Real")
+    }
+
+    func testUnclosedTextareaHidesTheRestOfThePageAndStaysFast() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        let unclosed = try PublicLinkHTMLMetadata(data: Data("<textarea><meta property='og:title' content='x'><title>T</title>".utf8), url: url)
+        XCTAssertNil(unclosed.title)
+        let repeated = try PublicLinkHTMLMetadata(data: Data(String(repeating: "<textarea>", count: 50_000).utf8), url: url)
+        XCTAssertNil(repeated.title)
+    }
+
+    func testUnclosedBlocksHideTheRestOfThePage() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        for opener in ["<script>", "<STYLE type='text/css'>", "<textarea\n>", "<!--"] {
+            let page = opener + "<meta property='og:title' content='Hidden'><meta property='og:image' content='https://public.example.org/hidden.png'><title>Hidden</title>"
+            let parsed = try PublicLinkHTMLMetadata(data: Data(page.utf8), url: url)
+            XCTAssertNil(parsed.title, opener); XCTAssertNil(parsed.thumbnailURL, opener)
+        }
+        // A closed one hides only its own content; the end tag may carry ASCII whitespace before `>`.
+        for (opener, closer) in [("<script>", "</SCRIPT \t>"), ("<style>", "</style>"), ("<textarea>", "</textarea\n>"), ("<!--", "--!>")] {
+            let page = opener + "<meta property='og:title' content='Hidden'>" + closer + "<meta property='og:title' content='Real'>"
+            XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(page.utf8), url: url).title, "Real", opener)
+        }
+        // A start tag that never gets its `>` hides nothing.
+        XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data("<title>Real</title><script".utf8), url: url).title, "Real")
+    }
+
+    func testCustomElementsNamedLikeRawTextStartNothing() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        for name in ["script-widget", "style-x", "textarea-x", "stylex", "script_x", "scripts"] {
+            let page = "<\(name)>x</\(name)><meta property='og:title' content='Real'>"
+            XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(page.utf8), url: url).title, "Real", name)
+        }
+        // The name ends at `/` as at whitespace or `>`.
+        XCTAssertNil(try PublicLinkHTMLMetadata(data: Data("<script/><meta property='og:title' content='Hidden'>".utf8), url: url).title)
+    }
+
+    func testMarkersInsideMetaAttributesStartNothing() throws {
+        let url = URL(string: "https://public.example.org/page")!
+        for marker in ["<script>", "<style>", "<!--", "<textarea>"] {
+            let page = "<meta name='k' content='a \(marker) b'><meta property='og:title' content='Real'>"
+            XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(page.utf8), url: url).title, "Real", marker)
+        }
+        let double = "<meta name=\"k\" content=\"a <script> b\"><meta property='og:title' content='Real'>"
+        XCTAssertEqual(try PublicLinkHTMLMetadata(data: Data(double.utf8), url: url).title, "Real")
+    }
+
     func testPagesOfUnclosedTagsParseInLinearTime() throws {
         let url = URL(string: "https://public.example.org/page")!
         func filled(_ unit: String) -> String { String(repeating: unit, count: 512 * 1024 / unit.utf8.count) }
-        let pages = ["<title", "<title>", "<!--", "<script>", "<style x", "<meta ", "<meta \"", "<meta '\"'\"", "<", "&amp;"].map(filled)
+        let pages = ["<title", "<title>", "<!--", "<script>", "<style>", "<textarea>", "<script-x>", "<style x", "<meta ", "<meta \"", "<meta '\"'\"",
+            "<", "&amp;"].map(filled)
             + [String(repeating: "<meta " + String(repeating: "a", count: 4000) + ">", count: 128)]
         for page in pages {
             let start = Date()
