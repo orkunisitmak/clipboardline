@@ -213,6 +213,8 @@ import XCTest
         let tag = try XCTUnwrap(library.tags().first); try library.renameTag(tag.id, name: "#urgent")
         XCTAssertEqual(try library.tags().map(\.name), ["urgent"])
         try library.addTag("#urgent", to: [second.id])
+        try library.addTag(" #urgent ", to: [second.id])
+        XCTAssertThrowsError(try library.addTag(" ## ", to: [second.id]))
         XCTAssertEqual(try library.tags().map(\.name), ["urgent"])
         XCTAssertThrowsError(try library.renameTag(tag.id, name: "##"))
         let revision = library.revision
