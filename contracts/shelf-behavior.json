@@ -26,6 +26,12 @@
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
+      },
+      {
+        "id": "deleted-screenshot-file",
+        "macos": "An unsaved shelf screenshot is shown from its original file. When that file is deleted in Finder (the file is missing while its folder can still be read) the item moves to Trash at the next prune; a disk that is not mounted or a permission error keeps it. LibraryStoreTests.testPruneDropsAnUnsavedScreenshotWhoseFileWasDeleted and testPruneKeepsAnUnsavedScreenshotWhoseFolderIsGone cover it.",
+        "windows": "importFile in main.cjs stores its own PNG copy of every watched or imported image, so deleting the original in Explorer leaves the shelf item intact.",
+        "reason": "The Mac shelf references screenshots in place to avoid duplicating the user's files; Windows always keeps a managed copy. Neither platform shows an empty card."
       }
     ],
     "sharedBehaviors": [
