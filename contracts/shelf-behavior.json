@@ -256,6 +256,18 @@
         "behavior": "When a text is copied again while the Library holds more than one live copy of it, one item is kept and takes the pins, folders, tags, name and note of the others; the other copies move to Trash with what they held, where they can be restored, and are never deleted outright. Undo take down does not bring such a copy back.",
         "macos": "LibraryStore.captureText marks every extra matching row deleted with a new trashRevision and invalidates its shelf and Trash undo entries; TextDedupStoreTests.testImportedDuplicatesConsolidateOnRecaptureAndPreserveAllOrganization covers it.",
         "windows": "Store.insert sets trashedAt, trashRevision and hiddenFromShelf on the extra matches instead of dropping them, and removes their undo entries; model.test.cjs 'recopying a text that has live duplicates merges them and keeps the extras in Trash like macOS' and 'undo of an earlier removal cannot revive a duplicate that a recopy merged into Trash', and text-identity-parity.test.cjs cover it."
+      },
+      {
+        "id": "folder-menu-path",
+        "behavior": "Wherever an item is added to, moved to or listed in a folder (the Add to folder and Move to folder choices and the Folders list of the details panel), a subfolder is shown with the same full path as the Library title (Parent / Child), so same-named subfolders of different parents can be told apart; a top-level folder shows only its name.",
+        "macos": "The Library list menu, the toolbar Actions menu and the inspector's Folders list, Add to folder and Move to folder menus title each folder with LibraryModel.folderPath, which indexes the paths once per folder list; LibraryNativeTests.testAddToFolderMenuTellsSameNamedSubfoldersApart and testToolbarAddToFolderMenuTellsSameNamedSubfoldersApart cover the menus.",
+        "windows": "The folder picker options (currentModalOptions) and the inspector memberships in renderer.js use folderPath(); library-ui.test.cjs 'Add to folder and the inspector tell same-named subfolders apart like macOS' covers both."
+      },
+      {
+        "id": "name-and-pin-names-the-selection",
+        "behavior": "Name and pin started from a menu on an item that is part of a selection of more than one names every selected item in turn, like the Name and pin shortcut; started on an item outside the selection it names only that item and leaves the selection unchanged.",
+        "macos": "The shelf card menus call Line.requestNameAndPin and the Library list menu calls LibraryModel.requestNameAndPin, which hand the ordered selection to onNameAndPinBatchRequested when the clicked item is in a multi-selection; NameAndPinWorkflowTests.testMenuNameAndPinNamesTheWholeSelectionLikeTheKey covers the three shelves, a card outside the selection and the Library list.",
+        "windows": "Windows has no per-item context menu; its menu entry for Name and pin (the command list) runs the name action on the current selection (startName); renderer-ui.test.cjs runs Name and pin from the command list on a two-item selection and checks the 1 / 2 and 2 / 2 prompts."
       }
     ]
   },

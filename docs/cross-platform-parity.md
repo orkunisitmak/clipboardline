@@ -80,6 +80,12 @@ this on both platforms with an image, a text and a link selected.
 `subfolder-title` requires the Library title of a subfolder to list every
 ancestor, outermost first (`Parent / Child`, `Parent / Middle / Child`), so
 same-named subfolders of different parents can be told apart.
+`folder-menu-path` requires the same full path wherever an item is added to,
+moved to or listed in a folder: the Add to folder and Move to folder choices and
+the Folders list of the details panel.
+`name-and-pin-names-the-selection` requires Name and pin started from a menu on
+an item inside a selection of more than one to name every selected item, like
+the shortcut; an item outside the selection is named alone and the selection stays.
 `link-title-format-characters` requires a fetched page title to keep the
 zero-width joiner and non-joiner (emoji sequences, Persian words) while removing
 the bidirectional marks, embeddings, overrides and isolates that can spoof a title,

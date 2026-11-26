@@ -172,6 +172,14 @@ test('a subfolder scope is titled with its parent like macOS',async()=>{
  await f.click('folder-scope',{folder:parent});assert.match(f.main,/<div class="window-title"><strong>Parent<\/strong>/);await f.click('folder-scope',{folder:child});assert.match(f.main,/<div class="window-title"><strong>Parent \/ Child<\/strong>/);
 });
 
+test('Add to folder and the inspector tell same-named subfolders apart like macOS',async()=>{
+ const f=fixture();await f.ready();const id=last=>'20000000-0000-4000-8000-00000000000'+last,work=id('1'),personal=id('2'),workYear=id('3'),personalYear=id('4');
+ f.state.folders=[{id:work,name:'Work',parentId:null},{id:personal,name:'Personal',parentId:null},{id:workYear,name:'2024',parentId:work},{id:personalYear,name:'2024',parentId:personal}];Object.assign(f.state.items[0],{retainedAt:1000,folderIds:[personalYear]});f.api.emit({folders:f.state.folders,items:f.state.items});await f.ready();await savedLibrary(f);
+ const inspector=f.main.match(/<aside class="inspector"[\s\S]*?<\/aside>/)[0];assert.match(inspector,/<span>Personal \/ 2024<\/span>/);assert.doesNotMatch(inspector,/<span>2024<\/span>/);
+ await f.click('add-to-folder');const names=[...f.overlay.matchAll(/data-action="choose-folder" data-folder="[^"]*"><span class="option-icon">[^<]*<\/span>([^<]*)<\/button>/g)].map(match=>match[1]);
+ assert.ok(names.includes('Work / 2024'));assert.ok(names.includes('Personal / 2024'));assert.ok(!names.includes('2024'));
+});
+
 test('an unnamed item is titled like macOS: trimmed first line capped at 120, link host without a fetched title',async()=>{
  const f=fixture();await f.ready();const base=(id,kind,extra)=>({id,kind,createdAt:500,updatedAt:500,name:'',title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,retainedAt:500,crop:null,annotations:[],...extra});
  f.state.items=[base('30000000-0000-4000-8000-000000000001','text',{text:'\t  Indented first line \r\nsecond line'}),base('30000000-0000-4000-8000-000000000002','text',{text:'x'.repeat(130)}),base('30000000-0000-4000-8000-000000000003','link',{url:'https://www.example.com/a/very/long/path?utm_source=news'}),base('30000000-0000-4000-8000-000000000004','link',{url:'https://example.com/ref',title:'Fetched title'}),base('30000000-0000-4000-8000-000000000005','text',{text:'\n \t\r\nSecond line\nthird'}),base('30000000-0000-4000-8000-000000000006','text',{text:' \t\r\n  '}),base('30000000-0000-4000-8000-000000000007','link',{url:'http://[bad'})];
