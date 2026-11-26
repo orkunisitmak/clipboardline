@@ -569,15 +569,33 @@ extension String {
     @discardableResult func captureLink(_ url: URL) throws -> LibraryRecord {
         defer { expire() }
         guard let normalized = LinkIdentity.normalized(url) else { throw HistoryFiles.Failure.unsafeFile }
-        if var item = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE normalized=? AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1", [.text(normalized)])).first {
-            item.onShelf = true; item.updatedAt = now(); item.lastCopiedAt = now(); item.lastCapturedAt = now(); item.captureRevision = UUID()
-            // Copying a link again asks for its preview again, so a failed attempt does not hold the retry back for an hour.
-            if item.metadataState == "failed" { item.metadataAttemptedAt = nil }
-            try db.transaction { try put(item) }; changed([item.id]); return item
+        let date = now()
+        let captured: LibraryRecord = try db.transaction {
+            let existing = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE normalized=? AND deleted IS NULL ORDER BY created DESC,rowid DESC LIMIT 1", [.text(normalized)])).first
+            var orderedDate = date
+            if case let .real(front)? = try db.rows("SELECT COALESCE(copied,created) AS front FROM items WHERE kind='link' AND shelf=1 AND deleted IS NULL ORDER BY front DESC,rowid DESC LIMIT 1").first?["front"] {
+                // Reusing a stable ID also reuses its rowid. An equal clock reading
+                // must still move that link ahead of a newer row, and later new links
+                // must stay ahead of that tiny ordering increment or a backward clock.
+                let timestamp = date.timeIntervalSince1970
+                if timestamp < front || (existing != nil && timestamp == front) {
+                    orderedDate = Date(timeIntervalSince1970: front.nextUp)
+                }
+            }
+            if var item = existing {
+                item.onShelf = true; item.updatedAt = date; item.lastCopiedAt = orderedDate; item.lastCapturedAt = date; item.captureRevision = UUID()
+                // Copying a link again asks for its preview again, so a failed attempt does not hold the retry back for an hour.
+                if item.metadataState == "failed" { item.metadataAttemptedAt = nil }
+                try put(item)
+                return item
+            }
+            var item = LibraryRecord(id: UUID(), kind: .link, createdAt: orderedDate, updatedAt: date)
+            item.originalURL = url.absoluteString; item.normalizedURL = normalized; item.lastCapturedAt = date; item.captureRevision = UUID()
+            try put(item)
+            return item
         }
-        let date = now(); var item = LibraryRecord(id: UUID(), kind: .link, createdAt: date, updatedAt: date)
-        item.originalURL = url.absoluteString; item.normalizedURL = normalized; item.lastCapturedAt = date; item.captureRevision = UUID()
-        try db.transaction { try put(item) }; changed([item.id]); return item
+        changed([captured.id])
+        return captured
     }
     private func ensureOwned(_ item: inout LibraryRecord) throws {
         guard item.kind == .image, let url = item.fileURL, !files.isAppCopy(url) else { return }
