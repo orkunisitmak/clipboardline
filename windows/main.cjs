@@ -35,6 +35,7 @@ const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
 const {shouldStartHidden,shouldShowOnSecondInstance,applyLoginItemSetting,migrateLoginItemSetting}=require('./lib/login-launch.cjs');
+const {folderKey,watchedFolders,shelfRevealPatch}=require('./lib/watch-folders.cjs');
 const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
 const testMode = process.argv.includes('--test-mode');
 const testFolder = process.argv.find(value=>value.startsWith('--test-data='))?.slice('--test-data='.length);
@@ -124,8 +125,7 @@ function rememberNormalBounds(){if(window&&view!=='shelves'&&!applyingBounds&&!w
 function fitNormalBounds(area){const width=Math.min(area.width,normalBounds?.width||1180),height=Math.min(area.height,normalBounds?.height||800);return{width,height,x:Math.min(area.x+area.width-width,Math.max(area.x,normalBounds?.x??Math.round(area.x+(area.width-width)/2))),y:Math.min(area.y+area.height-height,Math.max(area.y,normalBounds?.y??Math.round(area.y+(area.height-height)/2)))};}
 async function show(next='shelves',event=null) {
   cancelRecordingTrims();
-  // Like macOS focusShelf: selecting an item on a hidden shelf shows that shelf alone.
-  if(next==='shelves'&&event?.selectId&&['image','text','link'].includes(event.kind)&&!store.data.settings.visibleKinds.includes(event.kind))store.modify('setSettings',{patch:{visibleKinds:[event.kind]}});
+  const reveal=shelfRevealPatch(store.data.settings,next,event);if(reveal)store.modify('setSettings',{patch:reveal});
   if(pastePromise){pasteGeneration++;cancelNativePaste();}
   const generation=++visibilityGeneration,wasClosing=!desiredVisible&&window.isVisible();desiredVisible=true;shelfMotion.cancel();showing++;
   try {
@@ -307,7 +307,7 @@ async function recognize(id,quiet=false) {
 // folder names survive any console code page. Each reconfigure re-resolves it
 // off the main path; watchers are rebuilt only when the folder changes, and a
 // failed lookup retries after a minute.
-let watchedFolders=new Set(),systemScreenshots=null,resolvingScreenshots=false,screenshotRetry=null;
+let activeFolders=new Set(),systemScreenshots=null,resolvingScreenshots=false,screenshotRetry=null;
 function resolveSystemScreenshotFolder() {
   if(resolvingScreenshots)return;resolvingScreenshots=true;clearTimeout(screenshotRetry);
   const ready=folder=>{try{if(folder&&path.isAbsolute(folder)){fs.mkdirSync(folder,{recursive:true});if(fs.statSync(folder).isDirectory())return folder;}}catch{}return null;};
@@ -328,13 +328,11 @@ function systemScreenshotFolder(resolve) {
 }
 function configureWatchers(resolve=true) {
   for(const watcher of watchers)watcher.close();watchers=[];
-  const system=systemScreenshotFolder(resolve);
-  const folders=[...store.data.settings.watchFolders];
-  if(system&&!folders.some(folder=>path.resolve(folder).toLowerCase()===path.resolve(system).toLowerCase()))folders.push(system);
+  const folders=watchedFolders(store.data.settings,systemScreenshotFolder(resolve));
   // A debounced import still pending when its folder stops being watched (for
   // example the screenshot setting is turned off) is dropped when it fires.
-  watchedFolders=new Set(folders.map(folder=>path.resolve(folder).toLowerCase()));
-  for(const folder of folders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);if(!watchedFolders.has(path.resolve(folder).toLowerCase()))return;try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(err=>{console.warn('Watch folder import error:',err?.message||err);});}catch(err){console.warn('Watch folder item error:',err?.message||err);}},700));});watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});watchers.push(watcher);}catch(err){console.warn('Watch folder configure error:',err?.message||err);}}
+  activeFolders=new Set(folders.map(folder=>folderKey(folder)));
+  for(const folder of folders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);if(!activeFolders.has(folderKey(folder)))return;try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(err=>{console.warn('Watch folder import error:',err?.message||err);});}catch(err){console.warn('Watch folder item error:',err?.message||err);}},700));});watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});watchers.push(watcher);}catch(err){console.warn('Watch folder configure error:',err?.message||err);}}
 }
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){

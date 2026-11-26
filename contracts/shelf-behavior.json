@@ -32,6 +32,12 @@
         "macos": "An unsaved shelf screenshot is shown from its original file. When that file is deleted in Finder (the file is missing while its folder can still be read) the item moves to Trash at the next prune; a disk that is not mounted or a permission error keeps it. LibraryStoreTests.testPruneDropsAnUnsavedScreenshotWhoseFileWasDeleted and testPruneKeepsAnUnsavedScreenshotWhoseFolderIsGone cover it.",
         "windows": "importFile in main.cjs stores its own PNG copy of every watched or imported image, so deleting the original in Explorer leaves the shelf item intact.",
         "reason": "The Mac shelf references screenshots in place to avoid duplicating the user's files; Windows always keeps a managed copy. Neither platform shows an empty card."
+      },
+      {
+        "id": "system-screenshots-setting",
+        "macos": "New system screenshots always reach the Images shelf: ScreenshotWatcher follows the screenshot location set in macOS, and Settings has no switch for it.",
+        "windows": "New files in the Screenshots known folder (PrtSc, Win+Shift+S, Win+PrtSc; the relocated folder when Pictures is redirected) reach the Images shelf by default. Settings > General > Import Windows screenshots (watchSystemScreenshots, on by default) turns this off; folders the user added under Watch image folders stay watched either way.",
+        "reason": "Both platforms import system screenshots by default. On macOS this is what the app started as and it has never had a switch. On Windows, Snipping Tool and Win+PrtSc can also copy the capture, so a user who already collects images from the clipboard can keep only that source. User impact: a Windows user can turn system screenshot import off in Settings; a Mac user cannot."
       }
     ],
     "sharedBehaviors": [
