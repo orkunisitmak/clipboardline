@@ -64,6 +64,9 @@ Windows folder picker uses the same entry; the macOS folder picker keeps its own
 declared character set (byte-order mark, `Content-Type`, XHTML declaration, early
 `<meta charset>`), falling back to windows-1252, so windows-1254 pages show their
 Turkish letters.
+`link-preview-unclosed-blocks` requires a link preview to ignore comments and script, style and
+textarea elements the way a browser parses them: an unclosed one hides the rest of the page, while a
+custom element such as `<script-widget>` or a marker inside a meta attribute value starts nothing.
 `image-recopy-dedupe` requires copying the same image again to keep one Library item,
 moved to the front with its pin, name, tags and folders.
 `note-survives-matching-copy` requires a note made with New note to stay as it is when
@@ -80,6 +83,12 @@ this on both platforms with an image, a text and a link selected.
 `subfolder-title` requires the Library title of a subfolder to list every
 ancestor, outermost first (`Parent / Child`, `Parent / Middle / Child`), so
 same-named subfolders of different parents can be told apart.
+`folder-menu-path` requires the same full path wherever an item is added to,
+moved to or listed in a folder: the Add to folder and Move to folder choices and
+the Folders list of the details panel.
+`name-and-pin-names-the-selection` requires Name and pin started from a menu on
+an item inside a selection of more than one to name every selected item, like
+the shortcut; an item outside the selection is named alone and the selection stays.
 `link-title-format-characters` requires a fetched page title to keep the
 zero-width joiner and non-joiner (emoji sequences, Persian words) while removing
 the bidirectional marks, embeddings, overrides and isolates that can spoof a title,
@@ -115,6 +124,16 @@ Name and pin case.
 `unavailable-watched-folder` requires a watched folder that is unavailable, such as one on an
 unmounted volume, to stay in the saved list while it is skipped, so adding or removing another
 watched folder does not forget it.
+
+System screenshots reach the Images shelf by default on both platforms. macOS follows the
+screenshot location set in the system and has no switch for it. Windows watches the Screenshots
+known folder used by PrtSc, Win+Shift+S and Win+PrtSc, including a relocated or OneDrive-redirected
+one, and adds Settings > General > Import Windows screenshots (`watchSystemScreenshots`, on by
+default). The switch exists only on Windows: this is the reviewed `system-screenshots-setting`
+exception in the shared contract. User impact: a Windows user can turn system screenshot import
+off, a Mac user cannot; folders added under Watch image folders stay watched either way. The
+Windows evidence is `windows/tests/watch-folders.test.cjs` (the folder is added while the setting
+is on, never twice, and dropped when it is off) and the `model.test.cjs` setting case.
 
 Shortcut recorder focus return is described in the shared `contracts/shortcut-recording.json` exception.
 On Windows the recorder lives in the Settings DOM and must refocus a newly rendered

@@ -26,6 +26,18 @@
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
+      },
+      {
+        "id": "deleted-screenshot-file",
+        "macos": "An unsaved shelf screenshot is shown from its original file. When that file is deleted in Finder (the file is missing while its folder can still be read) the item moves to Trash at the next prune; a disk that is not mounted or a permission error keeps it. LibraryStoreTests.testPruneDropsAnUnsavedScreenshotWhoseFileWasDeleted and testPruneKeepsAnUnsavedScreenshotWhoseFolderIsGone cover it.",
+        "windows": "importFile in main.cjs stores its own PNG copy of every watched or imported image, so deleting the original in Explorer leaves the shelf item intact.",
+        "reason": "The Mac shelf references screenshots in place to avoid duplicating the user's files; Windows always keeps a managed copy. Neither platform shows an empty card."
+      },
+      {
+        "id": "system-screenshots-setting",
+        "macos": "New system screenshots always reach the Images shelf: ScreenshotWatcher follows the screenshot location set in macOS, and Settings has no switch for it.",
+        "windows": "New files in the Screenshots known folder (PrtSc, Win+Shift+S, Win+PrtSc; the relocated folder when Pictures is redirected) reach the Images shelf by default. Settings > General > Import Windows screenshots (watchSystemScreenshots, on by default) turns this off; folders the user added under Watch image folders stay watched either way.",
+        "reason": "Both platforms import system screenshots by default. On macOS this is what the app started as and it has never had a switch. On Windows, Snipping Tool and Win+PrtSc can also copy the capture, so a user who already collects images from the clipboard can keep only that source. User impact: a Windows user can turn system screenshot import off in Settings; a Mac user cannot."
       }
     ],
     "sharedBehaviors": [
@@ -66,6 +78,18 @@
         "windows": "decodeHTML in lib/network.cjs follows that order with TextDecoder; security.test.cjs covers it."
       },
       {
+        "id": "link-title-quoted-greater-than",
+        "behavior": "A greater-than sign inside a quoted meta value, such as content=\"Tips > Tricks\", is part of the value, so the link preview shows the full title.",
+        "macos": "PublicLinkHTMLMetadata reads quoted attribute values whole; PublicLinkPolicyTests.testGreaterThanInsideQuotedMetaValueKeepsTheTitle covers it.",
+        "windows": "meta in lib/network.cjs reads quoted attribute values whole; link-metadata-embed.test.cjs covers it."
+      },
+      {
+        "id": "link-preview-unclosed-blocks",
+        "behavior": "A link preview reads the page the way a browser parses it: the title and image never come from inside a comment or a script, style or textarea element, and one that is never closed hides the rest of the page. <!--> and <!---> are empty comments, and a comment ends at --> or --!>. Only the exact names open these elements, so a custom element such as <script-widget> hides nothing, and a marker inside a meta tag's attribute value starts nothing. A script, style or textarea tag without its closing > also hides nothing.",
+        "macos": "PublicLinkHTMLMetadata drops comments and script, style and textarea elements, unclosed ones to the end of the page; PublicLinkPolicyTests.testUnclosedBlocksHideTheRestOfThePage, testCustomElementsNamedLikeRawTextStartNothing and testMarkersInsideMetaAttributesStartNothing cover it.",
+        "windows": "withoutNonMetadata in lib/network.cjs drops comments and script, style and textarea elements, unclosed ones to the end of the page; link-metadata-embed.test.cjs covers it."
+      },
+      {
         "id": "link-blank-thumbnail",
         "behavior": "A link preview whose Open Graph image is empty or only whitespace has no thumbnail; a valid relative image URL is resolved against the page address.",
         "macos": "PublicLinkHTMLMetadata drops a whitespace-only og:image before resolving it; PublicLinkNetworkTests.testWhitespaceOnlyOpenGraphImageGivesNoThumbnailAndValidOneIsKept covers it.",
@@ -93,7 +117,7 @@
         "id": "link-tracking-parameters",
         "behavior": "Copying a link again that differs only by tracking query parameters (names starting with utm_, fbclid or gclid, in any letter case) is the same item: it is refreshed and keeps its first stored address, and links whose other parameters or fragment differ stay separate.",
         "macos": "LinkIdentity.normalized drops those parameters before LibraryStore.captureLink matches an existing item; CrossPlatformBehaviorContractTests runs the tracking-parameter-links scenario through LibraryStore.captureLink, and LibraryStoreTests.testLinkIdentityPreservesMeaningfulParametersAndDeduplicatesVideoForms covers it.",
-        "windows": "linkIdentity in lib/model.cjs applies the same rule when Store.insert matches an existing link, and merges older duplicates whose name and note do not clash into the kept item, which takes the oldest stored address; renderer-ui.test.cjs runs the tracking-parameter-links scenario through Store.insert, and model.test.cjs covers it."
+        "windows": "linkIdentity in lib/model.cjs applies the same rule when Store.insert matches an existing link, and merges older duplicates whose name and note do not clash into the kept item, which takes the oldest stored address, and moves those duplicates to Trash; renderer-ui.test.cjs runs the tracking-parameter-links scenario through Store.insert, and model.test.cjs covers it."
       },
       {
         "id": "mixed-selection-pin",
@@ -124,6 +148,12 @@
         "behavior": "An item in Library Trash can be copied: the Copy action stays enabled in the action list for a selection in Trash, matching the copy shortcut, while paste, preview, pin and the other editing actions stay disabled until the item is restored.",
         "macos": "ActionBarCatalog.keyboardAvailability enables .copy for any selection, as LibraryModel.perform(.copy) already copied it; ActionBarCatalogTests.testCopyStaysAvailableForTrashedItemsWhileEditingActionsDoNot covers it.",
         "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
+      },
+      {
+        "id": "trash-no-pin-tag-drag",
+        "behavior": "An item in Library Trash cannot be pinned, tagged or dragged into a folder by key or drag, matching the disabled action rows; it has to be restored first.",
+        "macos": "LibraryModel.favorite(), perform(.tag) and dragItems(_:) return early when the selection is in Trash; LibraryInteractionTests.testTrashedItemIgnoresPinTagAndDragLikeTheDisabledActionBarRows covers it.",
+        "windows": "perform() ignores pin, tag and the other editing actions for trashed ids, the Pin button is not rendered on a trashed card and dragstart is cancelled; library-ui.test.cjs checks it."
       },
       {
         "id": "undo-take-down-no-duplicate",
@@ -232,6 +262,24 @@
         "behavior": "A note made with New note is never taken over by a copy: copying text equal to a note's text makes a separate item, and every note with that text keeps its name, date added and place in the Library instead of moving to the shelf or to Trash. Text that was copied, not typed as a note, still deduplicates on the next copy.",
         "macos": "LibraryStore.createNote marks the record (createdAsNote) and LibraryStore.captureText skips marked records when it looks for a match; records stored before the marker open unchanged and keep deduplicating. TextDedupStoreTests.testCopyingANotesTextNeverMergesOrTrashesNotes and testRecordsStoredBeforeTheNoteMarkerOpenAndStillTakeTheCopy cover it.",
         "windows": "Store.createNote marks the item (createdAsNote) in its first write and Store.insert never matches a marked item; model.test.cjs 'a capture or import of a note's text never merges or removes notes, also after reopening' covers it."
+      },
+      {
+        "id": "recopy-merged-duplicates-stay-in-trash",
+        "behavior": "When a text is copied again while the Library holds more than one live copy of it, one item is kept and takes the pins, folders, tags, name and note of the others; the other copies move to Trash with what they held, where they can be restored, and are never deleted outright. Undo take down does not bring such a copy back.",
+        "macos": "LibraryStore.captureText marks every extra matching row deleted with a new trashRevision and invalidates its shelf and Trash undo entries; TextDedupStoreTests.testImportedDuplicatesConsolidateOnRecaptureAndPreserveAllOrganization covers it.",
+        "windows": "Store.insert sets trashedAt, trashRevision and hiddenFromShelf on the extra matches instead of dropping them, and removes their undo entries; model.test.cjs 'recopying a text that has live duplicates merges them and keeps the extras in Trash like macOS' and 'undo of an earlier removal cannot revive a duplicate that a recopy merged into Trash', and text-identity-parity.test.cjs cover it."
+      },
+      {
+        "id": "folder-menu-path",
+        "behavior": "Wherever an item is added to, moved to or listed in a folder (the Add to folder and Move to folder choices and the Folders list of the details panel), a subfolder is shown with the same full path as the Library title (Parent / Child), so same-named subfolders of different parents can be told apart; a top-level folder shows only its name.",
+        "macos": "The Library list menu, the toolbar Actions menu and the inspector's Folders list, Add to folder and Move to folder menus title each folder with LibraryModel.folderPath, which indexes the paths once per folder list; LibraryNativeTests.testAddToFolderMenuTellsSameNamedSubfoldersApart and testToolbarAddToFolderMenuTellsSameNamedSubfoldersApart cover the menus.",
+        "windows": "The folder picker options (currentModalOptions) and the inspector memberships in renderer.js use folderPath(); library-ui.test.cjs 'Add to folder and the inspector tell same-named subfolders apart like macOS' covers both."
+      },
+      {
+        "id": "name-and-pin-names-the-selection",
+        "behavior": "Name and pin started from a menu on an item that is part of a selection of more than one names every selected item in turn, like the Name and pin shortcut; started on an item outside the selection it names only that item and leaves the selection unchanged.",
+        "macos": "The shelf card menus call Line.requestNameAndPin and the Library list menu calls LibraryModel.requestNameAndPin, which hand the ordered selection to onNameAndPinBatchRequested when the clicked item is in a multi-selection; NameAndPinWorkflowTests.testMenuNameAndPinNamesTheWholeSelectionLikeTheKey covers the three shelves, a card outside the selection and the Library list.",
+        "windows": "Windows has no per-item context menu; its menu entry for Name and pin (the command list) runs the name action on the current selection (startName); renderer-ui.test.cjs runs Name and pin from the command list on a two-item selection and checks the 1 / 2 and 2 / 2 prompts."
       }
     ]
   },
