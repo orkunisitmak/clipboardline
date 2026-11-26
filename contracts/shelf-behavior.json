@@ -32,6 +32,12 @@
         "macos": "An unsaved shelf screenshot is shown from its original file. When that file is deleted in Finder (the file is missing while its folder can still be read) the item moves to Trash at the next prune; a disk that is not mounted or a permission error keeps it. LibraryStoreTests.testPruneDropsAnUnsavedScreenshotWhoseFileWasDeleted and testPruneKeepsAnUnsavedScreenshotWhoseFolderIsGone cover it.",
         "windows": "importFile in main.cjs stores its own PNG copy of every watched or imported image, so deleting the original in Explorer leaves the shelf item intact.",
         "reason": "The Mac shelf references screenshots in place to avoid duplicating the user's files; Windows always keeps a managed copy. Neither platform shows an empty card."
+      },
+      {
+        "id": "card-context-menu-form",
+        "macos": "Right-clicking a card opens a native menu at the pointer: the shelf card's own menu (GrabView.rightMouseDown with the menuProvider set in GrabArea, TextShelfView and LinkShelfView) or the Library table's row menu.",
+        "windows": "Right-clicking a card on a shelf or in the Library opens the shared Actions palette for it, with its search field, instead of a menu at the pointer.",
+        "reason": "The Actions palette already holds every card command with its availability rules, shortcuts and translations, so Windows reuses it instead of keeping a second command list in a pointer menu that could drift from it. User impact on Windows: the commands appear in a searchable Actions palette, not in a menu under the pointer, and the right-clicked card becomes the selection."
       }
     ],
     "sharedBehaviors": [
@@ -250,6 +256,12 @@
         "behavior": "When a text is copied again while the Library holds more than one live copy of it, one item is kept and takes the pins, folders, tags, name and note of the others; the other copies move to Trash with what they held, where they can be restored, and are never deleted outright. Undo take down does not bring such a copy back.",
         "macos": "LibraryStore.captureText marks every extra matching row deleted with a new trashRevision and invalidates its shelf and Trash undo entries; TextDedupStoreTests.testImportedDuplicatesConsolidateOnRecaptureAndPreserveAllOrganization covers it.",
         "windows": "Store.insert sets trashedAt, trashRevision and hiddenFromShelf on the extra matches instead of dropping them, and removes their undo entries; model.test.cjs 'recopying a text that has live duplicates merges them and keeps the extras in Trash like macOS' and 'undo of an earlier removal cannot revive a duplicate that a recopy merged into Trash', and text-identity-parity.test.cjs cover it."
+      },
+      {
+        "id": "card-right-click",
+        "behavior": "Right-clicking a card on a shelf or in the Library offers that card's actions without a left-click first. When the card is one of several selected cards, Pin and Copy act on all of them; otherwise the right-clicked card is the only target. The form of the menu is the card-context-menu-form exception, and how the remaining actions pick their target is stated per platform.",
+        "macos": "The right-click leaves the shelf selection as it is. Pin favorite/Unpin and Copy act on the selection when the clicked card is one of several selected cards on its shelf (Line.pinFromMenu, actionItems, actionEntries) and on the clicked card otherwise; Take down or Discard on the image shelf follows the same rule. Name and pin, Preview, Open, Quick Look, Markup and Show in Finder act on the clicked card. Move to Trash on the text and link shelves selects the clicked card when it is not selected and then asks about the selection; the image menu has no Move to Trash. The Library row menu selects the clicked row unless it is already selected, and its items act on the selection. DualShelfTests and LibraryNativeTests execute the shelf and Library menus.",
+        "windows": "The renderer's contextmenu handler selects the card and opens Actions. A card outside the selection becomes the only selected card; a card inside it keeps the selection, limited on the shelves to the cards of its own shelf (the range anchor moves to the card when the anchor left the selection). Every Actions command then acts on that selection under the palette's own rules, so single-item commands need one selected card. A right-click while a dialog, a preview or the image editor is open is ignored. renderer-ui.test.cjs executes a single card, a selection, a mixed-shelf selection with a later Shift-click, a Library selection across kinds and an open preview. Native Windows acceptance remains a separate release gate."
       }
     ]
   },

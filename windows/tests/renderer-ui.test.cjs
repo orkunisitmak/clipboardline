@@ -994,3 +994,14 @@ test('right-click does nothing while a preview is open',async()=>{
  const event=await f.cardContextMenu(f.text1);assert.equal(event.prevented,undefined);assert.match(f.overlay,/id="preview-dialog"/);
  assert.deepEqual(selectedCards(f),before);
 });
+
+test('right-clicking a Library card opens Actions and keeps a selection that spans kinds',async()=>{
+ const f=fixture();await f.ready();f.api.emit({items:f.state.items.map(value=>({...value,pinned:true}))});await f.ready();await f.key('KeyL');assert.equal(f.state.view,'library');
+ const event=await f.cardContextMenu(f.text2);assert.equal(event.prevented,true);
+ assert.deepEqual(selectedCards(f),[f.text2]);assert.match(f.overlay,/class="dialog palette"/);await f.key('Escape');
+ await f.cardClick(f.image,{ctrl:true});assert.deepEqual(selectedCards(f).sort(),[f.image,f.text2].sort());
+ await f.cardContextMenu(f.image);assert.deepEqual(selectedCards(f).sort(),[f.image,f.text2].sort());
+ await f.input('modal-query','unpin');await f.key('Enter');
+ assert.equal(f.state.items.find(value=>value.id===f.text2).pinned,false);assert.equal(f.state.items.find(value=>value.id===f.image).pinned,false);
+ assert.equal(f.state.items.find(value=>value.id===f.text1).pinned,true);
+});

@@ -115,6 +115,11 @@ Name and pin case.
 `unavailable-watched-folder` requires a watched folder that is unavailable, such as one on an
 unmounted volume, to stay in the saved list while it is skipped, so adding or removing another
 watched folder does not forget it.
+`card-right-click` requires a right-click on a shelf or Library card to offer that card's actions
+without a left-click first, and Pin and Copy to act on the whole selection when the card is one of
+several selected cards. The reviewed `card-context-menu-form` exception records the form: a native
+menu at the pointer on macOS, the searchable Actions palette on Windows, which reuses the palette's
+commands, availability rules, shortcuts and translations and makes the right-clicked card the selection.
 
 Shortcut recorder focus return is described in the shared `contracts/shortcut-recording.json` exception.
 On Windows the recorder lives in the Settings DOM and must refocus a newly rendered
