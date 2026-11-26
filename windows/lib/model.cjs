@@ -111,11 +111,22 @@ function plainURL(value) {
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
 
+// Match macOS LinkIdentity.youtubeID.
+function youtubeID(u) {
+  const pieces = u.pathname.split('/').filter(Boolean), host = u.hostname;
+  const id = ['youtu.be', 'www.youtu.be'].includes(host) ? pieces[0] : ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(host) ? (['shorts', 'embed', 'live'].includes(pieces[0]) && pieces.length > 1 ? pieces[1] : u.searchParams.get('v')) : null;
+  return /^[A-Za-z0-9_-]{11}$/.test(id || '') ? id : null;
+}
+
 // Match macOS LinkIdentity.normalized: utm_*, fbclid and gclid (any case) do not make a different link.
 function linkIdentity(href) {
   try {
     const u = new URL(href), drop = part => { const name = part.split('=')[0]; let decoded = name; try { decoded = decodeURIComponent(name); } catch {} return /^utm_/i.test(decoded) || /^(fbclid|gclid)$/i.test(decoded); };
-    u.search = u.search.slice(1).split('&').filter(part => !drop(part)).join('&'); return u.href;
+    u.search = u.search.slice(1).split('&').filter(part => !drop(part)).join('&');
+    // Like macOS, every address of one YouTube video is https://www.youtube.com/watch?v=ID; si is a share token.
+    const video = youtubeID(u);
+    if (video) return 'https://www.youtube.com/watch?' + ['v=' + video, ...u.search.slice(1).split('&').filter(part => part && !['v', 'si'].includes(part.split('=')[0]))].join('&') + u.hash;
+    return u.href;
   } catch { return href; }
 }
 
