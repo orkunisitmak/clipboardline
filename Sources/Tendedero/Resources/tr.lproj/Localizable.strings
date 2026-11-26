@@ -199,6 +199,7 @@
 "Trash" = "Çöp";
 "Try another filter or view your recent copies." = "Başka filtre deneyin veya son kopyalarınıza bakın.";
 "Turn on" = "Etkinleştir";
+"Turn on Fetch link titles and thumbnails in Settings to refresh link previews" = "Link önizlemelerini yenilemek için Ayarlar'da “Link başlıklarını ve küçük görsellerini al” seçeneğini aç";
 "Unorganized" = "Düzenlenmemiş";
 "Unpin" = "Sabitlemeyi kaldır";
 "Unsaved copies are kept for %d days" = "Kaydedilmemiş kopyalar %d gün saklanır";

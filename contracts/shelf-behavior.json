@@ -42,6 +42,12 @@
         "windows": "The renderer looks main-process notices up in the shared catalog, refills numeric templates, and formats the conflict with the catalog key; renderer-ui.test.cjs runs the shipped export through the Export shortcut in Turkish."
       },
       {
+        "id": "refresh-link-preview-needs-fetching",
+        "behavior": "Refresh link preview with link fetching turned off does nothing to the item and tells the user to turn on the link fetching setting in Settings.",
+        "macos": "LinkMetadataService.request(force:) sets the Library notice when fetching is off; LibraryInteractionTests.testRefreshLinkPreviewTellsWhyWhenFetchingIsOff covers it.",
+        "windows": "The refreshLink action in main.cjs refuses with a notice naming the Sources setting when fetchLinkMetadata is off."
+      },
+      {
         "id": "localized-selection-count",
         "behavior": "The Library footer and the multi-selection details panel show the number of selected items with the shared \"%d selected\" catalog entry in the language selected in Settings.",
         "macos": "LibraryWindow uses String(format: L(\"%d selected\"), count) for the footer and the multi-selection title.",
@@ -118,6 +124,12 @@
         "behavior": "An item in Library Trash can be copied: the Copy action stays enabled in the action list for a selection in Trash, matching the copy shortcut, while paste, preview, pin and the other editing actions stay disabled until the item is restored.",
         "macos": "ActionBarCatalog.keyboardAvailability enables .copy for any selection, as LibraryModel.perform(.copy) already copied it; ActionBarCatalogTests.testCopyStaysAvailableForTrashedItemsWhileEditingActionsDoNot covers it.",
         "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
+      },
+      {
+        "id": "undo-take-down-no-duplicate",
+        "behavior": "Undo take down does not bring back a text or link when the same content is on the shelf again because it was copied after the take down, so that Undo never hangs the same text or link twice. Links that differ only by tracking parameters count as the same content. An item Undo leaves off the shelf does not take the selection or the open preview. Images and a copy that is off the shelf do not block it, and restoring from Trash by hand is not limited.",
+        "macos": "LibraryStore.undoShelfRemoval skips a text or link record that has a live twin on the shelf (hasLiveTwin, which matches links by normalizedURL, repairs the text index first and never matches images) and returns only the restored ids, so the shelf and preview keep their selection when nothing came back; LibraryStoreTests.testUndoTakeDownDoesNotHangATextOrLinkTwiceAfterItWasCopiedAgain, testUndoTakeDownLeavesALinkOffTheShelfWhenTheCopyDiffersOnlyByTrackingParameters and testUndoTakeDownSeesATextEditedByAnOlderAppWhileOpen cover it.",
+        "windows": "Store.modify('undo') leaves a trashed text or link in Trash when a live item of the same kind and content (linkIdentity for links) is on the shelf, and ignores images and copies hidden from the shelf; undoTakeDown() in renderer.js selects and previews the item only when it is back on the shelf. model.test.cjs and renderer-ui.test.cjs cover it."
       },
       {
         "id": "recopy-last-copied",
@@ -208,6 +220,18 @@
         "behavior": "M on the focused selected still photo in the active image shelf opens its editable markup preview directly. Hover alone does not retarget keyboard actions. H selects the translucent marker; pointer drags draw editable marks. Escape saves and finishes markup (a later Escape closes preview); crop Escape cancels the crop. Saved marks survive reopening. M in search, note, annotation text and rename editors stays native text input. Empty and non-image shelves do not open markup. Remapped or disabled markup keys remain respected.",
         "macos": "LineKeyboard routes markup to Line.markup for the focused visible still image. MarkupKeyboardTests and ImageMarkupInteractionTests execute typing guards, remapping, real preview-panel sendEvent mouse delivery, hit testing, composited marker pixels, Escape/save and reopen. The nonactivating panel's canvas accepts the first mouse click while editing. CrossPlatformBehaviorContractTests executes the shared shelf M scenarios.",
         "windows": "The shipped renderer allows markup in the shelves shortcut context and opens the existing image editor for the focused still image. renderer-ui.test.cjs executes the shared shelf M scenarios plus marker pointer drawing, Escape/save, reopen and native editor guards. Native Windows acceptance remains a separate release gate."
+      },
+      {
+        "id": "domain-filter-parses-only-non-ascii",
+        "behavior": "The Library domain filter ignores case, surrounding dots and a leading www, and matches the host and its subdomains. A typed name is converted to its host form only when it has non-ASCII characters and no path, query, fragment, port, credentials, backslash or space, so bücher.de finds xn--bcher-kva.de; an ASCII entry such as 0x7f.1 is compared as typed and is not rewritten to 127.0.0.1.",
+        "macos": "LibraryStore.query builds the domain match from the typed name and calls URL(string:) only when it has a non-ASCII scalar; LibraryStoreTests.testDomainFilterMatchesATypedNumberLiterallyInsteadOfAnIPAddress and testDomainFilterMatchesAnInternationalizedNameTypedAsWritten cover it.",
+        "windows": "libraryBaseItems() in renderer.js runs new URL on the typed name only when it has a non-ASCII character; library-ui.test.cjs 'Library domain filter matches a typed number literally and does not rewrite it to an IP address' and 'Library domain filter finds an internationalized link typed as written' cover it."
+      },
+      {
+        "id": "note-survives-matching-copy",
+        "behavior": "A note made with New note is never taken over by a copy: copying text equal to a note's text makes a separate item, and every note with that text keeps its name, date added and place in the Library instead of moving to the shelf or to Trash. Text that was copied, not typed as a note, still deduplicates on the next copy.",
+        "macos": "LibraryStore.createNote marks the record (createdAsNote) and LibraryStore.captureText skips marked records when it looks for a match; records stored before the marker open unchanged and keep deduplicating. TextDedupStoreTests.testCopyingANotesTextNeverMergesOrTrashesNotes and testRecordsStoredBeforeTheNoteMarkerOpenAndStillTakeTheCopy cover it.",
+        "windows": "Store.createNote marks the item (createdAsNote) in its first write and Store.insert never matches a marked item; model.test.cjs 'a capture or import of a note's text never merges or removes notes, also after reopening' covers it."
       }
     ]
   },
