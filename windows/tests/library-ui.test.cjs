@@ -152,6 +152,12 @@ test('new permanent notes leave incompatible Library filters and open unpinned i
  const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.key('KeyF');await f.click('new-note');await f.input('simple-input','A new permanent note');await f.click('confirm-modal');const note=f.state.items.find(value=>value.text==='A new permanent note');assert.ok(note?.retainedAt);assert.equal(note.pinned,false);assert.deepEqual(cards(f),[note.id,f.image]);assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);assert.match(f.main,/data-action="pinnedOnly"[^>]*aria-pressed="false"/);assert.match(f.overlay,/id="text-editor"[^>]*>A new permanent note<\/textarea>/);
 });
 
+test('New note resets the Library sort to newest like macOS',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000});f.api.emit({items:f.state.items});await f.ready();
+ await savedLibrary(f);await f.change('sort-filter','oldest');
+ await f.click('new-note');await f.input('simple-input','Fresh note');await f.click('confirm-modal');
+ const note=f.state.items.find(value=>value.text==='Fresh note');assert.equal(cards(f)[0],note.id);assert.match(f.main,/<option value="newest" selected>/);
+});
 test('Edit details chooses Saved for a retained shelf item excluded by Recent',async()=>{
  const f=fixture();await f.ready();f.state.items[0].retainedAt=0;f.api.emit({items:f.state.items});await f.ready();await recent(f);assert.ok(!cards(f).includes(f.image));await f.api.command('show');await f.click('edit-details');assert.deepEqual(cards(f),[f.image]);assert.equal(focusedCard(f),f.image);assert.match(f.main,/data-action="scope" data-scope="saved" class="active"/);
 });
@@ -483,6 +489,17 @@ test('the multi-selection inspector says Unpin when every selected item is pinne
  await f.key('KeyA',{ctrl:true});assert.equal(pinLabel(),'Pin');
  f.state.items[2].pinned=true;f.api.emit({items:f.state.items});await f.ready();assert.equal(pinLabel(),'Unpin');
 });
+test('Library domain filter matches a typed number literally and does not rewrite it to an IP address',async()=>{
+ const f=fixture();await f.ready();const link=f.state.items.find(item=>item.id===f.link);link.url='http://127.0.0.1/page';link.retainedAt=1;f.state.items[0].tags=['x'];f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('toggle-filters');
+ await f.input('domain-filter','127.0.0.1');assert.deepEqual(cards(f),[f.link]);
+ for(const value of ['0x7f.1','2130706433'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[],value);
+});
+test('Library domain filter finds an internationalized link typed as written',async()=>{
+ const f=fixture();await f.ready();const link=f.state.items.find(item=>item.id===f.link);link.url='https://bücher.de/katalog';link.retainedAt=1;f.state.items[0].tags=['x'];f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);await f.click('toggle-filters');
+ for(const value of ['bücher.de','BÜCHER.de','www.bücher.de','xn--bcher-kva.de'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[f.link],value);
+ await f.input('domain-filter','bücher.org');assert.deepEqual(cards(f),[]);
+ for(const value of ['bücher.de/katalog','bücher.de?x','bücher.de#x'])await f.input('domain-filter',value),assert.deepEqual(cards(f),[],value);
+});
 test('removing a tag that is not open keeps the open tag view',async()=>{
  const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,tags:['client']});Object.assign(f.state.items[1],{retainedAt:900,tags:['client']});Object.assign(f.state.items[2],{retainedAt:800,tags:['other']});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
  await f.click('tag-scope',{tag:'client'});await f.key('ArrowRight');const selectedCard=/<article class="[^"]*\bselected\b[^"]*"[^>]*data-item-id="00000000-0000-4000-8000-000000000002"/;assert.match(f.main,selectedCard);assert.equal(focusedCard(f),f.text1);await f.click('tag-menu',{tag:'other'});await f.key('ArrowDown');await f.key('Enter');await f.click('confirm-modal');
@@ -502,9 +519,24 @@ test('changing the Library sort keeps the selected item like macOS setSort',asyn
  await f.change('sort-filter','oldest');assert.deepEqual(cards(f),[f.link,f.text2,f.text1,f.image]);assert.equal(focusedCard(f),f.text1);
  await f.click('view-mode');await f.click('sort-column',{column:'title'});assert.equal(focusedCard(f),f.text1);
 });
+test('Library cards do not offer the shelf-only Take down button',async()=>{
+ const f=fixture();await f.ready();Object.assign(f.state.items[0],{retainedAt:1000,pinned:true});f.api.emit({items:f.state.items});await f.ready();await savedLibrary(f);
+ assert.match(f.main,/data-action="card-pin"/);assert.doesNotMatch(f.main,/data-action="card-remove"/);
+});
 test('copying several Library items says how many were copied',async()=>{
  const f=fixture();await f.ready();await recent(f);
  await f.key('ArrowRight');await f.key('KeyC',{ctrl:true});assert.equal(f.nodes.get('toast').textContent,'Copied');
  await f.key('ArrowRight',{shift:true});await f.key('ArrowRight',{shift:true});await f.key('KeyC',{ctrl:true});
  assert.equal(f.commands.findLast(command=>command.action==='copy').payload.ids.length,3);assert.equal(f.nodes.get('toast').textContent,'3 items copied');
+});
+test('the Trash inspector offers no pin, folder or tag actions for a trashed item',async()=>{
+ const f=fixture();await f.ready();f.state.items[0].trashedAt=1000;f.state.items[1].trashedAt=900;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ await f.key('ArrowDown');
+ const inspector=()=>f.main.match(/<aside class="inspector"[\s\S]*?<\/aside>/)[0],actions=()=>[...inspector().matchAll(/data-action="([^"]+)"/g)].map(match=>match[1]);
+ assert.ok(actions().includes('copy')&&actions().includes('restore'),actions().join());
+ for(const action of ['pin','add-to-folder','tag'])assert.ok(!actions().includes(action),action);
+ assert.doesNotMatch(inspector(),/<h2>/,'a single selection has no multi-selection heading');
+ await f.key('KeyA',{ctrl:true});assert.equal(f.main.match(/class="[^"]*\bselected\b[^"]*"[^>]*data-item-id/g).length,2,'both trashed items are selected');
+ for(const action of ['pin','add-to-folder','tag'])assert.ok(!actions().includes(action),action+' multi');
+ assert.match(inspector(),/<h2>[^<]+<\/h2>/,'the inspector shows the multi-selection heading');
 });
