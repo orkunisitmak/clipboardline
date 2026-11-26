@@ -338,6 +338,19 @@ import XCTest
         f.date.addTimeInterval(10); _ = try library.captureLink(URL(string: "https://example.com/a?page=2")!)
         XCTAssertEqual(try library.undoShelfRemoval(), [other.id])
     }
+    func testUndoTakeDownDoesNotLetALibraryNoteBlockAClipboardCopy() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let note = try library.createNote(); try library.update(note.id) { $0.text = "Meeting agenda" }
+        let copy = try XCTUnwrap(library.captureText("Meeting agenda"))
+        XCTAssertNotEqual(copy.id, note.id)
+        try library.removeFromShelf([copy.id])
+        XCTAssertEqual(try library.undoShelfRemoval(), [copy.id])
+        XCTAssertEqual(Set(try library.shelfItems(.text).map(\.id)), [note.id, copy.id])
+        // Taking down the Library note while the clipboard copy is on the shelf also remains undoable.
+        try library.removeFromShelf([note.id])
+        XCTAssertEqual(try library.undoShelfRemoval(), [note.id])
+        XCTAssertEqual(Set(try library.shelfItems(.text).map(\.id)), [note.id, copy.id])
+    }
     func testUndoTakeDownSeesATextEditedByAnOlderAppWhileOpen() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let old = try XCTUnwrap(library.captureText("Hang once")), edited = try XCTUnwrap(library.captureText("Something else"))
