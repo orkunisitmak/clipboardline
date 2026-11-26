@@ -116,6 +116,16 @@ Name and pin case.
 unmounted volume, to stay in the saved list while it is skipped, so adding or removing another
 watched folder does not forget it.
 
+System screenshots reach the Images shelf by default on both platforms. macOS follows the
+screenshot location set in the system and has no switch for it. Windows watches the Screenshots
+known folder used by PrtSc, Win+Shift+S and Win+PrtSc, including a relocated or OneDrive-redirected
+one, and adds Settings > General > Import Windows screenshots (`watchSystemScreenshots`, on by
+default). The switch exists only on Windows: this is the reviewed `system-screenshots-setting`
+exception in the shared contract. User impact: a Windows user can turn system screenshot import
+off, a Mac user cannot; folders added under Watch image folders stay watched either way. The
+Windows evidence is `windows/tests/watch-folders.test.cjs` (the folder is added while the setting
+is on, never twice, and dropped when it is off) and the `model.test.cjs` setting case.
+
 Shortcut recorder focus return is described in the shared `contracts/shortcut-recording.json` exception.
 On Windows the recorder lives in the Settings DOM and must refocus a newly rendered
 Record button by stable identity, not an already detached element. On macOS the
