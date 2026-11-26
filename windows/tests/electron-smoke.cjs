@@ -348,6 +348,7 @@ async function main(){
   await application.evaluate(()=>global.__clipboardLineTest.readClipboard());assert.equal((await page.evaluate(()=>window.clipboardLine.state())).items.length,batch.items.length);
   await page.evaluate(ids=>window.clipboardLine.command('trash',{ids}),[batchText]);await page.evaluate(ids=>window.clipboardLine.command('delete',{ids}),[batchText]);check('multi-image copy supplies native Windows FileDrop batch and full-resolution PNG fallback without recapture');
   const copied=await page.evaluate(id=>window.clipboardLine.command('copy',{ids:[id]}),textItem.id);assert.ok(!copied.result?.error);assert.equal(await application.evaluate(()=>global.__clipboardLineTest.getWindow().isVisible()),false);check('plain Enter copy dismisses shelves/preview host and restores previous application');
+  await require('./focus-return-placement-acceptance.cjs')({page,application,check,until,fixtureCommand,fixtureState});
   await fixtureCommand({action:'focus',target:'plain'});await application.evaluate(()=>global.__clipboardLineTest.command('show'));
   const closedTarget=await application.evaluate(()=>global.__clipboardLineTest.getTarget());assert.ok(closedTarget.editable);
   const exited=new Promise(resolve=>fixture.once('exit',resolve));fixture.kill();await exited;fixture=null;await application.evaluate(async({clipboard})=>await clipboard.writeText('Clipboard before closed target'));

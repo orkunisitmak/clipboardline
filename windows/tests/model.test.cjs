@@ -73,6 +73,25 @@ test('a note keeps its marker on disk even when creation stops after the first w
  s.modify=()=>{throw new Error('stopped');};assert.throws(()=>s.createNote({title:'Agenda'}),/stopped/);
  const note=new Store(dir).data.items.find(i=>i.text==='New note');assert.equal(note?.createdAsNote,true);
 }));
+test('recopying a text that has live duplicates merges them and keeps the extras in Trash like macOS',()=>fixture((s,time)=>{
+ const first=s.insert('text','duplicate body');s.modify('remove',{ids:[first.id]});
+ // Undo take down no longer brings back a recopied text; restoring from Trash by hand still makes two live copies.
+ time(2000);const second=s.insert('text','duplicate body');assert.notEqual(second.id,first.id);s.modify('restore',{ids:[first.id]});
+ assert.equal(s.data.items.filter(i=>!i.trashedAt&&i.text==='duplicate body').length,2);s.modify('tag',{id:first.id,tags:['kept']});
+ time(3000);const merged=s.insert('text','duplicate body');
+ const live=s.data.items.filter(i=>!i.trashedAt),trashed=s.data.items.filter(i=>i.trashedAt);
+ assert.deepEqual(live.map(i=>i.id),[merged.id]);assert.equal(trashed.length,1);assert.equal(s.data.items.length,2);
+ assert.ok(merged.tags.includes('kept'));assert.equal(trashed[0].hiddenFromShelf,true);assert.ok(trashed[0].trashRevision);
+ s.modify('restore',{ids:[trashed[0].id]});assert.equal(s.data.items.filter(i=>!i.trashedAt).length,2);
+}));
+test('undo of an earlier removal cannot revive a duplicate that a recopy merged into Trash',()=>fixture((s,time)=>{
+ const saved=s.insert('text','first body');s.modify('pin',{ids:[saved.id]});s.modify('remove',{ids:[saved.id]});assert.equal(saved.hiddenFromShelf,true);
+ time(2000);const other=s.insert('text','second body');s.modify('editText',{id:other.id,text:'first body'});
+ time(3000);const merged=s.insert('text','first body');
+ assert.equal(s.data.items.filter(i=>!i.trashedAt).length,1);
+ s.modify('undo');
+ assert.deepEqual(s.data.items.filter(i=>!i.trashedAt).map(i=>i.id),[merged.id]);
+}));
 test('explicit Trash invalidates removal undo and deletion requires Trash',()=>fixture(s=>{const item=s.insert('text','text');assert.throws(()=>s.modify('delete',{ids:[item.id]}));s.modify('remove',{ids:[item.id]});s.modify('restore',{ids:[item.id]});assert.equal(s.undoStack.length,0);s.modify('trash',{ids:[item.id]});s.modify('delete',{ids:[item.id]});assert.equal(s.data.items.length,0);}));
 test('batch operations are atomic when one content kind is invalid',()=>fixture(s=>{const text=s.insert('text','before'),image=s.insert('image',png);assert.throws(()=>s.modify('editText',{ids:[text.id,image.id],text:'after'}));assert.equal(s.item(text.id).text,'before');}));
 test('a failed command rolls back in place so background jobs keep the item objects they hold',()=>fixture(s=>{
@@ -290,7 +309,10 @@ test('old duplicate links that differ only by tracking parameters merge on the n
  const old=(url,createdAt,fields)=>Object.assign(s.insert('link','https://example.com/seed-'+s.data.items.length),{url,createdAt,updatedAt:createdAt,...fields});
  const first=old('https://example.com/a?utm_source=x',1000,{name:'Reading list',pinned:true,title:'Example',author:'Ann',thumbnailFile:'a'.repeat(64)+'.png'}),second=old('https://example.com/a',2000,{note:'from a friend',tags:['later'],lastCopiedAt:4000}),newest=old('https://example.com/a?fbclid=z',3000,{});
  time(5000);const copy=s.insert('link','https://example.com/a?gclid=q');
- assert.equal(copy.id,newest.id);assert.deepEqual(s.data.items.filter(i=>i.kind==='link').map(i=>i.id),[newest.id]);
+ assert.equal(copy.id,newest.id);assert.deepEqual(s.data.items.filter(i=>i.kind==='link'&&!i.trashedAt).map(i=>i.id),[newest.id]);
+ // The merged copies stay recoverable in Trash with what they held.
+ assert.deepEqual(s.data.items.filter(i=>i.kind==='link'&&i.trashedAt).map(i=>i.id).sort(),[first.id,second.id].sort());
+ assert.deepEqual([first.name,first.pinned,second.note,second.tags,first.hiddenFromShelf,second.hiddenFromShelf],['Reading list',true,'from a friend',['later'],true,true]);
  assert.equal(copy.url,first.url);assert.equal(copy.name,'Reading list');assert.equal(copy.note,'from a friend');assert.deepEqual(copy.tags,['later']);assert.equal(copy.pinned,true);assert.equal(copy.lastCopiedAt,5000);
  assert.equal(copy.title,'Example');assert.equal(copy.author,'Ann');assert.equal(copy.thumbnailFile,'a'.repeat(64)+'.png');
 }));
@@ -299,7 +321,8 @@ test('old duplicate links whose names or notes differ are not merged, so none of
  const work=old('https://example.com/a?id=7&utm_source=x',1000,{name:'Work',note:'shared note'}),home=old('https://example.com/a?id=7',2000,{name:'Home',note:'other note'}),newest=old('https://example.com/a?id=7&utm_campaign=y',3000,{note:'shared note'});
  for(const at of [5000,6000]){time(at);const copy=s.insert('link','https://example.com/a?id=7&gclid=q');
   assert.equal(copy.id,newest.id);assert.deepEqual([copy.name,copy.note,copy.url],['Work','shared note',work.url]);
-  assert.deepEqual(s.data.items.filter(i=>i.kind==='link').map(i=>i.id).sort(),[newest.id,home.id].sort());
+  assert.deepEqual(s.data.items.filter(i=>i.kind==='link'&&!i.trashedAt).map(i=>i.id).sort(),[newest.id,home.id].sort());
+  assert.deepEqual(s.data.items.filter(i=>i.kind==='link'&&i.trashedAt).map(i=>i.id),[work.id]);assert.equal(work.trashedAt,5000);
   assert.deepEqual([home.name,home.note,home.url],['Home','other note','https://example.com/a?id=7']);}
 }));
 test('Name and pin follows macOS nameAndPin: 1-160 characters, 1024 bytes, no control or line separators',()=>fixture(s=>{

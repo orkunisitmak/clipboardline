@@ -26,6 +26,12 @@
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
+      },
+      {
+        "id": "deleted-screenshot-file",
+        "macos": "An unsaved shelf screenshot is shown from its original file. When that file is deleted in Finder (the file is missing while its folder can still be read) the item moves to Trash at the next prune; a disk that is not mounted or a permission error keeps it. LibraryStoreTests.testPruneDropsAnUnsavedScreenshotWhoseFileWasDeleted and testPruneKeepsAnUnsavedScreenshotWhoseFolderIsGone cover it.",
+        "windows": "importFile in main.cjs stores its own PNG copy of every watched or imported image, so deleting the original in Explorer leaves the shelf item intact.",
+        "reason": "The Mac shelf references screenshots in place to avoid duplicating the user's files; Windows always keeps a managed copy. Neither platform shows an empty card."
       }
     ],
     "sharedBehaviors": [
@@ -66,6 +72,12 @@
         "windows": "decodeHTML in lib/network.cjs follows that order with TextDecoder; security.test.cjs covers it."
       },
       {
+        "id": "link-title-quoted-greater-than",
+        "behavior": "A greater-than sign inside a quoted meta value, such as content=\"Tips > Tricks\", is part of the value, so the link preview shows the full title.",
+        "macos": "PublicLinkHTMLMetadata reads quoted attribute values whole; PublicLinkPolicyTests.testGreaterThanInsideQuotedMetaValueKeepsTheTitle covers it.",
+        "windows": "meta in lib/network.cjs reads quoted attribute values whole; link-metadata-embed.test.cjs covers it."
+      },
+      {
         "id": "link-blank-thumbnail",
         "behavior": "A link preview whose Open Graph image is empty or only whitespace has no thumbnail; a valid relative image URL is resolved against the page address.",
         "macos": "PublicLinkHTMLMetadata drops a whitespace-only og:image before resolving it; PublicLinkNetworkTests.testWhitespaceOnlyOpenGraphImageGivesNoThumbnailAndValidOneIsKept covers it.",
@@ -93,7 +105,7 @@
         "id": "link-tracking-parameters",
         "behavior": "Copying a link again that differs only by tracking query parameters (names starting with utm_, fbclid or gclid, in any letter case) is the same item: it is refreshed and keeps its first stored address, and links whose other parameters or fragment differ stay separate.",
         "macos": "LinkIdentity.normalized drops those parameters before LibraryStore.captureLink matches an existing item; CrossPlatformBehaviorContractTests runs the tracking-parameter-links scenario through LibraryStore.captureLink, and LibraryStoreTests.testLinkIdentityPreservesMeaningfulParametersAndDeduplicatesVideoForms covers it.",
-        "windows": "linkIdentity in lib/model.cjs applies the same rule when Store.insert matches an existing link, and merges older duplicates whose name and note do not clash into the kept item, which takes the oldest stored address; renderer-ui.test.cjs runs the tracking-parameter-links scenario through Store.insert, and model.test.cjs covers it."
+        "windows": "linkIdentity in lib/model.cjs applies the same rule when Store.insert matches an existing link, and merges older duplicates whose name and note do not clash into the kept item, which takes the oldest stored address, and moves those duplicates to Trash; renderer-ui.test.cjs runs the tracking-parameter-links scenario through Store.insert, and model.test.cjs covers it."
       },
       {
         "id": "mixed-selection-pin",
@@ -220,6 +232,24 @@
         "behavior": "M on the focused selected still photo in the active image shelf opens its editable markup preview directly. Hover alone does not retarget keyboard actions. H selects the translucent marker; pointer drags draw editable marks. Escape saves and finishes markup (a later Escape closes preview); crop Escape cancels the crop. Saved marks survive reopening. M in search, note, annotation text and rename editors stays native text input. Empty and non-image shelves do not open markup. Remapped or disabled markup keys remain respected.",
         "macos": "LineKeyboard routes markup to Line.markup for the focused visible still image. MarkupKeyboardTests and ImageMarkupInteractionTests execute typing guards, remapping, real preview-panel sendEvent mouse delivery, hit testing, composited marker pixels, Escape/save and reopen. The nonactivating panel's canvas accepts the first mouse click while editing. CrossPlatformBehaviorContractTests executes the shared shelf M scenarios.",
         "windows": "The shipped renderer allows markup in the shelves shortcut context and opens the existing image editor for the focused still image. renderer-ui.test.cjs executes the shared shelf M scenarios plus marker pointer drawing, Escape/save, reopen and native editor guards. Native Windows acceptance remains a separate release gate."
+      },
+      {
+        "id": "domain-filter-parses-only-non-ascii",
+        "behavior": "The Library domain filter ignores case, surrounding dots and a leading www, and matches the host and its subdomains. A typed name is converted to its host form only when it has non-ASCII characters and no path, query, fragment, port, credentials, backslash or space, so bücher.de finds xn--bcher-kva.de; an ASCII entry such as 0x7f.1 is compared as typed and is not rewritten to 127.0.0.1.",
+        "macos": "LibraryStore.query builds the domain match from the typed name and calls URL(string:) only when it has a non-ASCII scalar; LibraryStoreTests.testDomainFilterMatchesATypedNumberLiterallyInsteadOfAnIPAddress and testDomainFilterMatchesAnInternationalizedNameTypedAsWritten cover it.",
+        "windows": "libraryBaseItems() in renderer.js runs new URL on the typed name only when it has a non-ASCII character; library-ui.test.cjs 'Library domain filter matches a typed number literally and does not rewrite it to an IP address' and 'Library domain filter finds an internationalized link typed as written' cover it."
+      },
+      {
+        "id": "note-survives-matching-copy",
+        "behavior": "A note made with New note is never taken over by a copy: copying text equal to a note's text makes a separate item, and every note with that text keeps its name, date added and place in the Library instead of moving to the shelf or to Trash. Text that was copied, not typed as a note, still deduplicates on the next copy.",
+        "macos": "LibraryStore.createNote marks the record (createdAsNote) and LibraryStore.captureText skips marked records when it looks for a match; records stored before the marker open unchanged and keep deduplicating. TextDedupStoreTests.testCopyingANotesTextNeverMergesOrTrashesNotes and testRecordsStoredBeforeTheNoteMarkerOpenAndStillTakeTheCopy cover it.",
+        "windows": "Store.createNote marks the item (createdAsNote) in its first write and Store.insert never matches a marked item; model.test.cjs 'a capture or import of a note's text never merges or removes notes, also after reopening' covers it."
+      },
+      {
+        "id": "recopy-merged-duplicates-stay-in-trash",
+        "behavior": "When a text is copied again while the Library holds more than one live copy of it, one item is kept and takes the pins, folders, tags, name and note of the others; the other copies move to Trash with what they held, where they can be restored, and are never deleted outright. Undo take down does not bring such a copy back.",
+        "macos": "LibraryStore.captureText marks every extra matching row deleted with a new trashRevision and invalidates its shelf and Trash undo entries; TextDedupStoreTests.testImportedDuplicatesConsolidateOnRecaptureAndPreserveAllOrganization covers it.",
+        "windows": "Store.insert sets trashedAt, trashRevision and hiddenFromShelf on the extra matches instead of dropping them, and removes their undo entries; model.test.cjs 'recopying a text that has live duplicates merges them and keeps the extras in Trash like macOS' and 'undo of an earlier removal cannot revive a duplicate that a recopy merged into Trash', and text-identity-parity.test.cjs cover it."
       }
     ]
   },

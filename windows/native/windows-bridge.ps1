@@ -5,8 +5,8 @@ clipboard monitoring and image clipboard export.
 .DESCRIPTION
 Restore, PreparePaste, ValidatePaste and Paste read the captured target from
 stdin and reactivate it only when it is still the same window and process.
-SW_RESTORE is sent only to a minimized or hidden target, so a visible
-maximized window keeps its maximized state.
+SW_RESTORE is sent only to a minimized target and a hidden one is shown with
+SW_SHOW, so a maximized window keeps its maximized state.
 .PARAMETER Mode
 Operation to run: Capture, CaptureDiagnostics, FocusPolicySelfTest, Restore,
 PreparePaste, ValidatePaste, Paste, Monitor, CopyImages or ClipboardSequence.
@@ -428,7 +428,12 @@ try {
     if ($Mode -in @('Paste','ValidatePaste') -and $expected.prepared) {
       if ([ClipBoardLineNative]::GetForegroundWindow() -ne $window) { throw 'Focus changed before paste. No keys were sent.' }
     } else {
-      if ([ClipBoardLineNative]::IsIconic($window) -or -not [ClipBoardLineNative]::IsWindowVisible($window)) { [void][ClipBoardLineNative]::ShowWindow($window,9) }
+      # SW_RESTORE also takes a maximized window back to its normal size, so
+      # only a minimized window is restored; any other keeps its placement.
+      # A hidden (not minimized) window is shown with SW_SHOW, which keeps its
+      # current size and position, so a hidden maximized window stays maximized.
+      if ([ClipBoardLineNative]::IsIconic($window)) { [void][ClipBoardLineNative]::ShowWindow($window,9) }
+      elseif (-not [ClipBoardLineNative]::IsWindowVisible($window)) { [void][ClipBoardLineNative]::ShowWindow($window,5) }
       [void][ClipBoardLineNative]::SetForegroundWindow($window)
     }
     $phase.activationRequested=[DateTime]::UtcNow.ToString('o')

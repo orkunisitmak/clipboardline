@@ -380,7 +380,12 @@ class Store {
       const dates=matching.map(i=>i.retainedAt).filter(Number.isFinite);if(dates.length)item.retainedAt=Math.min(...dates);
       const copied=matching.map(i=>i.lastCopiedAt).filter(Number.isFinite);if(copied.length)item.lastCopiedAt=Math.max(...copied);
     }
-    this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
+    // Like macOS, merged duplicates stay recoverable in Trash instead of disappearing.
+    for (const other of matching) if (other !== item) { other.trashedAt = now; other.trashRevision = crypto.randomUUID(); other.hiddenFromShelf = true; other.updatedAt = now; }
+    // As with the trash action, older undo entries must not bring a trashed duplicate back.
+    const trashed = new Set(matching.filter(other => other !== item).map(other => other.id));
+    if (trashed.size) this.undoStack = this.undoStack.map(batch => batch.filter(entry => !trashed.has(entry.id))).filter(batch => batch.length);
+    this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id)];
     this.expire(false); this.persist(); return item;
   }
   /** A new, retained note record, like macOS createNote. It never reuses a matching capture. */

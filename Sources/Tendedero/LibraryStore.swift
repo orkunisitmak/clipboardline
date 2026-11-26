@@ -23,6 +23,8 @@ struct LibraryRecord: Codable, Equatable, Identifiable {
     /// records need no migration; every new trash transition gets a fresh value.
     var trashRevision: UUID?
     var retainedAt: Date?
+    /// Set on records made by New note; a capture never merges with or drops one, as on Windows.
+    var createdAsNote: Bool?
     var favorite = false
     var onShelf = true
     var deletedAt: Date?
@@ -115,6 +117,8 @@ private enum LibrarySQL {
         if let days = query.days { whereParts.append("i.created>=?"); values.append(.real(now.addingTimeInterval(-Double(days) * 86400).timeIntervalSince1970)) }
         if !query.domain.isEmpty {
             var domain = query.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            // Stored hosts are ASCII (punycode), so an internationalized name typed as written is converted first; anything with a path, query, port or credentials is not a host name and stays as typed.
+            if domain.unicodeScalars.contains(where: { !$0.isASCII }), domain.rangeOfCharacter(from: CharacterSet(charactersIn: "/?#@:\\").union(.whitespaces)) == nil, let host = URL(string: "https://" + domain)?.host { domain = host }
             if domain.hasPrefix("www.") { domain.removeFirst(4) }
             let suffix = "." + domain
             // Literal host boundaries include subdomains without wildcard or
@@ -452,7 +456,7 @@ extension String {
     func imageSearchChanged() { searchRevision += 1 }
     @discardableResult func createNote() throws -> LibraryRecord {
         let date = now(); var record = LibraryRecord(id: UUID(), kind: .text, createdAt: date, updatedAt: date)
-        record.text = ""; record.retainedAt = date
+        record.text = ""; record.retainedAt = date; record.createdAsNote = true
         try db.transaction { try put(record) }; changed(); return record
     }
     @discardableResult func captureImage(_ url: URL, capturedAt: Date? = nil) throws -> LibraryRecord {
@@ -515,6 +519,7 @@ extension String {
             var canonical: LibraryRecord?
             for row in rows {
                 guard let id = row["id"]?.string.flatMap(UUID.init(uuidString:)), var duplicate = try item(id) else { throw HistoryFiles.Failure.unsafeFile }
+                guard duplicate.createdAsNote != true else { continue }
                 guard let candidate = duplicate.text, TextIdentity.key(candidate).utf8.elementsEqual(identity.utf8) else { continue }
                 guard var current = canonical else { canonical = duplicate; continue }
                 // Preserve personal organization on the surviving identity.
@@ -985,7 +990,21 @@ extension String {
                 : "SELECT payload FROM items WHERE kind=? AND deleted IS NULL AND retained IS NULL AND created<=?"
             expired += try LibrarySQL.decode(db.rows(sql, [.text(kind.rawValue), .real(cutoff.timeIntervalSince1970)])).filter { ($0.lastCapturedAt ?? $0.createdAt) <= cutoff }
         }
+        // A screenshot deleted in Finder falls off the shelf, as it does without the Library.
+        let expiredIDs = Set(expired.map(\.id))
+        let gone = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='image' AND shelf=1 AND deleted IS NULL AND retained IS NULL")).filter { record in
+            record.path.map(Self.fileWasDeleted) ?? false && !expiredIDs.contains(record.id)
+        }
+        expired += gone
         if !expired.isEmpty { try trash(expired.map(\.id)) }
+    }
+    /// Only a file that is really gone (ENOENT) while its folder can still be read counts as deleted.
+    /// A disk that is not mounted, a permission error or any other read failure keeps the item.
+    private static func fileWasDeleted(_ path: String) -> Bool {
+        var info = stat()
+        guard stat(path, &info) != 0, errno == ENOENT else { return false }
+        let folder = (path as NSString).deletingLastPathComponent
+        return stat(folder, &info) == 0 && info.st_mode & S_IFMT == S_IFDIR && access(folder, R_OK | X_OK) == 0
     }
     func collections() throws -> [LibraryCollection] {
         try db.rows("SELECT * FROM collections ORDER BY folded,id").map { row in
