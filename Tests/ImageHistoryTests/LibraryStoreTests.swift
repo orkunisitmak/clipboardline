@@ -195,6 +195,12 @@ import XCTest
         XCTAssertEqual(Set(try library.query(LibraryQuery(scope: .recent, domain: "YouTube.com")).map(\.id)), Set(expected))
         XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, domain: "WWW.YouTube.com.")).count, 3)
         XCTAssertTrue(try library.query(LibraryQuery(scope: .recent, domain: "%youtube.com")).isEmpty)
+        let note = try XCTUnwrap(library.captureText("Plain note"))
+        let allIDs = Set(try library.query(LibraryQuery(scope: .recent)).map(\.id))
+        XCTAssertTrue(allIDs.contains(note.id))
+        for dotOnly in [".", "...", " . "] {
+            XCTAssertEqual(Set(try library.query(LibraryQuery(scope: .recent, domain: dotOnly)).map(\.id)), allIDs, dotOnly)
+        }
     }
     func testBlankOrPaddedItemNameIsIgnoredOrTrimmedLikeWindows() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
