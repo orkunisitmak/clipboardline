@@ -540,3 +540,17 @@ test('the Trash inspector offers no pin, folder or tag actions for a trashed ite
  for(const action of ['pin','add-to-folder','tag'])assert.ok(!actions().includes(action),action+' multi');
  assert.match(inspector(),/<h2>[^<]+<\/h2>/,'the inspector shows the multi-selection heading');
 });
+
+test('typing a search in the Library switches the sort to Best match like macOS, and clearing it returns to Newest first',async()=>{
+ const f=fixture();await f.ready();
+ const older=f.state.items.find(value=>value.id===f.text1),newer=f.state.items.find(value=>value.id===f.link);
+ older.name='reference';older.createdAt=1;newer.createdAt=Math.max(...f.state.items.map(value=>value.createdAt))+1000;f.api.emit({items:f.state.items});await f.ready();
+ await recent(f);
+ assert.match(f.main,/<option value="newest" selected>/);
+ await f.input('search-input','reference');
+ assert.match(f.main,/<option value="relevance" selected>/,'sort stays on Newest first after a search starts');
+ assert.deepEqual(cards(f),[f.text1,f.link],'the older item with the better match comes first');
+ await f.input('search-input','');
+ assert.match(f.main,/<option value="newest" selected>/);
+ assert.deepEqual(cards(f).filter(id=>id===f.link||id===f.text1),[f.link,f.text1],'newest first again');
+});
