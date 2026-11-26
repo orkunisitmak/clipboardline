@@ -452,8 +452,8 @@ struct PublicLinkHTMLMetadata: Equatable, Sendable {
 }
 
 /// The page as Unicode scalars, the unit NSRegularExpression quantifiers count. The scans below find the same tags as
-/// `<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>`, `<meta\b([^>]{0,8192})>`,
-/// `<title\b[^>]*>(.{0,8192}?)</title\s*>` and `<[^>]*>` with (?is), but each search for a closing marker resumes
+/// `<!--.*?-->|<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>`, `<meta\b([^>]{0,8192})>` (with quoted
+/// values read whole), `<title\b[^>]*>(.{0,8192}?)</title\s*>` and `<[^>]*>` with (?is), but each search for a closing marker resumes
 /// from the one found last, so a page of opening tags that are never closed costs one pass, not one pass per tag.
 private struct HTMLText {
     let scalars: [Unicode.Scalar]
@@ -500,17 +500,36 @@ private struct HTMLText {
         return HTMLText(scalars: kept)
     }
 
-    /// The attribute text of up to `limit` meta tags.
+    /// The attribute text of up to `limit` meta tags. A `>` inside a quoted value belongs to the value; a tag whose quotes
+    /// do not close within 8192 scalars ends at its first `>` instead.
     func metaAttributes(limit: Int) -> [String] {
         var tags: [String] = [], tagClose = Resume(), index = 0
+        // Quoted scans of tags that fail can overlap, so together they get a fixed number of steps to keep the pass linear.
+        var quotedSteps = 4 * 512 * 1024
         while tags.count < limit, let open = first(Self.meta, from: index) {
             let body = open + Self.meta.count
-            if endsWord(at: body), let tag = tagClose.next(from: body, { from in first(Self.greater, from: from).map { $0..<$0 + 1 } }),
+            if endsWord(at: body), let end = quotedTagEnd(from: body, limit: 8192, steps: &quotedSteps) {
+                tags.append(string(body..<end)); index = end + 1
+            } else if endsWord(at: body), let tag = tagClose.next(from: body, { from in first(Self.greater, from: from).map { $0..<$0 + 1 } }),
                tag.lowerBound - body <= 8192 {
                 tags.append(string(body..<tag.lowerBound)); index = tag.upperBound
             } else { index = open + 1 }
         }
         return tags
+    }
+
+    /// The first `>` outside quotes within `limit` scalars of `body`; nil at a `<` outside quotes or when `steps` run out.
+    private func quotedTagEnd(from body: Int, limit: Int, steps: inout Int) -> Int? {
+        var quote: Unicode.Scalar?, index = body
+        while index < scalars.count, index - body <= limit, steps > 0 {
+            let scalar = scalars[index]; steps -= 1
+            if let open = quote { if scalar == open { quote = nil } }
+            else if scalar == "\"" || scalar == "'" { quote = scalar }
+            else if scalar == ">" { return index }
+            else if scalar == "<" { return nil }
+            index += 1
+        }
+        return nil
     }
 
     /// The text of the first title element whose text is at most 8192 scalars long.
