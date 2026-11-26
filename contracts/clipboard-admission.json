@@ -82,6 +82,26 @@
       "name": "IBAN-shaped word",
       "value": "AB12 HELLO WORLD",
       "capture": true
+    },
+    {
+      "name": "two card numbers on separate lines",
+      "value": "4111 1111 1111 1111\n5555 5555 5555 4444",
+      "capture": true
+    },
+    {
+      "name": "labelled card number",
+      "value": "Card: 4111 1111 1111 1111",
+      "capture": true
+    },
+    {
+      "name": "IBAN inside a sentence",
+      "value": "Pay GB82 WEST 1234 5698 7654 32 today",
+      "capture": true
+    },
+    {
+      "name": "labelled IBAN",
+      "value": "IBAN: TR33 0006 1005 1978 6457 8413 26",
+      "capture": true
     }
   ]
 }
