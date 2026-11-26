@@ -54,14 +54,22 @@ enum LinkedHTML {
     private static func space(_ c: UInt16) -> Bool { c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0C || c == 0x0D }
     /// The one anchor with a real href attribute and its content. Start tags are scanned
     /// attribute by attribute, so data-href or text inside another value is never the
-    /// destination. Several links or an unterminated tag give nil.
+    /// destination, and an anchor inside a comment is not a link. Several links or an
+    /// unterminated tag give nil.
     private static func singleAnchor(_ s: [UInt16]) -> (href: String, text: String)? {
-        let lt: UInt16 = 0x3C, gt: UInt16 = 0x3E, slash: UInt16 = 0x2F, equals: UInt16 = 0x3D
+        let lt: UInt16 = 0x3C, gt: UInt16 = 0x3E, slash: UInt16 = 0x2F, equals: UInt16 = 0x3D, dash: UInt16 = 0x2D
         func at(_ index: Int) -> UInt16? { index < s.count ? s[index] : nil }
         func isA(_ c: UInt16?) -> Bool { c == 0x61 || c == 0x41 }
         func string(_ range: Range<Int>) -> String { String(decoding: s[range], as: UTF16.self) }
         var found: (href: String, text: String)?, i = 0
         while let open = s[i...].firstIndex(of: lt) {
+            // A comment's content is not markup; an unclosed comment runs to the end.
+            if at(open + 1) == 0x21, at(open + 2) == dash, at(open + 3) == dash {
+                var close = open + 2
+                while close + 2 < s.count, !(s[close] == dash && s[close + 1] == dash && s[close + 2] == gt) { close += 1 }
+                guard close + 2 < s.count else { break }
+                i = close + 3; continue
+            }
             guard isA(at(open + 1)), let after = at(open + 2), space(after) || after == gt || after == slash else { i = open + 1; continue }
             var p = open + 2, href: String?
             while true {

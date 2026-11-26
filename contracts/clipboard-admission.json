@@ -50,6 +50,16 @@
       "text": "Read docs"
     },
     {
+      "name": "anchor inside an HTML comment is not a link",
+      "formats": {"text/plain": "docs", "text/html": "<!-- <a href=\"https://example.com/wrong\">docs</a> --><span>docs</span>"},
+      "text": "docs"
+    },
+    {
+      "name": "unclosed HTML comment hides the anchor after it",
+      "formats": {"text/plain": "docs", "text/html": "<span>docs</span><!-- <a href=\"https://example.com/wrong\">docs</a>"},
+      "text": "docs"
+    },
+    {
       "name": "unsafe anchor destination",
       "formats": {"text/plain": "Read docs", "text/html": "<a href=\"javascript:alert(1)\">Read docs</a>"},
       "text": "Read docs"

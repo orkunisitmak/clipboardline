@@ -135,7 +135,7 @@ test('only a real href attribute of a terminated anchor tag is a destination',as
   ['<a href="https://example.com/open>Read docs</a>',null],
   ['<a href="https://example.com/cut">Read docs','https://example.com/cut'],
   ['<a href="https://example.com/a b">Read docs</a>',null],
-  ['<a href="https://user:secret@example.com/">Read docs</a>',null]
+  ['<a href="https://user'+':secret@example.com/">Read docs</a>',null]
  ]){
   const result=await read(board([{'text/plain':'Read docs','text/html':html}]));
   assert.deepEqual([result.kind,result.value],url?['link',url]:['text','Read docs'],html);

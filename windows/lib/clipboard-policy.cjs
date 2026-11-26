@@ -17,12 +17,14 @@ function uriListURL(value,plainURL){
 const htmlSpace=c=>c===' '||c==='\t'||c==='\n'||c==='\f'||c==='\r';
 // The one anchor that carries a real href attribute, with its content. Start tags
 // are scanned attribute by attribute, so data-href or text inside another value is
-// never the destination. Several links or an unterminated tag give null. This reads
-// attributes only; it never interprets markup. TextClipboardWatcher's LinkedHTML
-// follows the same steps on macOS.
+// never the destination, and an anchor inside a comment is not a link. Several
+// links or an unterminated tag give null. This reads attributes only; it never
+// interprets markup. TextClipboardWatcher's LinkedHTML follows the same steps on macOS.
 function singleAnchor(html){
   let found=null,i=0;
   while((i=html.indexOf('<',i))>=0){
+    // A comment's content is not markup; an unclosed comment runs to the end.
+    if(html.startsWith('!--',i+1)){const close=html.indexOf('-->',i+2);if(close<0)break;i=close+3;continue;}
     const after=html[i+2];
     if((html[i+1]!=='a'&&html[i+1]!=='A')||!(htmlSpace(after)||after==='>'||after==='/')){i++;continue;}
     let p=i+2,href;
