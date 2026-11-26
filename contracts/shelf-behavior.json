@@ -26,6 +26,12 @@
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
         "reason": "Electron native startDrag exposes files without a simultaneous Unicode-text payload. The explicit Alt gesture preserves direct text insertion and offers both outcomes; native link file types follow each operating system."
+      },
+      {
+        "id": "area-capture-macos-first",
+        "macos": "Global capture shortcut (off by default; Settings offers ⌘9) freezes and dims every display, an area is dragged out, moved, resized and annotated with the shared markup tools, then copied as PNG or saved as a file; the capture also hangs on the line.",
+        "windows": "Ctrl+Alt+A captures the display under the pointer and opens crop/preview. No area selection or in-capture markup yet.",
+        "reason": "Interim exception: the area-selection overlay was built on macOS first. The Windows counterpart (area overlay, in-capture markup, copy/save) is planned so both editions share the flow; until then the difference is documented here and in both READMEs."
       }
     ],
     "sharedBehaviors": [
