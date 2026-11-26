@@ -144,6 +144,12 @@
         "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
       },
       {
+        "id": "trash-no-pin-tag-drag",
+        "behavior": "An item in Library Trash cannot be pinned, tagged or dragged into a folder by key or drag, matching the disabled action rows; it has to be restored first.",
+        "macos": "LibraryModel.favorite(), perform(.tag) and dragItems(_:) return early when the selection is in Trash; LibraryInteractionTests.testTrashedItemIgnoresPinTagAndDragLikeTheDisabledActionBarRows covers it.",
+        "windows": "perform() ignores pin, tag and the other editing actions for trashed ids, the Pin button is not rendered on a trashed card and dragstart is cancelled; library-ui.test.cjs checks it."
+      },
+      {
         "id": "undo-take-down-no-duplicate",
         "behavior": "Undo take down does not bring back a text or link when the same content is on the shelf again because it was copied after the take down, so that Undo never hangs the same text or link twice. Links that differ only by tracking parameters count as the same content. An item Undo leaves off the shelf does not take the selection or the open preview. Images and a copy that is off the shelf do not block it, and restoring from Trash by hand is not limited.",
         "macos": "LibraryStore.undoShelfRemoval skips a text or link record that has a live twin on the shelf (hasLiveTwin, which matches links by normalizedURL, repairs the text index first and never matches images) and returns only the restored ids, so the shelf and preview keep their selection when nothing came back; LibraryStoreTests.testUndoTakeDownDoesNotHangATextOrLinkTwiceAfterItWasCopiedAgain, testUndoTakeDownLeavesALinkOffTheShelfWhenTheCopyDiffersOnlyByTrackingParameters and testUndoTakeDownSeesATextEditedByAnOlderAppWhileOpen cover it.",

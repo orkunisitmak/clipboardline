@@ -371,8 +371,10 @@ import Combine
         copyRecords(actionIDs, to: board ?? copyPasteboard)
     }
     func copyCurrent(_ id: UUID) { guard flushEdits() else { return }; copyRecords([id], to: copyPasteboard) }
+    /// Pin, tag and folder actions refuse a selection that is in Trash, like the disabled action bar rows.
+    private var selectionInTrash: Bool { actionIDs.contains { (try? store.item($0))?.deletedAt != nil } }
     func dragItems(_ id: UUID) -> [ShelfDragItem] {
-        guard flushEdits(), selectedIDs.contains(id) || select(id) else { return [] }
+        guard flushEdits(), selectedIDs.contains(id) || select(id), !selectionInTrash else { return [] }
         do { return try LibraryTransfer.dragItems(store.records(actionIDs), store: store) }
         catch { notice = error.localizedDescription; return [] }
     }
@@ -389,7 +391,7 @@ import Combine
     /// True when favorite() would unpin: every acted-on item is already pinned.
     var actionsArePinned: Bool { (try? store.allPinned(actionIDs)) ?? false }
     func favorite() {
-        guard flushEdits() else { return }
+        guard flushEdits(), !selectionInTrash else { return }
         let targets = actionIDs, pinning = !((try? store.allPinned(targets)) ?? true)
         // Pinning saves a recent copy and unpinning leaves Pinned, so the selection would vanish: move it to the neighbour, as Move to Trash does.
         let leaves = (query.scope == .recent && pinning) || (query.scope == .favorites && !pinning)
@@ -533,7 +535,7 @@ import Combine
         case .images: setKind(.image); _ = focusContent()
         case .texts: setKind(.text); _ = focusContent()
         case .links: setKind(.link); _ = focusContent()
-        case .tag: onTagRequested?()
+        case .tag: if !selectionInTrash { onTagRequested?() }
         case .export: onExportRequested?()
         case .trash: trashSelection()
         case .editText, .markup, .cropImage:
