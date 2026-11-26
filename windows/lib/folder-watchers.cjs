@@ -12,7 +12,8 @@ function sourceExists(file){try{fs.lstatSync(file);return true;}catch(error){ret
 // its writes settle. Like macOS, a folder that cannot be watched is skipped,
 // and a file removed before its import is not a failure. Any other import
 // failure, including ENOENT from the library while the source still exists,
-// shows the shared notice.
+// shows the shared notice. Every skipped folder, watcher error and failed
+// import is also written to the console log, as before.
 class FolderWatchers{
   constructor({importFile,imported,notify,closing=()=>false,watch=fs.watch,stat=fs.statSync,exists=sourceExists,delay=700}){
     Object.assign(this,{importFile,imported,notify,closing,watch,stat,exists,delay});this.active=[];
@@ -23,8 +24,8 @@ class FolderWatchers{
       try{
         if(!this.stat(folder).isDirectory())continue;
         const timers=new Map(),watcher=this.watch(folder,(_event,name)=>this.changed(folder,timers,name));
-        watcher.on('error',()=>{});this.active.push({watcher,timers});
-      }catch{}
+        watcher.on('error',error=>{console.warn('Watch folder watcher error:',error?.message||error);});this.active.push({watcher,timers});
+      }catch(error){console.warn('Watch folder configure error:',error?.message||error);}
     }
   }
   changed(folder,timers,name){
@@ -36,6 +37,7 @@ class FolderWatchers{
   }
   failed(file,error){
     if(this.closing()||error?.code==='ENOENT'&&!this.exists(file))return;
+    console.warn('Watch folder import error:',error?.message||error);
     this.notify(IMPORT_FAILED);
   }
   close(){for(const {watcher,timers} of this.active){watcher.close();for(const timer of timers.values())clearTimeout(timer);}this.active=[];}
