@@ -616,6 +616,14 @@ test('Settings and Actions show localized copy in the rendered UI',async()=>{
  for(const key of ['Search actions…','Browse','Run'])assert.ok(f.overlay.includes(tr[key]),key);
 });
 
+test('the Windows screenshot import setting is shown in each selected language',async()=>{
+ const f=fixture();await f.ready();const catalogs=require('../locales.js');await f.api.command('settings');await f.ready();
+ for(const language of ['az','es','fr','ja','ko','pt-BR','tr','zh-Hans']){
+  f.api.emit({settings:{...f.state.settings,language}});await f.ready();
+  for(const key of ['Import Windows screenshots','Watch the Windows Screenshots folder used by PrtSc, Win+Shift+S and Win+PrtSc.']){assert.notEqual(catalogs[language][key],key,language);assert.ok(f.main.includes(catalogs[language][key].replaceAll('&','&amp;').replaceAll('"','&quot;')),language+': '+key);assert.ok(!f.main.includes(key),language+': '+key);}
+ }
+});
+
 test('disabled action availability hints use selected language',async()=>{
  const f=fixture();await f.ready();
  const tr=require('../locales.js').tr;

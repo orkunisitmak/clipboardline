@@ -199,7 +199,7 @@
 "Trash" = "废纸篓";
 "Try another filter or view your recent copies." = "请尝试其他筛选条件，或查看最近复制的内容。";
 "Turn on" = "开启";
-"Turn on Fetch link titles and thumbnails in Settings to refresh link previews" = "Turn on Fetch link titles and thumbnails in Settings to refresh link previews";
+"Turn on Fetch link titles and thumbnails in Settings to refresh link previews" = "请在设置中打开“获取链接标题和缩略图”以刷新链接预览";
 "Unorganized" = "未整理";
 "Unpin" = "取消固定";
 "Unsaved copies are kept for %d days" = "未保存的副本会保留 %d 天";

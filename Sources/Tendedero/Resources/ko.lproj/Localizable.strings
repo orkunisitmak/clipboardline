@@ -199,7 +199,7 @@
 "Trash" = "휴지통";
 "Try another filter or view your recent copies." = "다른 필터를 사용하거나 최근 복사 항목을 확인하세요.";
 "Turn on" = "켜기";
-"Turn on Fetch link titles and thumbnails in Settings to refresh link previews" = "Turn on Fetch link titles and thumbnails in Settings to refresh link previews";
+"Turn on Fetch link titles and thumbnails in Settings to refresh link previews" = "링크 미리보기를 새로 고치려면 설정에서 ‘링크 제목과 미리 보기 가져오기’를 켜세요";
 "Unorganized" = "미분류";
 "Unpin" = "고정 해제";
 "Unsaved copies are kept for %d days" = "저장하지 않은 복사본은 %d일 동안 보관됩니다";

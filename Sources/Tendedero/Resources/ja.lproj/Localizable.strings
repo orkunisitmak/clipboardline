@@ -199,7 +199,7 @@
 "Trash" = "ゴミ箱";
 "Try another filter or view your recent copies." = "別のフィルタを試すか、最近のコピーを表示してください。";
 "Turn on" = "オンにする";
-"Turn on Fetch link titles and thumbnails in Settings to refresh link previews" = "Turn on Fetch link titles and thumbnails in Settings to refresh link previews";
+"Turn on Fetch link titles and thumbnails in Settings to refresh link previews" = "リンクのプレビューを更新するには、設定で「リンクのタイトルとサムネイルを取得」をオンにしてください";
 "Unorganized" = "未整理";
 "Unpin" = "ピン留めを解除";
 "Unsaved copies are kept for %d days" = "未保存のコピーは%d日間保持されます";

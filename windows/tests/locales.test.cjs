@@ -161,7 +161,7 @@ const validSameSpelling = {
   ja: new Set(['Tendedero · MIT', 'Tesseract OCR']),
   ko: new Set(['Tendedero · MIT', 'Tesseract OCR']),
   'pt-BR': new Set(['Links', 'Tendedero · MIT', 'Tesseract OCR']),
-  tr: new Set(['Tendedero · MIT', 'Tesseract OCR', 'Video']),
+  tr: new Set(['Link', 'Tendedero · MIT', 'Tesseract OCR', 'Video']),
   'zh-Hans': new Set(['Tendedero · MIT', 'Tesseract OCR'])
 };
 
