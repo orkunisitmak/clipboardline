@@ -121,7 +121,7 @@ struct TextGrabArea: NSViewRepresentable {
             let menu = NSMenu()
             menu.addItem(ClosureMenuItem(L("Copy")) { texts.copyAction(id) })
             menu.addItem(ClosureMenuItem(line.menuPinIsUnpin(id, shelf: .texts) ? L("Unpin") : L("Pin favorite")) { line.pinFromMenu(id, shelf: .texts) })
-            menu.addItem(ClosureMenuItem(L("Name and pin…")) { line.onNameAndPinRequested?(id) })
+            menu.addItem(ClosureMenuItem(L("Name and pin…")) { line.requestNameAndPin(id, on: .texts) })
             menu.addItem(ClosureMenuItem(L("Preview")) { line.onTextPreviewRequested?(id) })
             menu.addItem(ClosureMenuItem(L("Move to Trash…")) {
                 line.focusShelf(.texts)

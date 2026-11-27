@@ -14,7 +14,7 @@ const DEFAULTS = Object.freeze({
   retentionDays: {image: 30, text: 30, link: 30},
   shortcuts: {toggle: 'Control+Alt+T', search: 'Control+Alt+S', library:'', copyLatest:'', screenshot: 'Control+Alt+A'},
   localShortcuts: {},
-  autoCheckUpdates: true, watchFolders: [], openAfterScreenshot: true,
+  autoCheckUpdates: true, watchFolders: [], watchSystemScreenshots: true, openAfterScreenshot: true,
   theme:'soft', cardSize:'medium', sounds:false, launchAtLogin:false, language:'system',indexImages:true,
   libraryListMode:false,libraryInspectorVisible:true,librarySidebarVisible:true,librarySidebarWidth:220,libraryInspectorWidth:300,
   libraryListColumns:{title:300,kind:80,tags:150,created:130},recentPinFolderIds:[]
@@ -38,7 +38,7 @@ function settings(patch, previous = DEFAULTS) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) fail('Invalid settings');
   const out = clone(previous);
   for (const [key, value] of Object.entries(patch)) {
-    if (['captureText', 'captureImages', 'captureLinks', 'fetchLinkMetadata','autoCheckUpdates', 'openAfterScreenshot','sounds','launchAtLogin','indexImages','libraryListMode','libraryInspectorVisible','librarySidebarVisible'].includes(key)) {
+    if (['captureText', 'captureImages', 'captureLinks', 'fetchLinkMetadata','autoCheckUpdates', 'watchSystemScreenshots', 'openAfterScreenshot','sounds','launchAtLogin','indexImages','libraryListMode','libraryInspectorVisible','librarySidebarVisible'].includes(key)) {
       if (typeof value !== 'boolean') fail('Invalid preference');
       out[key] = value;
     } else if (key === 'visibleKinds') {
@@ -111,11 +111,22 @@ function plainURL(value) {
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
 
+// Match macOS LinkIdentity.youtubeID.
+function youtubeID(u) {
+  const pieces = u.pathname.split('/').filter(Boolean), host = u.hostname;
+  const id = ['youtu.be', 'www.youtu.be'].includes(host) ? pieces[0] : ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(host) ? (['shorts', 'embed', 'live'].includes(pieces[0]) && pieces.length > 1 ? pieces[1] : u.searchParams.get('v')) : null;
+  return /^[A-Za-z0-9_-]{11}$/.test(id || '') ? id : null;
+}
+
 // Match macOS LinkIdentity.normalized: utm_*, fbclid and gclid (any case) do not make a different link.
 function linkIdentity(href) {
   try {
     const u = new URL(href), drop = part => { const name = part.split('=')[0]; let decoded = name; try { decoded = decodeURIComponent(name); } catch {} return /^utm_/i.test(decoded) || /^(fbclid|gclid)$/i.test(decoded); };
-    u.search = u.search.slice(1).split('&').filter(part => !drop(part)).join('&'); return u.href;
+    u.search = u.search.slice(1).split('&').filter(part => !drop(part)).join('&');
+    // Like macOS, every address of one YouTube video is https://www.youtube.com/watch?v=ID; si is a share token.
+    const video = youtubeID(u);
+    if (video) return 'https://www.youtube.com/watch?' + ['v=' + video, ...u.search.slice(1).split('&').filter(part => part && !['v', 'si'].includes(part.split('=')[0]))].join('&') + u.hash;
+    return u.href;
   } catch { return href; }
 }
 
