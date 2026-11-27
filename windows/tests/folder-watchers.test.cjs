@@ -48,3 +48,11 @@ test('reconfiguring cancels pending imports and quitting suppresses notices',asy
  let quitting=false;
  await fixture(async({folder,notices,watchers})=>{watchers.configure([folder]);fs.writeFileSync(path.join(folder,'broken.png'),'bad');quitting=true;await sleep(600);assert.deepEqual(notices,[]);},{closing:()=>quitting});
 });
+
+test('a pending import survives a reconfigure while its folder stays watched and an event after close arms nothing',()=>fixture(async({directory,folder,notices,imported,watchers})=>{
+ const other=path.join(directory,'Other');fs.mkdirSync(other);
+ watchers.configure([folder,other]);fs.writeFileSync(path.join(folder,'kept.png'),png);fs.writeFileSync(path.join(other,'dropped.png'),png);await until(()=>watchers.timers.has(path.join(folder,'kept.png')));
+ watchers.configure([folder]);await until(()=>imported.length);await sleep(400);
+ assert.equal(imported.length,1);assert.deepEqual(notices,[]);
+ watchers.close();watchers.changed(folder,'late.png');await sleep(400);assert.equal(imported.length,1);assert.equal(watchers.timers.size,0);
+}));
