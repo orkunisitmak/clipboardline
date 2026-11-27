@@ -109,6 +109,11 @@ platforms, not 1 MiB of UTF-16 units on Windows.
 Devanagari or Thai vowel sign to stay distinct on both platforms.
 `width-insensitive-search` also keeps a voiced kana and a Hangul syllable whole, so searching は or 하 does
 not find ばら or 한국 on either platform.
+`card-right-click` requires a right-click on a shelf or Library card to offer that card's actions
+without a left-click first, and Pin and Copy to act on the whole selection when the card is one of
+several selected cards. The reviewed `card-context-menu-form` exception records the form: a native
+menu at the pointer on macOS, the searchable Actions palette on Windows, which reuses the palette's
+commands, availability rules, shortcuts and translations and makes the right-clicked card the selection.
 `item-display-title` requires an unnamed text to be titled by its first non-blank
 line, trimmed and capped at 120 grapheme clusters (Untitled note when every line is
 blank), and a link without a fetched title by its host name (Link when the stored URL

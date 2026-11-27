@@ -22,6 +22,12 @@
         "reason": "Native platform rendering differs; action placement, content hierarchy, keyboard behavior and outcomes remain shared."
       },
       {
+        "id": "card-context-menu-form",
+        "macos": "Right-clicking a card opens a native menu at the pointer: the shelf card's own menu (GrabView.rightMouseDown with the menuProvider set in GrabArea, TextShelfView and LinkShelfView) or the Library table's row menu.",
+        "windows": "Right-clicking a card on a shelf or in the Library opens the shared Actions palette for it, with its search field, instead of a menu at the pointer.",
+        "reason": "The Actions palette already holds every card command with its availability rules, shortcuts and translations, so Windows reuses it instead of keeping a second command list in a pointer menu that could drift from it. User impact on Windows: the commands appear in a searchable Actions palette, not in a menu under the pointer, and the right-clicked card becomes the selection."
+      },
+      {
         "id": "native-text-file-drag",
         "macos": "Text drag advertises plain text and per-item .txt files together; links offer .webloc copies.",
         "windows": "Shelf text drag inserts text and shelf image drag exports files. Library card drag adds selected items to folders; Alt-drag exports native file copies (.txt/.url for text/links).",
@@ -118,6 +124,12 @@
         "behavior": "Pin on a selection that contains both pinned and unpinned items pins every item; only a selection that is already fully pinned unpins.",
         "macos": "LibraryStore.toggleFavorite and Line.pinActiveSelection compute one target for the whole selection, matching the action bar, which offers Unpin only when every selected item is pinned; LibraryKeyboardContractTests runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json.",
         "windows": "Store.modify('pin') pins every selected item when any is unpinned (targetPin); model.test.cjs covers a mixed selection and renderer-ui.test.cjs runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json."
+      },
+      {
+        "id": "card-right-click",
+        "behavior": "Right-clicking a card on a shelf or in the Library offers that card's actions without a left-click first. When the card is one of several selected cards, Pin and Copy act on all of them; otherwise the right-clicked card is the only target. The form of the menu is the card-context-menu-form exception, and how the remaining actions pick their target is stated per platform.",
+        "macos": "The right-click leaves the shelf selection as it is. Pin favorite/Unpin and Copy act on the selection when the clicked card is one of several selected cards on its shelf (Line.pinFromMenu, actionItems, actionEntries) and on the clicked card otherwise; Take down or Discard on the image shelf follows the same rule. Name and pin, Preview, Open, Quick Look, Markup and Show in Finder act on the clicked card. Move to Trash on the text and link shelves selects the clicked card when it is not selected and then asks about the selection; the image menu has no Move to Trash. The Library row menu selects the clicked row unless it is already selected, and its items act on the selection. DualShelfTests and LibraryNativeTests execute the shelf and Library menus.",
+        "windows": "The renderer's contextmenu handler selects the card and opens Actions. A card outside the selection becomes the only selected card; a card inside it keeps the selection, limited on the shelves to the cards of its own shelf (the range anchor moves to the card when the anchor left the selection). Every Actions command then acts on that selection under the palette's own rules, so single-item commands need one selected card. A right-click while a dialog, a preview or the image editor is open is ignored. renderer-ui.test.cjs executes a single card, a selection, a mixed-shelf selection with a later Shift-click, a Library selection across kinds and an open preview. Native Windows acceptance remains a separate release gate."
       },
       {
         "id": "subfolder-title",
@@ -279,7 +291,7 @@
         "id": "name-and-pin-names-the-selection",
         "behavior": "Name and pin started from a menu on an item that is part of a selection of more than one names every selected item in turn, like the Name and pin shortcut; started on an item outside the selection it names only that item and leaves the selection unchanged.",
         "macos": "The shelf card menus call Line.requestNameAndPin and the Library list menu calls LibraryModel.requestNameAndPin, which hand the ordered selection to onNameAndPinBatchRequested when the clicked item is in a multi-selection; NameAndPinWorkflowTests.testMenuNameAndPinNamesTheWholeSelectionLikeTheKey covers the three shelves, a card outside the selection and the Library list.",
-        "windows": "Windows has no per-item context menu; its menu entry for Name and pin (the command list) runs the name action on the current selection (startName); renderer-ui.test.cjs runs Name and pin from the command list on a two-item selection and checks the 1 / 2 and 2 / 2 prompts."
+        "windows": "Windows has no per-item pointer menu (a right-click opens the same command list for the card, see card-right-click); its menu entry for Name and pin (the command list) runs the name action on the current selection (startName); renderer-ui.test.cjs runs Name and pin from the command list on a two-item selection and checks the 1 / 2 and 2 / 2 prompts."
       }
     ]
   },
