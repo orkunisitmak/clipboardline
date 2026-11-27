@@ -11,7 +11,7 @@ const {execFileSync}=require('node:child_process');
 const os=require('node:os');
 const {exportCopies}=require('../lib/export-copies.cjs');
 
-function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,exporter=null,trackFocus=false}={}){
+function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,exporter=null,trackFocus=false,serializeOverlayMarkup=false}={}){
  const listeners=new Map(),nodes=new Map(),commands=[],imageLoads=[],animationFrames=[],paintCalls=[];let exportFailures=0,lastClick=null,testDocument;
  class Element{
   constructor(id=''){this.id=id;this._innerHTML='';this.textContent='';this.dataset={};this.style={};this.className='';this.value='';this.selectionStart=0;this.selectionEnd=0;this.isConnected=true;this.classList={add(){},remove(){},contains(){return false;}};}
@@ -30,6 +30,8 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
   set src(value){imageLoads.push({url:value,crossOrigin:this.crossOrigin});if(this.onload)queueMicrotask(()=>this.onload());}
  }
  const document={body:new Element('body'),activeElement:null,querySelectorAll(){return[];},getElementById(id){if(!nodes.has(id))nodes.set(id,id==='markup-canvas'?new Canvas(id):new Element(id));return nodes.get(id);},createElement(tag){return tag==='canvas'?new Canvas():new Element();},querySelector(){return null;},addEventListener(name,listener){if(!listeners.has(name))listeners.set(name,[]);listeners.get(name).push(listener);}};testDocument=document;
+ const overlayNode=document.getElementById('overlay-root');let overlayWrites=0,overlayMarkup='';
+ Object.defineProperty(overlayNode,'innerHTML',{get(){return overlayMarkup;},set(value){overlayWrites++;overlayMarkup=serializeOverlayMarkup?value.replace(/ >/g,'>'):value;}});
  const image='00000000-0000-4000-8000-000000000001',text1='00000000-0000-4000-8000-000000000002',text2='00000000-0000-4000-8000-000000000003',link='00000000-0000-4000-8000-000000000004';
  const base=(id,kind,createdAt,extra)=>({id,kind,createdAt,updatedAt:createdAt,name:'',title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,...extra});
  const state={items:[base(image,'image',1000,{name:'Synthetic image',...(imageDocument?{annotations:[],crop:null}:{}),mediaUrl:'appmedia://media/'+image,originalMediaUrl:'appmedia://media/'+image+'/original'}),base(text1,'text',900,{text:'Text one'}),base(text2,'text',800,{text:'Text two'}),base(link,'link',700,{url:'https://example.com/reference',title:'Reference link'})],folders:[],settings:{visibleKinds:['image','text','link'],retentionDays:{image:30,text:30,link:30},shortcuts:{toggle:'Control+Alt+Space',search:'Control+Alt+S'},localShortcuts:{},language:'en',theme:'soft',cardSize:'medium'},view:'shelves',version:'1.7.0',windowVisible:initialVisible,canUndo:false,canUndoTrash:false,libraryRevision:0};
@@ -65,7 +67,7 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
  async function pointer(type,x,y){const target=document.getElementById('markup-canvas');for(const listener of listeners.get(type)||[])listener({target,clientX:x,clientY:y,pointerId:1,shiftKey:false,preventDefault(){}});await ready();}
  async function input(id,value){const target=document.getElementById(id);target.value=value;target.selectionStart=value.length;for(const listener of listeners.get('input')||[])await listener({target});await ready();}
  async function change(id,value){const target=document.getElementById(id);target.value=value;for(const listener of listeners.get('change')||[])await listener({target});await ready();}
- return{async cardContextMenu(id,{child=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;const inner=new Element();inner.closest=card.closest;const event={target:child?inner:card,preventDefault(){this.prevented=true;}};for(const listener of listeners.get('contextmenu')||[])await listener(event);await ready();return event;},async cardClick(id,{ctrl=false,shift=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;for(const listener of listeners.get('click')||[])await listener({target:card,ctrlKey:ctrl,metaKey:false,shiftKey:shift,stopPropagation(){}});await ready();},grid(columns){document.querySelectorAll=selector=>selector==='.library-grid > .card'?[...document.getElementById('app').innerHTML.matchAll(/<article class="[^"]*"[^>]*data-item-id="([^"]+)"/g)].map((match,index)=>({offsetTop:Math.floor(index/columns)*200,dataset:{itemId:match[1]}})):[];},editor(id){const node=document.getElementById(id);node.tagName='INPUT';node.matches=selector=>selector.includes('input');return node;},ready,key,input,change,click,pointer,async blur(){for(const listener of listeners.get('window:blur')||[])listener();await ready();},imageLoads,paintCalls,animationFrames,flushAnimationFrames(){for(const fn of animationFrames.splice(0))fn();},releaseInitialState(){releaseInitialState?.();},deferReply(action){let release;const promise=new Promise(resolve=>{release=resolve;});delayedReply={action,promise};return release;},deferImageBroadcast({surface=true}={}){deferredImageBroadcast={surface};},releaseImageBroadcast(){const next=pendingImageBroadcast;pendingImageBroadcast=null;if(next)subscriber?.(next);},failExportOnce(){exportFailures++;},failCleanupOnce(){cleanupFailures++;},failEditOnce(){editFailures++;},state,commands,nodes,image,text1,text2,link,api,get main(){return nodes.get('app').innerHTML;},get overlay(){return nodes.get('overlay-root').innerHTML;},get focused(){return document.activeElement;},get lastClick(){return lastClick;}};
+ return{async cardContextMenu(id,{child=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;const inner=new Element();inner.closest=card.closest;const event={target:child?inner:card,preventDefault(){this.prevented=true;}};for(const listener of listeners.get('contextmenu')||[])await listener(event);await ready();return event;},async cardClick(id,{ctrl=false,shift=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;for(const listener of listeners.get('click')||[])await listener({target:card,ctrlKey:ctrl,metaKey:false,shiftKey:shift,stopPropagation(){}});await ready();},grid(columns){document.querySelectorAll=selector=>selector==='.library-grid > .card'?[...document.getElementById('app').innerHTML.matchAll(/<article class="[^"]*"[^>]*data-item-id="([^"]+)"/g)].map((match,index)=>({offsetTop:Math.floor(index/columns)*200,dataset:{itemId:match[1]}})):[];},editor(id){const node=document.getElementById(id);node.tagName='INPUT';node.matches=selector=>selector.includes('input');return node;},ready,key,input,change,click,pointer,async blur(){for(const listener of listeners.get('window:blur')||[])listener();await ready();},imageLoads,paintCalls,animationFrames,flushAnimationFrames(){for(const fn of animationFrames.splice(0))fn();},releaseInitialState(){releaseInitialState?.();},deferReply(action){let release;const promise=new Promise(resolve=>{release=resolve;});delayedReply={action,promise};return release;},deferImageBroadcast({surface=true}={}){deferredImageBroadcast={surface};},releaseImageBroadcast(){const next=pendingImageBroadcast;pendingImageBroadcast=null;if(next)subscriber?.(next);},failExportOnce(){exportFailures++;},failCleanupOnce(){cleanupFailures++;},failEditOnce(){editFailures++;},state,commands,nodes,image,text1,text2,link,api,get main(){return nodes.get('app').innerHTML;},get overlay(){return nodes.get('overlay-root').innerHTML;},get focused(){return document.activeElement;},get lastClick(){return lastClick;},get overlayWrites(){return overlayWrites;}};
 }
 
 function selectedCards(f){return [...f.main.matchAll(/<article class="([^"]*)"[^>]*data-item-id="([^"]+)"/g)].filter(match=>match[1].split(' ').includes('selected')).map(match=>match[2]);}
@@ -600,12 +602,43 @@ for(const [width,height]of[[3840,2160],[7680,4320]])test('retained '+width+'×'+
  assert.equal(f.paintCalls.filter(value=>value.canvas==='markup-canvas'&&value.operation==='clearRect').length,1);assert.equal(f.paintCalls.filter(value=>value.canvas==='markup-canvas'&&value.operation==='drawImage').length,0);assert.equal(f.imageLoads.length,1);
  await f.key('KeyS',{ctrl:true});const saved=f.commands.find(value=>value.action==='saveImage');assert.ok(saved);assert.equal(saved.payload.annotations[0].points.length,97);assert.deepEqual(saved.payload.annotations[0].points[0],{x:width*.1,y:height*.2});assert.ok(Math.abs(saved.payload.annotations[0].points.at(-1).x-width*666/900)<1e-7);
 });
+test('Settings and Actions show localized copy in the rendered UI',async()=>{
+ const f=fixture();await f.ready();const tr=require('../locales.js').tr;
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.api.command('settings');await f.ready();
+ assert.ok(f.main.includes(tr['Settings sections']));
+ await f.click('settings-tab',{tab:'shortcuts'});
+ assert.ok(f.main.includes(tr['Windows uses Control for copy, paste and app commands. Record a combination or turn an action off. Letter keys work only while browsing.']));
+ assert.ok(f.main.includes(tr['Find shortcut…']));
+ await f.click('settings-tab',{tab:'updates'});
+ assert.ok(f.main.includes(tr['Windows uses its own signed installer channel. Download integrity is checked before the app is replaced.']));
+ await f.key('KeyK',{ctrl:true});
+ for(const key of ['Search actions…','Browse','Run'])assert.ok(f.overlay.includes(tr[key]),key);
+});
+
+test('the Windows screenshot import setting is shown in each selected language',async()=>{
+ const f=fixture();await f.ready();const catalogs=require('../locales.js');await f.api.command('settings');await f.ready();
+ for(const language of ['az','es','fr','ja','ko','pt-BR','tr','zh-Hans']){
+  f.api.emit({settings:{...f.state.settings,language}});await f.ready();
+  for(const key of ['Import Windows screenshots','Watch the Windows Screenshots folder used by PrtSc, Win+Shift+S and Win+PrtSc.']){assert.notEqual(catalogs[language][key],key,language);assert.ok(f.main.includes(catalogs[language][key].replaceAll('&','&amp;').replaceAll('"','&quot;')),language+': '+key);assert.ok(!f.main.includes(key),language+': '+key);}
+ }
+});
+
+test('disabled action availability hints use selected language',async()=>{
+ const f=fixture();await f.ready();
+ const tr=require('../locales.js').tr;
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.key('KeyK',{ctrl:true});
+ assert.ok(f.overlay.includes(tr['Available in Library.']),'disabled Library-only action hint should be localized');
+ assert.ok(!f.overlay.includes('Available in Library'),'untranslated hint must not be shown');
+});
+
 test('Turkish Settings toggles use the same localized visible and accessible label',async()=>{const f=fixture();await f.ready();await f.api.command('settings');await f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();assert.match(f.main,/aria-label="Sesler"/);assert.doesNotMatch(f.main,/aria-label="Sounds"/);});
 
 test('closing an editor before its scheduled frame prevents stale overlay painting',async()=>{const f=fixture({queuedAnimationFrames:true});await f.ready();await f.key('Space');f.flushAnimationFrames();await f.key('KeyM');assert.equal(f.animationFrames.length,1);await f.key('Escape');assert.doesNotMatch(f.overlay,/id="markup-canvas"/);f.paintCalls.length=0;f.flushAnimationFrames();assert.equal(f.paintCalls.filter(value=>value.canvas==='markup-canvas').length,0);assert.match(f.overlay,/id="preview-dialog"/);});
 
-async function historyCleanupFixture(language='en'){
- const f=fixture();await f.ready();const basedOn=(kind,id,extra)=>({...structuredClone(f.state.items.find(value=>value.kind===kind)),id,retainedAt:null,pinned:false,folderIds:[],tags:[],trashedAt:null,...extra});
+async function historyCleanupFixture(language='en',fixtureOptions={}){
+ const f=fixture(fixtureOptions);await f.ready();const basedOn=(kind,id,extra)=>({...structuredClone(f.state.items.find(value=>value.kind===kind)),id,retainedAt:null,pinned:false,folderIds:[],tags:[],trashedAt:null,...extra});
  f.api.emit({settings:{...f.state.settings,language},items:[...f.state.items.map(value=>value.id===f.text2?{...value,retainedAt:1000}:value),
   basedOn('image','00000000-0000-4000-8000-000000000005',{pinned:true}),basedOn('link','00000000-0000-4000-8000-000000000006',{folderIds:['retained-folder']}),
   basedOn('text','00000000-0000-4000-8000-000000000007',{tags:['retained-tag']}),basedOn('link','00000000-0000-4000-8000-000000000008',{trashedAt:1000})]});
@@ -619,6 +652,14 @@ test('History cleanup selector counts each actual unsaved type and excludes save
 for(const cancel of['Escape','button'])test('History cleanup '+cancel+' cancel sends no backend operation and changes no records',async()=>{
  const f=await historyCleanupFixture(),before=structuredClone(f.state),calls=f.commands.length;await f.click('clear-history');assert.match(f.overlay,/aria-label="Clear unsaved copies\?"/);assert.match(f.overlay,/3 unsaved copies will move/);
  if(cancel==='Escape')await f.key('Escape');else await f.click('close-modal');assert.equal(f.overlay,'');assert.equal(f.commands.length,calls);assert.deepEqual(f.state,before);
+});
+test('History confirmation retains its Cancel button DOM across unrelated native state broadcasts',async()=>{
+ const f=await historyCleanupFixture('tr',{serializeOverlayMarkup:true});await f.change('history-cleanup-kind','text');await f.click('clear-history');
+ const original=f.overlay,writes=f.overlayWrites;
+ f.api.emit({items:f.state.items.map(value=>value.id===f.link?{...value,title:'Updated in background'}:value),libraryRevision:6});await f.ready();
+ assert.equal(f.overlay,original,'unchanged confirmation text must remain visible');
+ assert.equal(f.overlayWrites,writes,'background state updates must not replace a live Cancel button during pointer input');
+ await f.click('close-modal');assert.equal(f.overlay,'');
 });
 test('History cleanup confirmation keeps the chosen kind and captured IDs when later copies arrive or an item is newly saved',async()=>{
  const f=await historyCleanupFixture();await f.change('history-cleanup-kind','text');await f.click('clear-history');assert.match(f.overlay,/1 unsaved copies will move/);const later='00000000-0000-4000-8000-000000000009';
@@ -842,6 +883,29 @@ test('after unpinning the focused card in pinned-only mode, the next arrow selec
  await f.key('KeyP');assert.equal(f.state.items.find(value=>value.id===values[0].id).pinned,false);
  await f.key('ArrowRight');assert.equal(focusedCard(f),values[1].id);
 });
+test('localized runtime messages render actual translated notice text in every language',async()=>{
+ const f=fixture();await f.ready();
+ for(const language of ['az','en','es','fr','ja','ko','pt-BR','tr','zh-Hans']){
+  f.api.emit({settings:{...f.state.settings,language},message:''});await f.ready();
+  f.api.emit({message:'Update check failed: Installer integrity check failed'});await f.ready();
+  const catalogs=require('../locales.js');
+  assert.equal(f.nodes.get('toast').textContent,catalogs[language]['Update check failed: %@'].replace('%@',catalogs[language]['Installer integrity check failed']),language);
+  f.api.emit({message:'ClipBoardLine 9.8.7 is available.'});await f.ready();
+  assert.equal(f.nodes.get('toast').textContent,catalogs[language]['ClipBoardLine %@ is available.'].replace('%@','9.8.7'),language);
+  f.api.emit({message:'Shortcut Ctrl+Alt+K is unavailable. Could not restore: search.'});await f.ready();
+  const restored=catalogs[language]['Could not restore: %@.'].replace('%@','search');
+  assert.equal(f.nodes.get('toast').textContent,catalogs[language]['Shortcut %@ is unavailable. %@'].replace('%@','Ctrl+Alt+K').replace('%@',restored),language);
+  f.api.emit({message:'Unexpected file%@%d.txt'});await f.ready();
+  assert.equal(f.nodes.get('toast').textContent,'Unexpected file%@%d.txt',language);
+ }
+});
+test('action palette and Settings display translated labels and private-data notice',async()=>{
+ const f=fixture();await f.ready();
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/Kütüphaneyi aç/);await f.key('Escape');
+ await f.api.command('settings');await f.ready();await f.click('settings-tab',{tab:'sources'});
+ assert.match(f.main,/Panoya ait özel işaretler yok sayılır/);
+});
 test('Tab onto an empty shelf leaves copy, take down, pin and preview with nothing to act on',async()=>{
  const f=fixture();await f.ready();f.api.emit({items:f.state.items.filter(value=>value.kind!=='text')});await f.ready();
  await f.key('Tab');assert.equal(activeKind(f),'text');const commands=f.commands.length;
@@ -852,7 +916,7 @@ test('the Library action bar keeps the Take down title on its disabled row like 
  const row=(f,id)=>{const start=f.overlay.indexOf('data-command="'+id+'"'),html=f.overlay.slice(start,f.overlay.indexOf('</button>',start));return{disabled:html.startsWith('data-command="'+id+'" disabled>'),title:html.match(/<span class="title">([^<]*)</)[1],detail:html.match(/<small>([^<]*)</)[1]};};
  const f=fixture();await f.ready();f.state.items.find(value=>value.id===f.text1).retainedAt=1000;f.api.emit({items:f.state.items});await f.ready();
  await f.key('KeyL');await f.click('scope',{scope:'saved'});await f.cardClick(f.text1);await f.key('KeyK',{ctrl:true});
- assert.deepEqual(row(f,'remove'),{disabled:true,title:'Take down',detail:'Available on the shelves'});
+ assert.deepEqual(row(f,'remove'),{disabled:true,title:'Take down',detail:'Available on the shelves.'});
  assert.deepEqual(row(f,'trash'),{disabled:false,title:'Move to Trash',detail:'1 selected'});
 });
 test('Library selection counts use the shared "%d selected" catalog entry in the chosen language',async()=>{
@@ -874,7 +938,7 @@ test('Settings shortcut filter matches the displayed localized action titles as 
 test('the empty-selection toast uses the shared "Select an item first" catalog entry',async()=>{
  const f=fixture();await f.ready();
  f.api.emit({items:[],settings:{...f.state.settings,language:'tr'}});await f.ready();await f.key('KeyC',{ctrl:true});
- assert.equal(f.nodes.get('toast').textContent,'Önce bir öğe seç');
+ assert.equal(f.nodes.get('toast').textContent,'Önce bir öğe seçin.');
 });
 test('the Move to Trash confirmation uses the shared localized catalog entry',async()=>{
  const f=fixture();await f.ready();await keyboardSaved(f);
@@ -1004,4 +1068,18 @@ test('right-clicking a Library card opens Actions and keeps a selection that spa
  await f.input('modal-query','unpin');await f.key('Enter');
  assert.equal(f.state.items.find(value=>value.id===f.text2).pinned,false);assert.equal(f.state.items.find(value=>value.id===f.image).pinned,false);
  assert.equal(f.state.items.find(value=>value.id===f.text1).pinned,true);
+});
+
+test('Action Palette finds both English and Turkish Settings History commands in Turkish locale', async()=>{
+ const f=fixture();await f.ready();
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.key('KeyK',{ctrl:true});
+ await f.input('modal-query','Ayarlar · Geçmiş');
+ assert.match(f.overlay,/data-command="settings-history"/);
+ await f.input('modal-query','Settings · History');
+ assert.match(f.overlay,/data-command="settings-history"/);
+ await f.key('Enter');
+ assert.equal(f.state.view,'settings');
+ assert.match(f.main,/data-retention="text"/);
+ assert.match(f.main,/data-retention="link"/);
 });

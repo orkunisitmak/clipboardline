@@ -23,7 +23,14 @@ module.exports=async function({page,application,until,check,output}){
   for(const kind of['all','image','text','link']){await selector.selectOption(kind);await until(()=>page.locator('[data-history-cleanup-count]').textContent(),value=>value===fixture.counts[kind]+' kaydedilmemiş kopya');assert.equal(await selector.inputValue(),kind);}
   assert.ok(fixture.counts.image>=1&&fixture.counts.text>=3&&fixture.counts.link>=1);completed('native History type selector counts unsaved image text and link copies with matching Turkish visible and accessible wording',{counts:fixture.counts});
   report.phase='cancel';await selector.selectOption('text');await page.locator('[data-action="clear-history"]').click();const dialog=page.getByRole('dialog',{name:'Kaydedilmemiş kopyalar temizlensin mi?',exact:true});await dialog.waitFor({state:'visible'});
-  assert.match(await dialog.textContent(),new RegExp(fixture.counts.text+' kaydedilmemiş kopya,'));await dialog.getByRole('button',{name:'İptal',exact:true}).click();await dialog.waitFor({state:'hidden'});
+  assert.match(await dialog.textContent(),new RegExp(fixture.counts.text+' kaydedilmemiş kopya,'));
+  const initialCancelNode=await page.evaluate(()=>{window.__historyCancelIdentity=document.querySelector('#overlay-root [data-action="close-modal"]');return !!window.__historyCancelIdentity;});
+  assert.equal(initialCancelNode,true,'A real DOM Cancel button must exist');
+  await application.evaluate(async()=>global.__clipboardLineTest.command('setSettings',{patch:{language:'tr'}}));
+  await dialog.waitFor({state:'visible'});
+  const preservedCancel=await page.evaluate(()=>{const same=window.__historyCancelIdentity===document.querySelector('#overlay-root [data-action="close-modal"]');delete window.__historyCancelIdentity;return same;});
+  assert.equal(preservedCancel,true,'State broadcasts must not replace the real Cancel DOM node');
+  await dialog.getByRole('button',{name:'İptal',exact:true}).click();await dialog.waitFor({state:'hidden'});
   const canceled=await application.evaluate(()=>{const p=global.__historyCleanupAcceptance,s=global.__clipboardLineTest.store;return{calls:p.calls.length,temporaryStillLive:s.item(p.aliases.temporaryText).trashedAt===null,oldTrashStillTrashed:!!s.item(p.aliases.oldTrash).trashedAt};});assert.deepEqual(canceled,{calls:0,temporaryStillLive:true,oldTrashStillTrashed:true});completed('native History Cancel performs no cleanup command and preserves live copies and existing Trash',{});
   report.phase='captured-confirmation';await page.locator('[data-action="clear-history"]').click();await dialog.waitFor({state:'visible'});
   const mutation=await application.evaluate(async()=>{
