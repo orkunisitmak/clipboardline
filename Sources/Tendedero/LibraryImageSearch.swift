@@ -85,17 +85,68 @@ final class ImageSearchWorker: @unchecked Sendable {
     private let queries = DispatchQueue(label: "local.clipboardline.image-search.query", qos: .userInitiated)
     private let stateLock = NSLock(), modelLock = NSLock()
     private var generation = 0
+    private var activeScans = 0
     private var modelLoaded = false
     private var model: Clip?
+    private var idleUnloadWork: DispatchWorkItem?
     private var cachedQuery = ""
     private var cachedVector: [Float]?
     init(database: URL, modelFolder: URL?) { self.database = database; self.modelFolder = modelFolder }
-    func cancel() { stateLock.lock(); generation += 1; stateLock.unlock() }
+    /// Invalidates any running scan and queues an immediate model release
+    /// unless another scan still owns the model.
+    func cancel() {
+        stateLock.lock(); generation += 1; stateLock.unlock()
+        queries.async { [weak self] in self?.releaseModelMemory() }
+    }
     private func current(_ value: Int) -> Bool { stateLock.lock(); defer { stateLock.unlock() }; return generation == value }
+    /// The shared Clip instance for queries, created on first use. Cancels a
+    /// pending idle release so the model is not dropped while in use.
     private func clip() -> Clip? {
         modelLock.lock(); defer { modelLock.unlock() }
+        idleUnloadWork?.cancel(); idleUnloadWork = nil
         if !modelLoaded { modelLoaded = true; model = modelFolder.flatMap(Clip.init(folder:)) }
         return model
+    }
+    /// Registers an active scan and returns a Clip whose image model loaded.
+    /// Nil means OCR-only indexing; the next scan retries model creation.
+    /// Every call must be balanced by `endScanModel()`.
+    private func beginScanModel() -> Clip? {
+        modelLock.lock(); defer { modelLock.unlock() }
+        activeScans += 1
+        idleUnloadWork?.cancel(); idleUnloadWork = nil
+        if !modelLoaded { modelLoaded = true; model = modelFolder.flatMap(Clip.init(folder:)) }
+        guard let current = model, current.prepareImageModel() else {
+            modelLoaded = false
+            model = nil
+            return nil
+        }
+        return current
+    }
+    /// Ends a scan started by `beginScanModel()` and schedules the idle model
+    /// release once no scan remains.
+    private func endScanModel() {
+        modelLock.lock()
+        activeScans = max(0, activeScans - 1)
+        let shouldSchedule = activeScans == 0
+        modelLock.unlock()
+        if shouldSchedule { scheduleIdleModelRelease() }
+    }
+    /// Unloads the Core ML models now, unless a scan is still using them.
+    private func releaseModelMemory() {
+        modelLock.lock(); defer { modelLock.unlock() }
+        idleUnloadWork?.cancel(); idleUnloadWork = nil
+        guard activeScans == 0 else { return }
+        model?.unloadModels()
+    }
+    /// Replaces any pending release with one that unloads the models after
+    /// 15 seconds of idle time. Skipped while a scan is active.
+    private func scheduleIdleModelRelease() {
+        modelLock.lock(); defer { modelLock.unlock() }
+        idleUnloadWork?.cancel(); idleUnloadWork = nil
+        guard activeScans == 0 else { return }
+        let work = DispatchWorkItem { [weak self] in self?.releaseModelMemory() }
+        idleUnloadWork = work
+        queries.asyncAfter(deadline: .now() + 15, execute: work)
     }
     static func fingerprint(_ url: URL) -> String? {
         guard let value = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey]), value.isRegularFile == true, value.isSymbolicLink != true,
@@ -110,22 +161,34 @@ final class ImageSearchWorker: @unchecked Sendable {
         try VNImageRequestHandler(cgImage: image).perform([request])
         return String((request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n").prefix(65536))
     }
+    /// Indexes library images whose fingerprint or analysis version changed,
+    /// storing OCR text and, when the image model loads, CLIP vectors.
+    /// `progress` reports (done, total, changed) on the main actor; a newer
+    /// scan or `cancel()` stops this one.
     func scan(progress: @escaping @MainActor (Int, Int, Bool) -> Void) {
         stateLock.lock(); generation += 1; let token = generation; stateLock.unlock()
         queue.async { [self] in
             guard current(token), let db = try? LibraryDatabase(url: database, verify: false) else { return }
             do {
-                let expectedVersion = modelFolder.map { FileManager.default.fileExists(atPath: $0.appendingPathComponent("model-source.json").path) } == true ? Self.version : "vision-ocr-v1"
+                let expectedVersion = modelFolder.flatMap(Clip.init(folder:)) != nil ? Self.version : "vision-ocr-v1"
                 let rows = try db.rows("SELECT i.id,i.path,a.fingerprint,a.version FROM items i LEFT JOIN image_analysis a ON a.item=i.id WHERE i.kind='image' AND i.deleted IS NULL ORDER BY i.created DESC")
-                let todo = rows.compactMap { row -> (UUID, URL, String)? in
+                let candidates = rows.compactMap { row -> (UUID, URL, String, String?, String?)? in
                     guard let id = row["id"]?.string.flatMap(UUID.init(uuidString:)), let path = row["path"]?.string else { return nil }
                     let url = URL(fileURLWithPath: path)
-                    guard ["png", "jpg", "jpeg", "heic", "tif", "tiff", "gif", "webp", "bmp"].contains(url.pathExtension.lowercased()), let key = Self.fingerprint(url), row["fingerprint"]?.string != key || row["version"]?.string != expectedVersion else { return nil }
-                    return (id, url, key)
+                    let oldFingerprint = row["fingerprint"]?.string, oldVersion = row["version"]?.string
+                    guard ["png", "jpg", "jpeg", "heic", "tif", "tiff", "gif", "webp", "bmp"].contains(url.pathExtension.lowercased()), let key = Self.fingerprint(url), oldFingerprint != key || oldVersion != expectedVersion else { return nil }
+                    return (id, url, key, oldFingerprint, oldVersion)
+                }
+                if candidates.isEmpty { DispatchQueue.main.async { if self.current(token) { progress(0, 0, false) } }; return }
+                let model = beginScanModel()
+                defer { endScanModel() }
+                let version = model == nil ? "vision-ocr-v1" : Self.version
+                let todo = candidates.compactMap { candidate -> (UUID, URL, String)? in
+                    guard candidate.3 != candidate.2 || candidate.4 != version else { return nil }
+                    return (candidate.0, candidate.1, candidate.2)
                 }
                 if todo.isEmpty { DispatchQueue.main.async { if self.current(token) { progress(0, 0, false) } }; return }
                 DispatchQueue.main.async { if self.current(token) { progress(0, todo.count, false) } }
-                let model = clip(), version = model == nil ? "vision-ocr-v1" : Self.version
                 var dirty = false, lastReport = Date.distantPast
                 for (index, job) in todo.enumerated() {
                     guard current(token) else { return }
@@ -145,9 +208,15 @@ final class ImageSearchWorker: @unchecked Sendable {
             } catch { DispatchQueue.main.async { if self.current(token) { progress(0, 0, false) } } }
         }
     }
+    /// Ranks indexed images in `eligibleIDs` against the query text and
+    /// delivers matching IDs on the main actor. The last query vector is
+    /// cached; a failed embedding is not cached so the next call retries.
     func search(_ text: String, eligibleIDs: Set<UUID>, completion: @escaping @MainActor ([UUID]) -> Void) {
         queries.async { [self] in
-            if cachedQuery != text { cachedQuery = text; cachedVector = clip()?.embed(text: text) }
+            if cachedQuery != text || cachedVector == nil {
+                if let vector = clip()?.embed(text: text) { cachedQuery = text; cachedVector = vector } else { cachedQuery = ""; cachedVector = nil }
+                scheduleIdleModelRelease()
+            }
             var ids = [UUID]()
             if let vector = cachedVector, let db = try? LibraryDatabase(url: database, readOnly: true, verify: false),
                let rows = try? db.rows("SELECT a.item,a.vectors FROM image_analysis a JOIN items i ON i.id=a.item AND i.path=a.path WHERE a.version=?", [.text(Self.version)]) {

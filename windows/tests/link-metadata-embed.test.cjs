@@ -30,7 +30,7 @@ test('meta tags with unquoted attribute values are read like macOS',async()=>{
 
 test('unclosed tags at the 512 KiB fetch ceiling parse in linear time',async()=>{
  const page=html=>async()=>({bytes:Buffer.from(html),url:'https://example.com/',type:'text/html'}),size=512*1024;
- for(const html of ['<title'.repeat(size/6),'<meta'.repeat(size/5),('<meta '+'a'.repeat(4000)+'>').repeat(size/4007|0),('<title>'+'a'.repeat(2001)).repeat(size/2008|0),'<title>'.repeat((size-8)/7|0)+'</title>']){
+ for(const html of ['<title'.repeat(size/6),'<meta'.repeat(size/5),'<meta "'.repeat(size/7|0)+'>',`<meta '"'"`.repeat(size/10|0)+'>',('<meta '+'a'.repeat(4000)+'>').repeat(size/4007|0),('<title>'+'a'.repeat(2001)).repeat(size/2008|0),'<title>'.repeat((size-8)/7|0)+'</title>']){
   const started=Date.now();assert.equal((await linkMetadata('https://example.com/',page(html))).title,'example.com');
   assert.ok(Date.now()-started<2000,`parse took ${Date.now()-started} ms`);
  }
@@ -49,4 +49,12 @@ test('long YouTube oEmbed title and author are cut on whole characters',async()=
  const emoji='\u{1F600}',title='a'.repeat(499)+emoji+' tail',author='b'.repeat(199)+emoji+' tail';
  const metadata=await linkMetadata('https://youtu.be/synthetic',async()=>({bytes:Buffer.from(JSON.stringify({title,author_name:author})),type:'application/json'}));
  assert.equal(metadata.title,'a'.repeat(499)+emoji);assert.equal(metadata.author,'b'.repeat(199)+emoji);
+});
+
+test('a greater-than sign inside a quoted meta value keeps the title',async()=>{
+ const page=html=>linkMetadata('https://example.com/a',async()=>({bytes:Buffer.from(html),url:'https://example.com/a',type:'text/html'}));
+ assert.equal((await page(`<meta property="og:title" content="Tips > Tricks"><title>Page</title>`)).title,'Tips > Tricks');
+ assert.equal((await page(`<meta property='og:title' content='Tips > Tricks'><title>Page</title>`)).title,'Tips > Tricks');
+ // A quote that never closes does not swallow the tags after it: the tag ends at its first '>' as before.
+ assert.equal((await page(`<meta name='size' content="5" tall"><meta property='og:title' content='Meta'><title>Page</title>`)).title,'Meta');
 });

@@ -7,7 +7,7 @@ const marker=Buffer.from('synthetic-own-marker');
 const {plainURL}=require('../lib/model.cjs');
 function board(values,options={}){
  let reads=0,formatReads=0,sequence=10;const requests=[];
- const entries=values.map(value=>({types:Object.keys(value),getType:async type=>{reads++;requests.push(type);if(options.duringRead)await options.duringRead(type,api);return new Blob([value[type]]);}}));
+ const entries=values.map(value=>({types:Object.keys(value),getType:async type=>{reads++;requests.push(type);if(options.duringRead)await options.duringRead(type,api);const payload=value[type];return type==='electron application/bookmark'?payload:new Blob([payload]);}}));
  const api={get reads(){return reads;},get formatReads(){return formatReads;},requests,advance(){sequence++;},sequence:async()=>sequence,
  clipboard:{read:async()=>{formatReads++;options.duringFormats?.(api);return entries;},readText:async()=>{throw new Error('A second live text read is forbidden.');}}};return api;
 }
@@ -27,6 +27,9 @@ test('shared external private-marker contract rejects any item before requesting
 });
 test('shared clipboard text contract rejects only whitespace and preserves accepted bytes',async()=>{
  for(const row of contract.textCases){const api=board([{'text/plain':row.value}]),result=await read(api);assert.equal(!!result,row.capture,row.name);if(row.capture)assert.deepEqual(Buffer.from(result.value),Buffer.from(row.value),row.name);}
+});
+test('a payment identifier with a linked HTML copy is still excluded',async()=>{
+ for(const row of contract.textCases.filter(row=>!row.capture&&/\d/.test(row.value))){const api=board([{'text/plain':row.value,'text/html':`<a href="https://example.com/pay">${row.value}</a>`}]);assert.equal(await read(api),null,row.name);}
 });
 test('changed generation before payload never reads content and requests a fresh attempt',async()=>{
  const api=board([{'text/plain':'stale public'}],{duringFormats:value=>value.advance()});
@@ -75,6 +78,91 @@ test('oversized native metadata is rejected before allocating its buffer',async(
   assert.equal(await readClipboardContent({clipboard,sequence:async()=>1,marker,plainURL}),null);assert.equal(buffers,0);
  }
 });
+test('rich linked copies prefer the Electron bookmark URL when link capture is enabled',async()=>{
+ const api=board([{'text/plain':'OpenAI docs','electron application/bookmark':{title:'OpenAI docs',url:'https://platform.openai.com/docs'}}]);
+ const result=await read(api);
+ assert.deepEqual([result.kind,result.value],['link','https://platform.openai.com/docs']);
+ assert.deepEqual(api.requests,['electron application/bookmark']);
+});
+test('bookmark copies are not read when link capture is disabled',async()=>{
+ const api=board([{'text/plain':'OpenAI docs','electron application/bookmark':{title:'OpenAI docs',url:'https://platform.openai.com/docs'}}]);
+ const result=await readClipboardContent({...api,marker,plainURL,captureLinks:false});
+ assert.deepEqual([result.kind,result.value],['text','OpenAI docs']);
+ assert.deepEqual(api.requests,['text/plain']);
+});
+test('invalid bookmark URLs fall back to the text label',async()=>{
+ const api=board([{'text/plain':'OpenAI docs','electron application/bookmark':{title:'OpenAI docs',url:'file:///private/report.pdf'}}]);
+ const result=await read(api);
+ assert.deepEqual([result.kind,result.value],['text','OpenAI docs']);
+ assert.deepEqual(api.requests,['electron application/bookmark','text/plain']);
+});
+test('shared linked representation rows save the single-link destination or keep the exact text',async()=>{
+ for(const row of contract.linkedRepresentationCases){
+  const api=board([row.formats]);
+  const result=await read(api);
+  if(row.url===undefined){assert.deepEqual([result?.kind,result?.value],['text',row.text],row.name);continue;}
+  assert.deepEqual([result?.kind,result?.value],['link',row.url],row.name);
+  assert.equal(result.fingerprint,'link:'+require('node:crypto').createHash('sha256').update(row.url).digest('hex'),row.name);
+ }
+});
+test('HTML and URI representations never override disabled links or private items',async()=>{
+ for(const row of contract.linkedRepresentationCases.filter(item=>item.formats['text/plain'])){
+  const off=board([row.formats]),disabled=await readClipboardContent({...off,marker,plainURL,captureLinks:false});
+  assert.deepEqual([disabled?.kind,disabled?.value],['text',row.formats['text/plain']],row.name);
+  assert.deepEqual(off.requests,['text/plain'],row.name);
+  const privateBoard=board([row.formats,{'com.agilebits.onepassword':''}]);
+  assert.equal(await read(privateBoard),null);
+  assert.equal(privateBoard.reads,0);
+ }
+});
+test('an HTML anchor is the link only when its text is the whole copied label',async()=>{
+ const html='<a href="https://example.com/docs">docs</a>';
+ for(const [plain,expected] of [['docs','link'],[' docs\r\n','link'],['the docs','text'],['docs.','text']]){
+  const result=await read(board([{'text/plain':plain,'text/html':html}]));
+  assert.deepEqual([result.kind,result.value],[expected,expected==='link'?'https://example.com/docs':plain],JSON.stringify(plain));
+ }
+ // A label that is itself an address keeps the anchor's destination, like NSPasteboard.URL beside a string.
+ const shown=await read(board([{'text/plain':'https://example.com/shown','text/html':'<a href="https://example.com/target">https://example.com/shown</a>'}]));
+ assert.deepEqual([shown.kind,shown.value],['link','https://example.com/target']);
+ const fallback=await read(board([{'text/plain':'https://example.com/shown','text/html':'<p>See <a href="https://example.com/target">this</a></p>'}]));
+ assert.deepEqual([fallback.kind,fallback.value],['link','https://example.com/shown']);
+});
+test('only a real href attribute of a terminated anchor tag is a destination',async()=>{
+ for(const [html,url] of [
+  ['<a\thref = https://example.com/unquoted >Read docs</a>','https://example.com/unquoted'],
+  ['<a href="https://example.com/first" href="https://example.com/second">Read docs</a>','https://example.com/first'],
+  ['<a name="top"></a><a href="https://example.com/named">Read docs</a>','https://example.com/named'],
+  ['<span data-x="<a href=https://example.com/in-value>">Read docs</span>',null],
+  ['<abbr href="https://example.com/abbr">Read docs</abbr>',null],
+  ['<a xhref="https://example.com/x" data-href="https://example.com/data">Read docs</a>',null],
+  ['<a href="https://example.com/open>Read docs</a>',null],
+  ['<a href="https://example.com/cut">Read docs','https://example.com/cut'],
+  ['<a href="https://example.com/a b">Read docs</a>',null],
+  ['<a href="https://user'+':secret@example.com/">Read docs</a>',null]
+ ]){
+  const result=await read(board([{'text/plain':'Read docs','text/html':html}]));
+  assert.deepEqual([result.kind,result.value],url?['link',url]:['text','Read docs'],html);
+ }
+ const started=Date.now();
+ const hostile=await read(board([{'text/plain':'Read docs','text/html':'<a "'.repeat(250000)}]));
+ assert.deepEqual([hostile.kind,hostile.value],['text','Read docs']);assert.ok(Date.now()-started<2000);
+});
+test('malformed, unsafe or ambiguous linked representations fall back to the original text',async()=>{
+ for(const formats of [
+  {'text/plain':'Read docs','text/html':'<a href="javascript:alert(1)">Read docs</a>'},
+  {'text/plain':'Read docs','text/uri-list':'file:///private/document.txt'},
+  {'text/plain':'Read docs','text/html':'<a href="https://example.com/a">A</a><a href="https://example.com/b">B</a>'},
+  {'text/plain':'Read docs','text/uri-list':'https://example.com/a\nhttps://example.com/b'}
+ ]){
+  const result=await read(board([formats]));
+  assert.deepEqual([result?.kind,result?.value],['text','Read docs']);
+ }
+});
+test('replaced clipboard generations never admit a linked URL',async()=>{
+ const api=board([{'text/plain':'Read docs','text/uri-list':'https://example.com/late'}],{duringRead:(type,value)=>{if(type==='text/uri-list')value.advance();}});
+ assert.deepEqual(await read(api),{raced:true});
+});
+
 test('a standalone URL is ordinary exact text while link capture is off, as on macOS',async()=>{
  const url=' https://example.com/a?b=1\r\n';
  const on=await read(board([{'text/plain':url}]));assert.deepEqual([on.kind,on.value],['link','https://example.com/a?b=1']);
