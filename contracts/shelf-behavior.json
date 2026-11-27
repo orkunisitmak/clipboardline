@@ -225,8 +225,14 @@
         "id": "unavailable-watched-folder",
         "behavior": "A watched folder that is unavailable (for example on an unmounted volume) is skipped while watching but stays in the saved list, so adding or removing another watched folder does not forget it.",
         "macos": "AppDelegate.extraFolders returns every saved folder and existingExtraFolders is the subset that is watched, re-evaluated when a volume mounts; SettingsTests.testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable covers it.",
-        "windows": "main.cjs skips a watchFolders entry that is not a directory without changing the list; model.test.cjs checks that adding and removing folders keeps an unavailable entry."
+        "windows": "lib/folder-watchers.cjs skips a watchFolders entry that is not a directory without changing the list; model.test.cjs checks that adding and removing folders keeps an unavailable entry."
         },
+      {
+        "id": "watched-folder-failures",
+        "behavior": "An image added to a watched folder is imported once its writes settle. If it cannot be imported, a notice uses the shared \"File could not be read or safely saved\" catalog key in the selected language; only a source file removed before it is imported produces no notice and no item. A folder that cannot be watched is skipped without a notice.",
+        "macos": "ImageHistory.add sets the library notice to HistoryFiles.Failure.unsafeFile (\"File could not be read or safely saved\") when a watched image cannot be hung. ScreenshotWatcher logs and skips a folder it cannot open.",
+        "windows": "lib/folder-watchers.cjs reports the same catalog key through the main-process notice path, suppresses ENOENT only when the watched source no longer exists, and skips a folder it cannot watch; folder-watchers.test.cjs drives real file-system events with the actual Store."
+      },
         {
         "id": "disabled-undo-names-the-surface",
         "behavior": "A disabled undo row first says where it is available: Undo trash on the shelves reads \"Available in Library\" and Undo take down in the Library reads \"Available on the shelves\"; \"Nothing to undo\" is shown only on the surface where the undo exists.",

@@ -121,6 +121,8 @@ Name and pin case.
 `unavailable-watched-folder` requires a watched folder that is unavailable, such as one on an
 unmounted volume, to stay in the saved list while it is skipped, so adding or removing another
 watched folder does not forget it.
+`watched-folder-failures` records the shared failure notice for an image that
+cannot be imported from a watched folder.
 
 System screenshots reach the Images shelf by default on both platforms. macOS follows the
 screenshot location set in the system and has no switch for it. Windows watches the Screenshots

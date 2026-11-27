@@ -23,6 +23,7 @@ const {MediaJobs,MAXIMUM_VIDEO_BYTES}=require('./lib/media.cjs');
 const {copyFiles,cancelFileCopies}=require('./lib/native-files.cjs');
 const {exportCopies}=require('./lib/export-copies.cjs');
 const {decodeTextFile}=require('./lib/text-file.cjs');
+const {FolderWatchers}=require('./lib/folder-watchers.cjs');
 const native = require('./lib/native.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
@@ -35,7 +36,7 @@ const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
 const {shouldStartHidden,shouldShowOnSecondInstance,applyLoginItemSetting,migrateLoginItemSetting}=require('./lib/login-launch.cjs');
-const {folderKey,watchedFolders,shelfRevealPatch}=require('./lib/watch-folders.cjs');
+const {watchedFolders,shelfRevealPatch}=require('./lib/watch-folders.cjs');
 const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
 const testMode = process.argv.includes('--test-mode');
 const testFolder = process.argv.find(value=>value.startsWith('--test-data='))?.slice('--test-data='.length);
@@ -47,7 +48,7 @@ if(development){const directory=path.join(app.getPath('appData'),'ClipBoardLine 
 app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
-let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
+let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,folderWatchers=null,normalBounds=null,normalMaximized=false,applyingBounds=false;
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
@@ -307,7 +308,7 @@ async function recognize(id,quiet=false) {
 // folder names survive any console code page. Each reconfigure re-resolves it
 // off the main path; watchers are rebuilt only when the folder changes, and a
 // failed lookup retries after a minute.
-let activeFolders=new Set(),systemScreenshots=null,resolvingScreenshots=false,screenshotRetry=null;
+let systemScreenshots=null,resolvingScreenshots=false,screenshotRetry=null;
 function resolveSystemScreenshotFolder() {
   if(resolvingScreenshots)return;resolvingScreenshots=true;clearTimeout(screenshotRetry);
   const ready=folder=>{try{if(folder&&path.isAbsolute(folder)){fs.mkdirSync(folder,{recursive:true});if(fs.statSync(folder).isDirectory())return folder;}}catch{}return null;};
@@ -327,12 +328,8 @@ function systemScreenshotFolder(resolve) {
   return systemScreenshots;
 }
 function configureWatchers(resolve=true) {
-  for(const watcher of watchers)watcher.close();watchers=[];
-  const folders=watchedFolders(store.data.settings,systemScreenshotFolder(resolve));
-  // A debounced import still pending when its folder stops being watched (for
-  // example the screenshot setting is turned off) is dropped when it fires.
-  activeFolders=new Set(folders.map(folder=>folderKey(folder)));
-  for(const folder of folders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);if(!activeFolders.has(folderKey(folder)))return;try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(err=>{console.warn('Watch folder import error:',err?.message||err);});}catch(err){console.warn('Watch folder item error:',err?.message||err);}},700));});watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});watchers.push(watcher);}catch(err){console.warn('Watch folder configure error:',err?.message||err);}}
+  folderWatchers??=new FolderWatchers({importFile,notify,closing:()=>closing,imported:record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}});
+  folderWatchers.configure(watchedFolders(store.data.settings,systemScreenshotFolder(resolve)));
 }
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){
@@ -557,4 +554,4 @@ else app.whenReady().then(async()=>{
 }).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
 app.on('second-instance',(_event,commandLine)=>{if(!shouldShowOnSecondInstance({commandLine}))return;startHidden=false;if(window&&windowReady)void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});
-app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
+app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();folderWatchers?.close();shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
