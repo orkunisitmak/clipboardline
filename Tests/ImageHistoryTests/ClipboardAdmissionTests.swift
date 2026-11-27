@@ -69,6 +69,16 @@ import XCTest
             if row.capture { XCTAssertEqual(Array(received.last!.utf8), Array(row.value.utf8), row.name) }
         }
     }
+    func testPaymentIdentifierWithALinkedHTMLCopyIsStillExcluded() throws {
+        let source = AdmissionClipboard(); var texts = [String](), links = [URL]()
+        let watcher = TextClipboardWatcher(source: source, onText: { texts.append($0) }, onLink: { links.append($0) }, capturesLinks: { true })
+        defer { watcher.stop() }; watcher.start()
+        for row in try contract().textCases where !row.capture && row.value.contains(where: \.isNumber) {
+            source.copy([[.string: Data(row.value.utf8), .html: Data("<a href=\"https://example.com/pay\">\(row.value)</a>".utf8)]])
+            watcher.check()
+            XCTAssertTrue(texts.isEmpty, row.name); XCTAssertTrue(links.isEmpty, row.name)
+        }
+    }
     func testSharedLinkedRepresentationRowsSaveTheSingleLinkOrKeepTheExactText() throws {
         let source = AdmissionClipboard(); var texts = [String](), links = [URL](), linksOn = true
         let watcher = TextClipboardWatcher(source: source, onText: { texts.append($0) }, onLink: { links.append($0) }, capturesLinks: { linksOn })

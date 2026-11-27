@@ -28,6 +28,9 @@ test('shared external private-marker contract rejects any item before requesting
 test('shared clipboard text contract rejects only whitespace and preserves accepted bytes',async()=>{
  for(const row of contract.textCases){const api=board([{'text/plain':row.value}]),result=await read(api);assert.equal(!!result,row.capture,row.name);if(row.capture)assert.deepEqual(Buffer.from(result.value),Buffer.from(row.value),row.name);}
 });
+test('a payment identifier with a linked HTML copy is still excluded',async()=>{
+ for(const row of contract.textCases.filter(row=>!row.capture&&/\d/.test(row.value))){const api=board([{'text/plain':row.value,'text/html':`<a href="https://example.com/pay">${row.value}</a>`}]);assert.equal(await read(api),null,row.name);}
+});
 test('changed generation before payload never reads content and requests a fresh attempt',async()=>{
  const api=board([{'text/plain':'stale public'}],{duringFormats:value=>value.advance()});
  assert.deepEqual(await read(api),{raced:true});assert.equal(api.reads,0);
