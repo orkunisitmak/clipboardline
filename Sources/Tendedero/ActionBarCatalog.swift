@@ -24,7 +24,7 @@ enum ActionBarAction: Equatable {
 
 enum ActionBarMenuAction: String, CaseIterable {
     case settings, settingsGeneral, settingsHistory, settingsSources, settingsShortcuts, settingsAbout, clearUnsavedHistory
-    case newNote, newFolder, newSubfolder, renameFolder, removeFolder, renameTag, removeTag, retain, restore, editDetails
+    case newNote, newFolder, newSubfolder, renameFolder, removeFolder, renameTag, removeTag, retain, restore, deletePermanently, emptyTrash, editDetails
     case scopeSaved, scopeFavorites, scopeUnorganized, scopeRecent, scopeTrash
     case grid, list, toggleSidebar, toggleInspector, toggleFullscreen, filters, clearFilters
     case sortNewest, sortOldest, sortTitle, sortTitleDescending, sortCopied, sortRelevance
@@ -402,6 +402,8 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .retain: return require(c.hasSelection && !c.isDeleted, L("Select an item first"))
         case .editDetails: return require(c.singleSelection && !c.isDeleted, L("Select one item first"))
         case .restore: return require(c.hasSelection && c.isDeleted, L("Select an item in Trash first"))
+        case .deletePermanently: return require(c.isLibrary && c.hasSelection && c.isDeleted, L("Select an item in Trash first"))
+        case .emptyTrash: return require(c.isLibrary, L("Available in Library"))
         case .refreshLink: return require(c.isLink, L("Select a link first"))
         case .openFile, .quickLook, .revealFile: return require(c.singleSelection && c.kind == .image && c.hasFile, L("Select one image first"))
         case .saveToDesktop: return require(!c.isLibrary && c.singleSelection && c.kind == .image && c.inInbox && !c.isDeleted, L("Select an image in the screenshots inbox first"))
@@ -487,6 +489,8 @@ enum ActionBarMenuAction: String, CaseIterable {
         case .removeTag: return (L("Remove tag"), organization, "tag.slash", ["remove", "delete", "tag", "sil", "kaldır", "etiket"])
         case .retain: return (L("Save to library"), organization, "tray.and.arrow.down", ["save", "keep", "retain", "permanent", "kaydet", "sakla", "kalıcı"])
         case .restore: return (L("Restore"), organization, "arrow.uturn.backward", ["restore", "trash", "recover", "geri yükle", "kurtar", "çöp"])
+        case .deletePermanently: return (L("Delete permanently…"), organization, "trash.slash", ["delete", "permanently", "erase", "trash", "kalıcı", "sil", "çöp"])
+        case .emptyTrash: return (L("Empty Trash…"), organization, "trash.slash", ["empty", "trash", "delete", "permanently", "boşalt", "çöp", "kalıcı", "sil"])
         case .editDetails: return (L("Edit item details"), organization, "square.and.pencil", ["edit", "details", "title", "note", "name", "düzenle", "ayrıntı", "başlık", "not", "isim"])
         case .scopeSaved: return (L("My library"), views, "square.grid.2x2", ["saved", "library", "kaydedilen", "kütüphane"])
         case .scopeFavorites: return (L("Favorites"), views, "pin.fill", ["favorite", "favourite", "pinned", "favori", "sabitlenen"])

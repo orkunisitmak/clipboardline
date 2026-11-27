@@ -46,6 +46,48 @@ import XCTest
         XCTAssertEqual(model.focusedID, order[0]); XCTAssertEqual(model.inspected?.id, order[0])
     }
 
+    func testLibraryActionsDeletePermanentlyAndEmptyTrashEraseOnlyAfterTheConfirmation() throws {
+        let (f, store, _, delegate) = try setup(); defer { f.cleanup() }
+        let records = try ["first trashed note", "second trashed note", "third trashed note"].map { try XCTUnwrap(store.captureText($0)) }
+        try store.trash(records.map(\.id))
+        delegate.showLibrary()
+        let controller = try XCTUnwrap(delegate.libraryController), model = controller.model, window = try XCTUnwrap(controller.window)
+        defer { delegate.commandPalette?.window.close(); window.close() }
+        model.changeScope(.trash)
+        let deadline = Date().addingTimeInterval(8)
+        func wait(_ predicate: () -> Bool) { while !predicate() && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.005)) } }
+        func choose(_ id: String, answer: NSApplication.ModalResponse) throws -> String {
+            delegate.showCommands(origin: .library)
+            let palette = try XCTUnwrap(delegate.commandPalette)
+            let index = try XCTUnwrap(palette.visibleCommands.firstIndex { $0.id == id })
+            XCTAssertTrue(palette.visibleCommands[index].isEnabled)
+            palette.table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+            palette.executeSelected()
+            wait { window.attachedSheet != nil }
+            let sheet = try XCTUnwrap(window.attachedSheet, "\(id) asks before erasing")
+            let question = sheet.contentView.map(Self.texts)?.joined(separator: "\n") ?? ""
+            window.endSheet(sheet, returnCode: answer)
+            wait { window.attachedSheet == nil }
+            return question
+        }
+        wait { model.ids.count == 3 && !model.loading }
+        let order = model.ids
+        guard order.count == 3 else { return XCTFail("expected three trashed items, got \(order.count)") }
+        XCTAssertTrue(model.select(order[1]))
+        XCTAssertTrue(try choose("menu.deletePermanently", answer: .alertSecondButtonReturn).contains(String(format: L("Delete %d items permanently?"), 1)))
+        XCTAssertEqual(try store.trashedIDs().count, 3, "Cancel keeps everything")
+        _ = try choose("menu.deletePermanently", answer: .alertFirstButtonReturn)
+        wait { model.ids.count == 2 && !model.loading }
+        XCTAssertNil(try store.item(order[1])); XCTAssertEqual(Set(try store.trashedIDs()), [order[0], order[2]])
+        // Empty Trash names the number of items it then erases.
+        XCTAssertTrue(try choose("menu.emptyTrash", answer: .alertFirstButtonReturn).contains(String(format: L("Empty Trash and delete %d items permanently?"), 2)))
+        wait { model.ids.isEmpty && !model.loading }
+        XCTAssertTrue(try store.trashedIDs().isEmpty)
+    }
+    private static func texts(_ view: NSView) -> [String] {
+        ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts)
+    }
+
     func testShelfButtonOriginWinsOverKeySettingsAndKeepsCapturedPinTarget() throws {
         let (f, store, line, delegate) = try setup(); defer { f.cleanup() }
         _ = line.texts.add("Captured pin target"); _ = line.texts.add("Different selection")

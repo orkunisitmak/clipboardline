@@ -72,4 +72,24 @@ import XCTest
         XCTAssertNotNil(try library.item(record.id))
         XCTAssertEqual(try library.deletePermanently(confirmed: library.trashSnapshot([record.id])), 1)
     }
+
+    func testLargeTrashIsErasedInChunksAndLeavesLiveItemsSearchable() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        // More items than one statement takes, so the last chunk is a partial one.
+        let trashed = try (0..<1_203).map { try XCTUnwrap(library.captureText("bulk entry number \($0)")).id }
+        let folder = try library.createCollection("Work")
+        try library.assign([trashed[0], trashed[600], trashed[1_202]], to: folder); try library.addTag("tag", to: [trashed[499], trashed[500]])
+        let live = try XCTUnwrap(library.captureText("bulk entry that stays"))
+        try library.trash(trashed)
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .trash, search: "bulk"), limit: 2_000).count, 1_203)
+
+        XCTAssertEqual(try library.deletePermanently(confirmed: library.trashSnapshot(library.trashedIDs())), 1_203)
+        XCTAssertTrue(try library.trashedIDs().isEmpty)
+        for id in [trashed[0], trashed[499], trashed[500], trashed[1_202]] { XCTAssertNil(try library.item(id)) }
+        XCTAssertTrue(try library.query(LibraryQuery(scope: .trash, search: "bulk"), limit: 2_000).isEmpty, "No search entry outlives its item")
+        XCTAssertEqual(try library.query(LibraryQuery(scope: .recent, search: "bulk"), limit: 2_000).map(\.id), [live.id])
+        XCTAssertTrue(try library.query(LibraryQuery(scope: .collection(folder)), limit: 2_000).isEmpty)
+        // The same text can be captured again as a new item afterwards.
+        XCTAssertNotNil(try library.captureText("bulk entry number 7"))
+    }
 }

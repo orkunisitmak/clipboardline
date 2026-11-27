@@ -564,9 +564,7 @@ import Combine
         case .links: setKind(.link); _ = focusContent()
         case .tag: if !selectionInTrash { onTagRequested?() }
         case .export: onExportRequested?()
-        case .trash:
-            // In Trash the delete keys erase for good, after a confirmation.
-            if query.scope == .trash { if !actionIDs.isEmpty { onDeletePermanentlyRequested?() } } else { trashSelection() }
+        case .trash: trashSelection()
         case .editText, .markup, .cropImage:
             if actionIDs.count == 1, let id = actionIDs.first, let record = try? store.item(id), record.deletedAt == nil,
                (action == .editText ? record.kind == .text : record.kind == .image) { onEditPreviewRequested?(action, id) }

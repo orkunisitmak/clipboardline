@@ -38,8 +38,8 @@ sonuçlara geçer. Kapalı klasörde ilk → alt klasörleri açar. Tab/Shift+Ta
 buton, seçim kutusu ve alanlar arasında normal şekilde dolaşılabilir.
 Ayrıntılarda Esc taslağı kaydedip sonuçlara döner; kaydetme başarısızsa taslak
 ve odak korunur. Actions içinden kapsam/tür, görünüm, sıralama, arama modu,
-klasör/etiket oluşturma, yeniden adlandırma, kaldırma ve Çöp’ten geri
-yükleme işlemlerine ulaşılır.
+klasör/etiket oluşturma, yeniden adlandırma, kaldırma, Çöp’ten geri
+yükleme, Kalıcı olarak sil ve Çöp Kutusu’nu boşalt işlemlerine ulaşılır.
 
 Library önizlemesinde oklar, ilk/son ve sayfa kısayolları aynı sonuçlar içinde
 ilerler; içerik türü değişse de pencere açık kalır. S sonrası sonraki öğe gelir;
@@ -49,8 +49,10 @@ normal metin düzenleme ve geri alma tuşları korunur.
 
 Enter ile Library’den kopyalamak Library’yi açık tutar. Askıda/askı
 önizlemesinde Enter’ın kopyalayıp kapatma ve önceki uygulamaya odak döndürme
-akışı korunur. Kısayolla Çöp’e taşıma kalıcı silme değildir. Windows’un mevcut kalıcı silme seçeneği ayrıca onay ister;
-Mac’te bu seçenek bulunmaz.
+akışı korunur. Kısayolla Çöp’e taşıma kalıcı silme değildir; Çöp görünümünde de S, Delete ve
+⌘/Ctrl+Backspace hiçbir şeyi kalıcı silmez. Kalıcı olarak sil ve Çöp Kutusu’nu
+boşalt iki platformda da yalnızca menülerden ve Actions’tan çalışır, silinecek
+öğe sayısını söyleyen bir onay ister.
 
 ## English
 
@@ -81,8 +83,9 @@ deletions, an empty result and undo. Library copy keeps Library open; shelf copy
 retains its existing dismissal and returned-focus behavior.
 
 Command/Control+K opens Actions: search, arrows and Enter reach scope/type,
-view/sort/search modes, folder/tag management, membership removal and Trash recovery. Windows additionally retains its confirmed permanent-delete
-action; macOS currently offers recoverable Trash. This is also the fallback when a function key
+view/sort/search modes, folder/tag management, membership removal, Trash recovery, Delete permanently and Empty Trash. Both
+platforms confirm those two with the number of items they erase, and S, Delete or
+Command/Control+Backspace never delete permanently, also in Trash. This is also the fallback when a function key
 is intercepted by the OS or the keyboard requires Fn.
 
 ## Persistence and OS integration

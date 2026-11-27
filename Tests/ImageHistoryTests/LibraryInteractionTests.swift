@@ -48,6 +48,21 @@ import XCTest
         XCTAssertTrue(model.select(live.id)); XCTAssertTrue(model.perform(.tag)); XCTAssertEqual(tagRequests, 1)
         XCTAssertFalse(model.dragItems(live.id).isEmpty)
     }
+    func testTrashActionInTrashNeitherErasesNorAsksToDeletePermanentlyLikeWindows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let note = try XCTUnwrap(store.captureText("trashed note")); try store.trash([note.id])
+        let model = LibraryModel(store: store); var requests = 0
+        model.onDeletePermanentlyRequested = { requests += 1 }; model.onTrashRequested = { requests += 1 }
+        model.changeScope(.trash); wait { model.ids == [note.id] }
+        XCTAssertTrue(model.select(note.id))
+        // Delete, S and Command+Backspace all arrive as this action.
+        XCTAssertTrue(model.perform(.trash))
+        XCTAssertEqual(requests, 0, "Permanent deletion is offered by the menus only")
+        XCTAssertNotNil(try store.item(note.id)?.deletedAt); XCTAssertEqual(model.ids, [note.id])
+        let snapshot = try store.trashSnapshot([note.id])
+        model.deletePermanently(snapshot); wait { model.ids.isEmpty && !model.loading }
+        XCTAssertNil(try store.item(note.id))
+    }
     func testNewNoteIsTitledByItsFirstLineLikeWindows() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let model = LibraryModel(store: store)

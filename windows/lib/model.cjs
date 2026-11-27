@@ -505,6 +505,14 @@ class Store {
       for (const {before, item} of entries) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; }
       this.persist(); return;
     }
+    if (action === 'emptyTrash') {
+      // Erases only the Trash items the confirmation listed: one restored, or restored and trashed again, since then stays.
+      const confirmed = payload.confirmed;
+      if (!confirmed || typeof confirmed !== 'object' || Array.isArray(confirmed)) fail('Invalid Trash confirmation');
+      const ids = this.data.items.filter(item => item.trashedAt != null && Object.hasOwn(confirmed, item.id) && confirmed[item.id] === String(item.trashedAt) + ':' + (item.trashRevision || '')).map(item => item.id);
+      if (ids.length) this.modifyTransaction('delete', {ids});
+      return {ids};
+    }
     const items = this.selected(payload.ids || (payload.id ? [payload.id] : []));
     if (!items.length) fail('Select an item first');
     if (action === 'remove') {

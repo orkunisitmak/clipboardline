@@ -1013,14 +1013,21 @@ extension String {
             let targets = try Set(ids).compactMap { try item($0) }.filter { value in
                 value.deletedAt != nil && (generations.map { $0[value.id] == (value.trashRevision?.uuidString ?? "") } ?? true)
             }
+            // One statement per table for each chunk of ids, not one per item:
+            // search_fts has no index on id, so every delete there reads the
+            // whole table, and this runs on the main thread.
+            let erased = targets.map { SQLValue.text($0.id.uuidString) }
+            for start in stride(from: 0, to: erased.count, by: 500) {
+                let chunk = Array(erased[start..<min(start + 500, erased.count)])
+                let marks = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+                try db.execute("DELETE FROM item_collections WHERE item IN (\(marks))", chunk)
+                try db.execute("DELETE FROM item_tags WHERE item IN (\(marks))", chunk)
+                try db.execute("DELETE FROM search_fts WHERE id IN (\(marks))", chunk)
+                try db.execute("DELETE FROM text_identity WHERE item IN (\(marks))", chunk)
+                try db.execute("DELETE FROM image_analysis WHERE item IN (\(marks))", chunk)
+                try db.execute("DELETE FROM items WHERE deleted IS NOT NULL AND id IN (\(marks))", chunk)
+            }
             for value in targets {
-                let id = SQLValue.text(value.id.uuidString)
-                try db.execute("DELETE FROM item_collections WHERE item=?", [id])
-                try db.execute("DELETE FROM item_tags WHERE item=?", [id])
-                try db.execute("DELETE FROM search_fts WHERE id=?", [id])
-                try db.execute("DELETE FROM text_identity WHERE item=?", [id])
-                try db.execute("DELETE FROM image_analysis WHERE item=?", [id])
-                try db.execute("DELETE FROM items WHERE id=? AND deleted IS NOT NULL", [id])
                 // Queue the app's own copies in the same write: if moving them
                 // fails now, the queue is retried on the next save or launch.
                 for path in Set([value.path, value.markupBasePath, value.recordingOriginalPath].compactMap { $0 })
