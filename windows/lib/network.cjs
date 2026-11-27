@@ -103,13 +103,24 @@ function decodeHTML(bytes, type = '') {
 const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
 // Yields [start, end] of each `opening…>` tag body of at most `limit` characters. Every tag shares the
 // next '>' instead of rescanning for it, so a page of unclosed tags costs one pass, not one per tag (#39).
-function* tags(html, opening, limit) {
-  const pattern = new RegExp(opening, 'gi'); let close = -1;
+// With `quoted`, a '>' inside a quoted attribute value belongs to the value; a tag whose quotes do not close within
+// `limit` ends at its first '>' instead. Quoted scans of tags that fail can overlap, so together they get a fixed
+// number of steps to keep the pass linear.
+function* tags(html, opening, limit, quoted = false) {
+  const pattern = new RegExp(opening, 'gi'); let close = -1, steps = quoted ? 4 * 512 * 1024 : 0;
   for (let match; (match = pattern.exec(html));) {
     const start = pattern.lastIndex; if (close < start) close = html.indexOf('>', start);
     if (close < 0) return;
-    if (close - start > limit) continue;
-    yield [start, close]; pattern.lastIndex = close + 1;
+    let end = -1;
+    for (let index = start, quote = ''; index < html.length && index - start <= limit && steps-- > 0; index++) {
+      const char = html[index];
+      if (quote) { if (char === quote) quote = ''; }
+      else if (char === '"' || char === "'") quote = char;
+      else if (char === '>') { end = index; break; }
+      else if (char === '<') break;
+    }
+    if (end < 0) { if (close - start > limit) continue; end = close; }
+    yield [start, end]; pattern.lastIndex = end + 1;
   }
 }
 // The first <title> whose </title> follows within 2000 characters; the closing marker is shared the same way.
@@ -123,7 +134,7 @@ function titleText(html) {
   return '';
 }
 function meta(html, name) {
-  for (const [start, close] of tags(html, '<meta\\b', 4096)) {
+  for (const [start, close] of tags(html, '<meta\\b', 4096, true)) {
     const attributes = {};
     // A name without a value still consumes its whole run, so a long run is not retried from every character.
     for (const attr of html.slice(start, close).matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {

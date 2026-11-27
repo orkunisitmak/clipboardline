@@ -1,5 +1,6 @@
 'use strict';
 const crypto=require('node:crypto');
+const {paymentIdentifier}=require('./sensitive-text.cjs');
 
 // Exclusion markers apply to the entire native copy, including markers carried
 // by a different item or wrapped in Electron's raw-format MIME type.
@@ -135,6 +136,7 @@ async function readClipboardContent({clipboard,sequence,marker,plainURL,captureL
         bytes=Buffer.from(await blob.arrayBuffer());if(bytes.length>1024*1024)return null;
         try{value=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);}catch{return null;}
         if(!value||! /\P{White_Space}/u.test(value))return null;
+        if(paymentIdentifier(value))return null;
       }
       const html=captureLinks?await representation(entries,'text/html'):null;
       const anchor=html===null?null:htmlAnchorURL(html,text?value:undefined,plainURL);

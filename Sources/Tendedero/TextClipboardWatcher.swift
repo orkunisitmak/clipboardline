@@ -67,6 +67,8 @@ final class TextClipboardWatcher {
             let onLink = capturesLinks() ? onLink : nil
             if let onLink, let url = address.flatMap(LinkIdentity.standalone) { onLink(url); return }
             let text = types.contains(.string) ? value(.string) : address
+            // A payment identifier excludes the whole copy before its HTML is read.
+            if let text, SensitiveText.isPaymentIdentifier(text) { return }
             if let onLink, types.contains(.html), text != nil || !types.contains(.string),
                let url = value(.html).flatMap({ LinkedHTML.destination(html: $0, label: types.contains(.string) ? text : nil) }) { onLink(url); return }
             if raced { return }
