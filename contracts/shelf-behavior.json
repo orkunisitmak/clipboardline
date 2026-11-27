@@ -16,10 +16,22 @@
         "reason": "Platform-standard modifier names; shared actions and outcomes remain the same."
       },
       {
+        "id": "rich-link-representations",
+        "macos": "A linked copy's destination is read from NSPasteboard.URL (public.url), which holds one address. macOS apps do not publish a text/uri-list pasteboard type, so that row of linkedRepresentationCases names Windows only.",
+        "windows": "The destination is read from Electron's application/bookmark entry or a text/uri-list entry with exactly one address.",
+        "reason": "Each system has its own native carrier for a copied link's address. The outcome is shared: with link capture on the destination is saved instead of the label, and the HTML single-link rule and its rows are the same on both platforms."
+      },
+      {
         "id": "native-window-materials",
         "macos": "AppKit materials, system window chrome and native controls",
         "windows": "Native Windows chrome with Electron-rendered shared layout, controls and icons",
         "reason": "Native platform rendering differs; action placement, content hierarchy, keyboard behavior and outcomes remain shared."
+      },
+      {
+        "id": "card-context-menu-form",
+        "macos": "Right-clicking a card opens a native menu at the pointer: the shelf card's own menu (GrabView.rightMouseDown with the menuProvider set in GrabArea, TextShelfView and LinkShelfView) or the Library table's row menu.",
+        "windows": "Right-clicking a card on a shelf or in the Library opens the shared Actions palette for it, with its search field, instead of a menu at the pointer.",
+        "reason": "The Actions palette already holds every card command with its availability rules, shortcuts and translations, so Windows reuses it instead of keeping a second command list in a pointer menu that could drift from it. User impact on Windows: the commands appear in a searchable Actions palette, not in a menu under the pointer, and the right-clicked card becomes the selection."
       },
       {
         "id": "native-text-file-drag",
@@ -32,6 +44,12 @@
         "macos": "An unsaved shelf screenshot is shown from its original file. When that file is deleted in Finder (the file is missing while its folder can still be read) the item moves to Trash at the next prune; a disk that is not mounted or a permission error keeps it. LibraryStoreTests.testPruneDropsAnUnsavedScreenshotWhoseFileWasDeleted and testPruneKeepsAnUnsavedScreenshotWhoseFolderIsGone cover it.",
         "windows": "importFile in main.cjs stores its own PNG copy of every watched or imported image, so deleting the original in Explorer leaves the shelf item intact.",
         "reason": "The Mac shelf references screenshots in place to avoid duplicating the user's files; Windows always keeps a managed copy. Neither platform shows an empty card."
+      },
+      {
+        "id": "system-screenshots-setting",
+        "macos": "New system screenshots always reach the Images shelf: ScreenshotWatcher follows the screenshot location set in macOS, and Settings has no switch for it.",
+        "windows": "New files in the Screenshots known folder (PrtSc, Win+Shift+S, Win+PrtSc; the relocated folder when Pictures is redirected) reach the Images shelf by default. Settings > General > Import Windows screenshots (watchSystemScreenshots, on by default) turns this off; folders the user added under Watch image folders stay watched either way.",
+        "reason": "Both platforms import system screenshots by default. On macOS this is what the app started as and it has never had a switch. On Windows, Snipping Tool and Win+PrtSc can also copy the capture, so a user who already collects images from the clipboard can keep only that source. User impact: a Windows user can turn system screenshot import off in Settings; a Mac user cannot."
       }
     ],
     "sharedBehaviors": [
@@ -40,6 +58,12 @@
         "behavior": "Closing a shortcut recorder ends its modal state and restores owned global registrations without keeping focus trapped; the precise return target follows the native window model documented in contracts/shortcut-recording.json.",
         "macos": "ShortcutRecorder presents a separate nonactivating NSPanel and ends its key-window lifecycle on cancel, save, close or loss of focus; AppKit chooses the returning key native window.",
         "windows": "Shortcut recorder overlay resolves the newly rendered Settings Record button by stable ID; renderer-ui.test.cjs verifies Escape returns focus to a connected new button instead of a detached element."
+      },
+      {
+        "id": "rich-linked-url-capture",
+        "behavior": "When link capture is enabled, copying a rich link with a display label stores the safe HTTP(S) destination as a link instead of the label, also when text capture is on. The destination comes from the copy's URL representation, or from an HTML representation that is that one link: exactly one anchor with a real href attribute (data-href and text inside other attributes do not count) whose text, with whitespace normalized, is the whole copied label, or a copy with no plain text. A copied paragraph that merely contains a link stays the exact text, and several links, an unterminated tag or an unsafe destination fall back to the label. If link capture is disabled, the label stays text and no URL or HTML representation is read; private clipboard markers exclude the whole copy. The linkedRepresentationCases rows of contracts/clipboard-admission.json run against both adapters.",
+        "macos": "TextClipboardWatcher prefers NSPasteboard.URL over the accompanying string, then LinkedHTML.destination on public.html, validates with LinkIdentity.standalone, rechecks changeCount after every read and respects capture settings and private types. ClipboardAdmissionTests runs the shared rows.",
+        "windows": "readClipboardContent prefers the native Electron bookmark, then one valid text/uri-list URL, then htmlAnchorURL on text/html over the plain-text label, validates with plainURL and checks the clipboard generation. clipboard-admission.test.cjs runs the shared rows."
       },
       {
         "id": "localized-notices",
@@ -114,6 +138,12 @@
         "windows": "Store.modify('pin') pins every selected item when any is unpinned (targetPin); model.test.cjs covers a mixed selection and renderer-ui.test.cjs runs the library-pin-on-a-mixed-selection-pins-all-then-unpins-all scenario of contracts/library-keyboard.json."
       },
       {
+        "id": "card-right-click",
+        "behavior": "Right-clicking a card on a shelf or in the Library offers that card's actions without a left-click first. When the card is one of several selected cards, Pin and Copy act on all of them; otherwise the right-clicked card is the only target. The form of the menu is the card-context-menu-form exception, and how the remaining actions pick their target is stated per platform.",
+        "macos": "The right-click leaves the shelf selection as it is. Pin favorite/Unpin and Copy act on the selection when the clicked card is one of several selected cards on its shelf (Line.pinFromMenu, actionItems, actionEntries) and on the clicked card otherwise; Take down or Discard on the image shelf follows the same rule. Name and pin, Preview, Open, Quick Look, Markup and Show in Finder act on the clicked card. Move to Trash on the text and link shelves selects the clicked card when it is not selected and then asks about the selection; the image menu has no Move to Trash. The Library row menu selects the clicked row unless it is already selected, and its items act on the selection. DualShelfTests and LibraryNativeTests execute the shelf and Library menus.",
+        "windows": "The renderer's contextmenu handler selects the card and opens Actions. A card outside the selection becomes the only selected card; a card inside it keeps the selection, limited on the shelves to the cards of its own shelf (the range anchor moves to the card when the anchor left the selection). Every Actions command then acts on that selection under the palette's own rules, so single-item commands need one selected card. A right-click while a dialog, a preview or the image editor is open is ignored. renderer-ui.test.cjs executes a single card, a selection, a mixed-shelf selection with a later Shift-click, a Library selection across kinds and an open preview. Native Windows acceptance remains a separate release gate."
+      },
+      {
         "id": "subfolder-title",
         "behavior": "The Library title of a subfolder is the names of all its ancestors and its own name, outermost first, joined with \" / \" (for example Parent / Child, or Parent / Middle / Child for imported deeper folders), so same-named subfolders of different parents can be told apart; a top-level folder shows only its name.",
         "macos": "LibraryModel.title builds the path by walking the whole LibraryCollection.parentID chain (cycle-safe) and shows it as the Library window title; LibraryInteractionTests.testSubfolderTitleIncludesItsParentLikeWindows covers it.",
@@ -136,6 +166,12 @@
         "behavior": "An item in Library Trash can be copied: the Copy action stays enabled in the action list for a selection in Trash, matching the copy shortcut, while paste, preview, pin and the other editing actions stay disabled until the item is restored.",
         "macos": "ActionBarCatalog.keyboardAvailability enables .copy for any selection, as LibraryModel.perform(.copy) already copied it; ActionBarCatalogTests.testCopyStaysAvailableForTrashedItemsWhileEditingActionsDoNot covers it.",
         "windows": "actionCommands() in renderer.js leaves copy out of the actions disabled for Trash items; library-ui.test.cjs checks the action list in Trash."
+      },
+      {
+        "id": "trash-no-pin-tag-drag",
+        "behavior": "An item in Library Trash cannot be pinned, tagged or dragged into a folder by key or drag, matching the disabled action rows; it has to be restored first.",
+        "macos": "LibraryModel.favorite(), perform(.tag) and dragItems(_:) return early when the selection is in Trash; LibraryInteractionTests.testTrashedItemIgnoresPinTagAndDragLikeTheDisabledActionBarRows covers it.",
+        "windows": "perform() ignores pin, tag and the other editing actions for trashed ids, the Pin button is not rendered on a trashed card and dragstart is cancelled; library-ui.test.cjs checks it."
       },
       {
         "id": "undo-take-down-no-duplicate",
@@ -213,8 +249,14 @@
         "id": "unavailable-watched-folder",
         "behavior": "A watched folder that is unavailable (for example on an unmounted volume) is skipped while watching but stays in the saved list, so adding or removing another watched folder does not forget it.",
         "macos": "AppDelegate.extraFolders returns every saved folder and existingExtraFolders is the subset that is watched, re-evaluated when a volume mounts; SettingsTests.testAddingAWatchedFolderKeepsOneThatIsCurrentlyUnavailable covers it.",
-        "windows": "main.cjs skips a watchFolders entry that is not a directory without changing the list; model.test.cjs checks that adding and removing folders keeps an unavailable entry."
+        "windows": "lib/folder-watchers.cjs skips a watchFolders entry that is not a directory without changing the list; model.test.cjs checks that adding and removing folders keeps an unavailable entry."
         },
+      {
+        "id": "watched-folder-failures",
+        "behavior": "An image added to a watched folder is imported once its writes settle. If it cannot be imported, a notice uses the shared \"File could not be read or safely saved\" catalog key in the selected language; only a source file removed before it is imported produces no notice and no item. A folder that cannot be watched is skipped without a notice.",
+        "macos": "ImageHistory.add sets the library notice to HistoryFiles.Failure.unsafeFile (\"File could not be read or safely saved\") when a watched image cannot be hung. ScreenshotWatcher logs and skips a folder it cannot open.",
+        "windows": "lib/folder-watchers.cjs reports the same catalog key through the main-process notice path, suppresses ENOENT only when the watched source no longer exists, and skips a folder it cannot watch; folder-watchers.test.cjs drives real file-system events with the actual Store."
+      },
         {
         "id": "disabled-undo-names-the-surface",
         "behavior": "A disabled undo row first says where it is available: Undo trash on the shelves reads \"Available in Library\" and Undo take down in the Library reads \"Available on the shelves\"; \"Nothing to undo\" is shown only on the surface where the undo exists.",
@@ -250,6 +292,18 @@
         "behavior": "When a text is copied again while the Library holds more than one live copy of it, one item is kept and takes the pins, folders, tags, name and note of the others; the other copies move to Trash with what they held, where they can be restored, and are never deleted outright. Undo take down does not bring such a copy back.",
         "macos": "LibraryStore.captureText marks every extra matching row deleted with a new trashRevision and invalidates its shelf and Trash undo entries; TextDedupStoreTests.testImportedDuplicatesConsolidateOnRecaptureAndPreserveAllOrganization covers it.",
         "windows": "Store.insert sets trashedAt, trashRevision and hiddenFromShelf on the extra matches instead of dropping them, and removes their undo entries; model.test.cjs 'recopying a text that has live duplicates merges them and keeps the extras in Trash like macOS' and 'undo of an earlier removal cannot revive a duplicate that a recopy merged into Trash', and text-identity-parity.test.cjs cover it."
+      },
+      {
+        "id": "folder-menu-path",
+        "behavior": "Wherever an item is added to, moved to or listed in a folder (the Add to folder and Move to folder choices and the Folders list of the details panel), a subfolder is shown with the same full path as the Library title (Parent / Child), so same-named subfolders of different parents can be told apart; a top-level folder shows only its name.",
+        "macos": "The Library list menu, the toolbar Actions menu and the inspector's Folders list, Add to folder and Move to folder menus title each folder with LibraryModel.folderPath, which indexes the paths once per folder list; LibraryNativeTests.testAddToFolderMenuTellsSameNamedSubfoldersApart and testToolbarAddToFolderMenuTellsSameNamedSubfoldersApart cover the menus.",
+        "windows": "The folder picker options (currentModalOptions) and the inspector memberships in renderer.js use folderPath(); library-ui.test.cjs 'Add to folder and the inspector tell same-named subfolders apart like macOS' covers both."
+      },
+      {
+        "id": "name-and-pin-names-the-selection",
+        "behavior": "Name and pin started from a menu on an item that is part of a selection of more than one names every selected item in turn, like the Name and pin shortcut; started on an item outside the selection it names only that item and leaves the selection unchanged.",
+        "macos": "The shelf card menus call Line.requestNameAndPin and the Library list menu calls LibraryModel.requestNameAndPin, which hand the ordered selection to onNameAndPinBatchRequested when the clicked item is in a multi-selection; NameAndPinWorkflowTests.testMenuNameAndPinNamesTheWholeSelectionLikeTheKey covers the three shelves, a card outside the selection and the Library list.",
+        "windows": "Windows has no per-item pointer menu (a right-click opens the same command list for the card, see card-right-click); its menu entry for Name and pin (the command list) runs the name action on the current selection (startName); renderer-ui.test.cjs runs Name and pin from the command list on a two-item selection and checks the 1 / 2 and 2 / 2 prompts."
       }
     ]
   },

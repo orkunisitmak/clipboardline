@@ -34,6 +34,20 @@ import XCTest
         }
         XCTAssertEqual(try store.tags().count, 6); XCTAssertEqual(try store.collections().count, 6)
     }
+    func testTrashedItemIgnoresPinTagAndDragLikeTheDisabledActionBarRows() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
+        let note = try XCTUnwrap(store.captureText("trashed note")); try store.trash([note.id])
+        let model = LibraryModel(store: store); var tagRequests = 0; model.onTagRequested = { tagRequests += 1 }
+        model.changeScope(.trash); wait { model.ids == [note.id] }
+        XCTAssertTrue(model.select(note.id))
+        XCTAssertTrue(model.perform(.pin)); XCTAssertTrue(model.perform(.tag))
+        XCTAssertEqual(tagRequests, 0); XCTAssertEqual(try store.item(note.id)?.favorite, false)
+        XCTAssertTrue(model.dragItems(note.id).isEmpty)
+        let live = try XCTUnwrap(store.captureText("live note")); try store.retain([live.id])
+        model.changeScope(.saved); wait { model.ids == [live.id] }
+        XCTAssertTrue(model.select(live.id)); XCTAssertTrue(model.perform(.tag)); XCTAssertEqual(tagRequests, 1)
+        XCTAssertFalse(model.dragItems(live.id).isEmpty)
+    }
     func testNewNoteIsTitledByItsFirstLineLikeWindows() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let store = try library(f)
         let model = LibraryModel(store: store)
@@ -170,6 +184,10 @@ import XCTest
         source.copy("https://example.com/new"); watcher.check(); XCTAssertEqual(links.count, 2)
         linkOn = false; textOn = true; source.copy("https://example.com/another"); watcher.check(); XCTAssertEqual(texts.last, "https://example.com/another")
         linkOn = true; source.count += 1; source.values = [[.URL: Data("https://example.com/url-representation".utf8)]]; watcher.check(); XCTAssertEqual(links.last?.path, "/url-representation")
+        linkOn = true; textOn = false
+        let destination = URL(string: "https://platform.openai.com/docs")!
+        source.count += 1; source.values = [[.string: Data("OpenAI docs".utf8), .URL: Data(destination.absoluteString.utf8)]]
+        watcher.check(); XCTAssertEqual(links.last, destination); XCTAssertFalse(texts.contains("OpenAI docs"))
     }
     func testRouterSkipsPrivateMarkersFilesImagesOwnCopyAndRacesBeforeRecording() throws {
         let source = LibraryClipboard(); var received = 0

@@ -9,6 +9,84 @@ function privateClipboard(formats){
 }
 function validSequence(value){return Number.isInteger(value)&&value>0&&value<=0xffffffff;}
 const changed=Object.freeze({raced:true});
+// Only a single valid URL can replace a copied display label. Reject
+// ambiguous multi-link copies rather than silently saving the wrong target.
+function uriListURL(value,plainURL){
+  const lines=value.split(/\r?\n/).map(line=>line.trim()).filter(line=>line&&!line.startsWith('#'));
+  return lines.length===1?plainURL(lines[0]):null;
+}
+const htmlSpace=c=>c===' '||c==='\t'||c==='\n'||c==='\f'||c==='\r';
+// The one anchor that carries a real href attribute, with its content. Start tags
+// are scanned attribute by attribute, so data-href or text inside another value is
+// never the destination, and an anchor inside a comment is not a link. Several
+// links or an unterminated tag give null. This reads attributes only; it never
+// interprets markup. TextClipboardWatcher's LinkedHTML follows the same steps on macOS.
+function singleAnchor(html){
+  let found=null,i=0;
+  while((i=html.indexOf('<',i))>=0){
+    // A comment's content is not markup; an unclosed comment runs to the end.
+    if(html.startsWith('!--',i+1)){const close=html.indexOf('-->',i+2);if(close<0)break;i=close+3;continue;}
+    const after=html[i+2];
+    if((html[i+1]!=='a'&&html[i+1]!=='A')||!(htmlSpace(after)||after==='>'||after==='/')){i++;continue;}
+    let p=i+2,href;
+    for(;;){
+      while(htmlSpace(html[p])||html[p]==='/')p++;
+      if(p>=html.length)return null;
+      if(html[p]==='>'){p++;break;}
+      let start=p;while(p<html.length&&!htmlSpace(html[p])&&html[p]!=='='&&html[p]!=='>'&&html[p]!=='/')p++;
+      const name=html.slice(start,p).toLowerCase();let value='';
+      while(htmlSpace(html[p]))p++;
+      if(html[p]==='='){
+        p++;while(htmlSpace(html[p]))p++;
+        if(p>=html.length)return null;
+        if(html[p]==='"'||html[p]==="'"){
+          const end=html.indexOf(html[p],p+1);if(end<0)return null;
+          value=html.slice(p+1,end);p=end+1;
+        }else{start=p;while(p<html.length&&!htmlSpace(html[p])&&html[p]!=='>')p++;value=html.slice(start,p);}
+      }
+      if(name==='href'&&href===undefined)href=value;
+    }
+    if(href!==undefined){
+      if(found)return null;
+      let end=p;
+      for(;;){
+        end=html.indexOf('</',end);if(end<0){end=html.length;break;}
+        const close=html[end+3];
+        if((html[end+2]==='a'||html[end+2]==='A')&&(close===undefined||close==='>'||htmlSpace(close)))break;
+        end+=2;
+      }
+      found={href,text:html.slice(p,end)};
+    }
+    i=p;
+  }
+  return found;
+}
+const ENTITIES={amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' '};
+function decodeEntities(value){
+  return value.replace(/&(#[xX][0-9a-fA-F]{1,6}|#[0-9]{1,7}|amp|lt|gt|quot|apos|nbsp);/g,(whole,name)=>{
+    if(name[0]!=='#')return ENTITIES[name];
+    const code=/^#x/i.test(name)?parseInt(name.slice(2),16):parseInt(name.slice(1),10);
+    return code>0&&code<=0x10ffff&&!(code>=0xd800&&code<=0xdfff)?String.fromCodePoint(code):whole;
+  });
+}
+const label=value=>value.replace(/\p{White_Space}+/gu,' ').trim();
+// An HTML copy is a link only when it is one link and nothing else: the plain-text
+// label equals the anchor's own text, or there is no plain text at all. A paragraph
+// that merely contains a link stays text, as on macOS.
+function htmlAnchorURL(html,plain,plainURL){
+  const anchor=singleAnchor(html);if(!anchor)return null;
+  if(plain!==undefined&&label(plain)!==label(decodeEntities(anchor.text.replace(/<[^>]*>/g,''))))return null;
+  return plainURL(decodeEntities(anchor.href));
+}
+async function representation(entries,format){
+  const entry=entries.find(item=>item.types.includes(format));
+  if(!entry)return null;
+  let blob;
+  try{blob=await entry.getType(format);}catch{return null;}
+  if(!blob||blob.size>1024*1024)return null;
+  try{return new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(await blob.arrayBuffer());}catch{return null;}
+}
+
 // With link capture off a standalone URL is ordinary text, as on macOS.
 async function readClipboardContent({clipboard,sequence,marker,plainURL,captureLinks=true}){
   let before;try{before=await sequence();}catch{return null;}if(!validSequence(before))return null;
@@ -35,15 +113,37 @@ async function readClipboardContent({clipboard,sequence,marker,plainURL,captureL
     const blob=await image.getType('image/png');if(blob.size>64*1024*1024)return null;
     bytes=Buffer.from(await blob.arrayBuffer());kind='image';value=bytes;
   }else{
-    // Use this item's payload, never a second live readText() of a replacement
-    // clipboard whose private formats have not been inspected.
-    const text=entries.find(item=>item.types.includes('text/plain'));if(!text)return null;
-    const blob=await text.getType('text/plain');if(blob.size>1024*1024)return null;
-    bytes=Buffer.from(await blob.arrayBuffer());if(bytes.length>1024*1024)return null;
-    try{value=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);}catch{return null;}
-    if(!value||! /\P{White_Space}/u.test(value))return null;
-    if(paymentIdentifier(value))return null;
-    const url=captureLinks?plainURL(value):null;kind=url?'link':'text';if(url)value=url;
+    // Electron exposes a linked copy's destination separately from its display
+    // label. Prefer that native bookmark only when the user enabled link capture.
+    if(captureLinks){
+      const bookmark=entries.find(item=>item.types.includes('electron application/bookmark'));
+      if(bookmark)try{
+        const payload=await bookmark.getType('electron application/bookmark');
+        const url=plainURL(payload?.url);
+        if(url){bytes=Buffer.from(url,'utf8');kind='link';value=url;}
+      }catch{}
+    }
+    if(kind!=='link'&&captureLinks){
+      const list=await representation(entries,'text/uri-list'),url=list===null?null:uriListURL(list,plainURL);
+      if(url){bytes=Buffer.from(url,'utf8');kind='link';value=url;}
+    }
+    if(kind!=='link'){
+      // Use this item's payload, never a second live readText() of a replacement
+      // clipboard whose private formats have not been inspected.
+      const text=entries.find(item=>item.types.includes('text/plain'));
+      if(text){
+        const blob=await text.getType('text/plain');if(blob.size>1024*1024)return null;
+        bytes=Buffer.from(await blob.arrayBuffer());if(bytes.length>1024*1024)return null;
+        try{value=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);}catch{return null;}
+        if(!value||! /\P{White_Space}/u.test(value))return null;
+        if(paymentIdentifier(value))return null;
+      }
+      const html=captureLinks?await representation(entries,'text/html'):null;
+      const anchor=html===null?null:htmlAnchorURL(html,text?value:undefined,plainURL);
+      if(anchor){bytes=Buffer.from(anchor,'utf8');kind='link';value=anchor;}
+      else if(!text)return null;
+      else{const url=captureLinks?plainURL(value):null;kind=url?'link':'text';if(url)value=url;}
+    }
   }
   if(!await current())return changed;
   return{kind,value,sequence:before,owned:false,fingerprint:kind+':'+crypto.createHash('sha256').update(bytes).digest('hex')};
