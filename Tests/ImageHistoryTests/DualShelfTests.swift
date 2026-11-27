@@ -57,6 +57,90 @@ final class DualShelfTests: HistoryTestCase {
             XCTAssertEqual(Set(trashed), Set(shown[0...1]), "only the two selected links, not the third")
         }
     }
+    @MainActor func testImageTakeDownEverythingToTheRightKeepsPinnedImagesInTheLibrary() throws {
+        try fixture { f in
+            let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+            let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, copyImage: { _ in }, library: store)
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            for item in line.items { try line.togglePin(item.id) }
+            var trashRequested = false; line.onImageTrashRequested = { _ in trashRequested = true }
+            let first = try XCTUnwrap(line.displayItems.first)
+            line.takeDown(first.id, toTheLeft: false)
+            XCTAssertFalse(trashRequested)
+            XCTAssertEqual(line.items.map(\.id), [first.id])
+            let records = try store.query(LibraryQuery(scope: .saved))
+            XCTAssertEqual(records.count, 3); XCTAssertTrue(records.allSatisfy { $0.deletedAt == nil })
+        }
+    }
+    @MainActor func testUndoTakeDownBringsBackEverythingTakenDownToTheRight() throws {
+        try fixture { f in
+            let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+            let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, copyImage: { _ in }, library: store)
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            let shown = line.displayItems.map(\.id)
+            line.takeDown(shown[0], toTheLeft: false)
+            XCTAssertEqual(line.displayItems.map(\.id), [shown[0]])
+            line.undoShelfRemoval()
+            XCTAssertEqual(line.displayItems.map(\.id), shown, "one undo restores the whole side removal, unpinned images included")
+        }
+    }
+    @MainActor func testImageMultiDiscardStopsWhenThePreviewCannotBeSaved() throws {
+        try fixture { f in
+            let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+            let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, copyImage: { _ in }, library: store)
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            line.selectAll()
+            line.onFlushPreview = { false }
+            let image = try XCTUnwrap(line.items.first), view = GrabView()
+            GrabArea(item: image, line: line).configure(view)
+            let item = try XCTUnwrap(view.menuProvider().items.first { [L("Take down"), L("Discard")].contains($0.title) })
+            _ = item.target?.perform(item.action, with: item)
+            XCTAssertEqual(line.items.count, 3)
+        }
+    }
+    @MainActor func testImageTakeDownWithoutALibraryKeepsPinnedAppCopiesOutOfTheTrash() throws {
+        try fixture { f in
+            let line = f.line()
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            for item in line.items { _ = try line.togglePin(item.id) }
+            let urls = line.displayItems.map(\.url)
+            let first = try XCTUnwrap(line.displayItems.first)
+            line.takeDown(first.id, toTheLeft: false)
+            let trashed = (try? FileManager.default.contentsOfDirectory(atPath: f.folder.appendingPathComponent(".test-trash").path)) ?? []
+            XCTAssertTrue(trashed.isEmpty)
+            XCTAssertTrue(urls.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+        }
+    }
+    @MainActor func testRemovingASelectionWithoutALibraryStopsWhenThePreviewCannotBeSaved() throws {
+        try fixture { f in
+            let line = f.line()
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            _ = try line.togglePin(try XCTUnwrap(line.items.first).id)
+            line.selectAll()
+            line.onFlushPreview = { false }
+            line.removeActiveSelectionFromShelf()
+            XCTAssertEqual(line.items.count, 3)
+            XCTAssertTrue(line.items.allSatisfy { !$0.falling })
+        }
+    }
+    @MainActor func testImageTakeDownOnAMultiSelectionKeepsPinnedImagesInTheLibrary() throws {
+        try fixture { f in
+            let store = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
+            let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, copyImage: { _ in }, library: store)
+            for _ in 0..<3 { _ = line.hang(try f.image(), quietly: true) }
+            for item in line.items { try line.togglePin(item.id) }
+            line.selectAll()
+            var trashRequested = false; line.onTrashRequested = { trashRequested = true }
+            let image = try XCTUnwrap(line.items.first), view = GrabView()
+            GrabArea(item: image, line: line).configure(view)
+            let item = try XCTUnwrap(view.menuProvider().items.first { [L("Take down"), L("Discard")].contains($0.title) })
+            _ = item.target?.perform(item.action, with: item)
+            XCTAssertFalse(trashRequested)
+            XCTAssertTrue(line.items.isEmpty)
+            let records = try store.query(LibraryQuery(scope: .saved))
+            XCTAssertEqual(records.count, 3); XCTAssertTrue(records.allSatisfy { $0.deletedAt == nil && !$0.onShelf })
+        }
+    }
     @MainActor func testTextRangeEnterCommandAAndDeleteAreSymmetric() throws {
         try fixture { f in
             var copied = ""; var trashed: [UUID] = []
@@ -279,5 +363,38 @@ final class DualShelfTests: HistoryTestCase {
         let screen = try XCTUnwrap(LinePanel.screenUnderPointer()); panel.placeOnScreen(screen)
         XCTAssertEqual(panel.frame.height, Layout.panelHeight * 2)
         XCTAssertEqual(panel.frame.maxY, screen.visibleFrame.maxY)
+    }
+    @MainActor func testMenuPinOnSelectedCardPinsWholeSelectionOnTextAndImageShelves() throws {
+        try fixture { f in
+            let line = f.line()
+            for _ in 0..<3 { line.hang(try f.image(), quietly: true) }
+            for i in 0..<3 { line.texts.add("Synthetic \(i)") }
+            line.selectAll(); line.texts.selectAll()
+            let textID = try XCTUnwrap(line.texts.selectedEntries.first?.id), imageID = try XCTUnwrap(line.selectedItems.first?.id)
+            XCTAssertFalse(line.menuPinIsUnpin(textID, shelf: .texts))
+            line.texts.togglePin(textID)
+            XCTAssertTrue(line.texts.entries.first { $0.id == textID }?.pinned ?? false)
+            XCTAssertFalse(line.menuPinIsUnpin(textID, shelf: .texts))
+            line.texts.togglePin(textID)
+            line.pinFromMenu(textID, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).count, 3)
+            XCTAssertTrue(line.menuPinIsUnpin(textID, shelf: .texts))
+            line.pinFromMenu(imageID, shelf: .images)
+            XCTAssertEqual(line.items.filter(\.pinned).count, 3)
+            line.pinFromMenu(textID, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).count, 0)
+            line.texts.select(textID, width: line.viewportWidth)
+            let other = try XCTUnwrap(line.texts.entries.first { $0.id != textID }?.id)
+            line.pinFromMenu(other, shelf: .texts)
+            XCTAssertEqual(line.texts.entries.filter(\.pinned).map(\.id), [other])
+            line.texts.select(textID, width: line.viewportWidth)
+            line.texts.select(other, toggle: true, width: line.viewportWidth)
+            let outside = try XCTUnwrap(line.texts.entries.first { $0.id != textID && $0.id != other }?.id)
+            let selection = line.texts.selectedIDs
+            XCTAssertEqual(selection.count, 2); XCTAssertFalse(selection.contains(outside))
+            line.pinFromMenu(outside, shelf: .texts)
+            XCTAssertEqual(Set(line.texts.entries.filter(\.pinned).map(\.id)), Set([other, outside]))
+            XCTAssertEqual(line.texts.selectedIDs, selection)
+        }
     }
 }

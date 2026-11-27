@@ -39,29 +39,72 @@ function prune(keys){
  records.sort((a,b)=>b.time-a.time);let bytes=0;for(let index=0;index<records.length;index++){const record=records[index];bytes+=record.size;if(index>=MAX_CACHE_RECORDS||bytes>MAX_CACHE_BYTES){fs.unlinkSync(record.file);vectors.delete(record.key);}}
  return true;
 }
-async function sessions(){
- if(imageSession&&textSession)return;
- ort=require(workerData.ortModule||'onnxruntime-web/wasm');ort.env.logLevel='error';ort.env.wasm.numThreads=1;ort.env.wasm.proxy=false;
- // Every WASM/JS asset is packaged locally. ORT receives no network model URL.
- if(workerData.runtimeDirectory)ort.env.wasm.wasmPaths=pathToFileURL(workerData.runtimeDirectory+path.sep).href;
+/**
+ * Returns the ONNX session for one model, creating it on first use. Image
+ * indexing never loads the text model or tokenizer; both sessions may stay
+ * resident together until the parent terminates this idle worker.
+ * @param {'image'|'text'} kind Model to load.
+ * @returns {Promise<object>} The ONNX Runtime inference session.
+ * @throws When a model cannot load; the worker then reports `failed`.
+ */
+async function session(kind){
+ if(kind==='image'&&imageSession)return imageSession;
+ if(kind==='text'&&textSession)return textSession;
+ if(!ort){
+  ort=require(workerData.ortModule||'onnxruntime-web/wasm');ort.env.logLevel='error';ort.env.wasm.numThreads=1;ort.env.wasm.proxy=false;
+  // Every WASM/JS asset is packaged locally. ORT receives no network model URL.
+  if(workerData.runtimeDirectory)ort.env.wasm.wasmPaths=pathToFileURL(workerData.runtimeDirectory+path.sep).href;
+ }
  const options={executionProviders:['wasm'],graphOptimizationLevel:'all',enableCpuMemArena:true};
  try{
-  imageSession=await ort.InferenceSession.create(fs.readFileSync(safeFile(workerData.modelDirectory,'mobileclip-s2-image.onnx',400*1024*1024)),options);
+  if(kind==='image'){
+   imageSession=await ort.InferenceSession.create(fs.readFileSync(safeFile(workerData.modelDirectory,'mobileclip-s2-image.onnx',400*1024*1024)),options);
+   return imageSession;
+  }
+  tokenizer??=ClipTokenizer.fromFiles(path.join(workerData.modelDirectory,'clip-vocab.json'),path.join(workerData.modelDirectory,'clip-merges.txt'));
   textSession=await ort.InferenceSession.create(fs.readFileSync(safeFile(workerData.modelDirectory,'mobileclip-s2-text.onnx',600*1024*1024)),options);
+  return textSession;
  }catch(error){available=false;parentPort.postMessage({event:'failed'});throw error;}
 }
-async function infer(session,name,tensor){const output=await session.run({[name]:tensor}),first=output.embedding||output.final_emb_1||output[session.outputNames[0]],vector=normalized(first?.data);if(!vector)throw new Error('The offline model returned an invalid embedding.');return vector;}
+/**
+ * Runs one inference and returns its normalized embedding. The input and
+ * output tensors are disposed afterwards, including when the output is invalid.
+ * @param {object} activeSession ONNX inference session.
+ * @param {string} name Model input name.
+ * @param {object} tensor Input tensor.
+ * @returns {Promise<Float32Array>} Unit length embedding.
+ * @throws When the model returns no valid embedding.
+ */
+async function infer(activeSession,name,tensor){
+ const output=await activeSession.run({[name]:tensor});
+ try{
+  const first=output.embedding||output.final_emb_1||output[activeSession.outputNames[0]],vector=normalized(first?.data);
+  if(!vector)throw new Error('The offline model returned an invalid embedding.');
+  return vector;
+ }finally{
+  tensor?.dispose?.();
+  for(const value of Object.values(output||{}))value?.dispose?.();
+ }
+}
+/**
+ * Executes one validated request from the parent process.
+ * @param {'has'|'prune'|'index'|'search'} action Requested operation.
+ * @param {object} payload Operation input.
+ * @returns {Promise<boolean|{ids:string[],scores:{id:string,score:number}[]}>}
+ *   Cache/index result, or ranked matches for `search`.
+ * @throws On invalid input or an unknown action.
+ */
 async function handle(action,payload){
  if(action==='has')return load(payload.key)!==null;
  if(action==='prune')return prune(payload.keys);
  if(action==='index'){
   const {key,bitmap,width,height}=payload;if(!keyPattern.test(key))throw new Error('Invalid image search identity.');
-  const views=imageTensors(bitmap,width,height),embeddings=[];if(views.length){await sessions();for(const pixels of views)embeddings.push(await infer(imageSession,'image',new ort.Tensor('float32',pixels,[1,3,256,256])));}
+  const views=imageTensors(bitmap,width,height),embeddings=[];if(views.length){const activeSession=await session('image');for(const pixels of views)embeddings.push(await infer(activeSession,'image',new ort.Tensor('float32',pixels,[1,3,256,256])));}
   save(key,embeddings);return true;
  }
  if(action==='search'){
   if(typeof payload.query!=='string'||payload.query.length>2048||!Array.isArray(payload.entries)||payload.entries.length>20000||payload.entries.some(value=>!value||typeof value.id!=='string'||!keyPattern.test(value.key)))throw new Error('Invalid image search query.');
-  await sessions();let query=queryCache.get(payload.query);if(!query){query=await infer(textSession,'text',new ort.Tensor('int64',tokenizer.tensor(payload.query),[1,77]));queryCache.set(payload.query,query);if(queryCache.size>16)queryCache.delete(queryCache.keys().next().value);}
+  let query=queryCache.get(payload.query);if(!query){const activeSession=await session('text');query=await infer(activeSession,'text',new ort.Tensor('int64',tokenizer.tensor(payload.query),[1,77]));queryCache.set(payload.query,query);if(queryCache.size>16)queryCache.delete(queryCache.keys().next().value);}
   const scores=payload.entries.flatMap(value=>{const vector=load(value.key);if(!vector?.length)return[];const result=score(query,vector);return result===null?[]:[{id:value.id,score:result}];});return{ids:rankedMatches(scores).map(value=>value.id),scores};
  }
  throw new Error('Unknown image search operation.');
@@ -72,7 +115,7 @@ try{
  verifyModels();
  const metadata=fs.readFileSync(safeFile(workerData.modelDirectory,'model-source.json',1024*1024));modelID=crypto.createHash('sha256').update(metadata).digest('hex');
  for(const file of ['mobileclip-s2-image.onnx','mobileclip-s2-text.onnx','clip-vocab.json','clip-merges.txt'])safeFile(workerData.modelDirectory,file,600*1024*1024);
- tokenizer=ClipTokenizer.fromFiles(path.join(workerData.modelDirectory,'clip-vocab.json'),path.join(workerData.modelDirectory,'clip-merges.txt'));available=true;
+ available=true;
 }catch{}
 parentPort.postMessage({event:'ready',available});
 parentPort.on('message',message=>{serial=serial.then(async()=>{if(!available)return parentPort.postMessage({id:message.id,error:'Offline image search assets are unavailable.'});try{const result=await handle(message.action,message.payload||{});parentPort.postMessage({id:message.id,result});}catch(error){parentPort.postMessage({id:message.id,error:String(error.message||error).slice(0,300)});}});});

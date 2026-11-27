@@ -216,7 +216,7 @@ final class LibraryNativeWindow: NSWindow {
         alert.addButton(withTitle: L("Remove tag")); alert.addButton(withTitle: L("Cancel"))
         presentAlert(alert) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            self.model.perform { try self.model.store.removeTag(tag.id) }; self.model.changeScope(.saved)
+            self.model.deleteTag(tag.id)
         }
     }
     func reportActionStatus(_ message: String) {
@@ -397,7 +397,7 @@ final class LibraryNativeWindow: NSWindow {
                 Text(String(format: L("%d selected"), model.selectedIDs.count)).font(.title3.weight(.semibold))
                 HStack { Button(L("Copy")) { model.copy() }; Button(model.actionsArePinned ? L("Unpin") : L("Pin favorite")) { model.favorite() } }
                 Divider()
-                Menu(L("Add to folder")) { ForEach(model.collections) { folder in Button(folder.name) { model.assign(folder.id) } } }.disabled(model.collections.isEmpty)
+                Menu(L("Add to folder")) { ForEach(model.collections) { folder in Button(model.folderPath(folder.id) ?? folder.name) { model.assign(folder.id) } } }.disabled(model.collections.isEmpty)
                 Button(L("Add tag…")) { actions?.promptTag() }
                 Button(L("Save to library")) { model.retain() }
                 Button(L("Export copies…")) { actions?.exportSelection() }
@@ -424,9 +424,9 @@ final class LibraryNativeWindow: NSWindow {
                     Divider()
                     VStack(alignment: .leading, spacing: 8) {
                         Text(L("Folders")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        ForEach(model.inspectedCollections) { folder in HStack { Label(folder.name, systemImage: "folder").font(.caption); Spacer(); Button { model.unassign(folder.id) } label: { Image(systemName: "xmark") }.buttonStyle(.plain).help(L("Remove from folder") + ": " + folder.name).accessibilityLabel(L("Remove from folder") + ": " + folder.name) } }
-                        Menu(L("Add to folder")) { ForEach(model.collections) { folder in Button(folder.name) { model.assign(folder.id) } } }.disabled(model.collections.isEmpty)
-                        if case .collection = model.query.scope { Menu(L("Move to folder")) { ForEach(model.collections) { folder in Button(folder.name) { model.assign(folder.id, moving: true) } } } }
+                        ForEach(model.inspectedCollections) { folder in HStack { Label(model.folderPath(folder.id) ?? folder.name, systemImage: "folder").font(.caption); Spacer(); Button { model.unassign(folder.id) } label: { Image(systemName: "xmark") }.buttonStyle(.plain).help(L("Remove from folder") + ": " + (model.folderPath(folder.id) ?? folder.name)).accessibilityLabel(L("Remove from folder") + ": " + (model.folderPath(folder.id) ?? folder.name)) } }
+                        Menu(L("Add to folder")) { ForEach(model.collections) { folder in Button(model.folderPath(folder.id) ?? folder.name) { model.assign(folder.id) } } }.disabled(model.collections.isEmpty)
+                        if case .collection = model.query.scope { Menu(L("Move to folder")) { ForEach(model.collections) { folder in Button(model.folderPath(folder.id) ?? folder.name) { model.assign(folder.id, moving: true) } } } }
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         Text(L("Tags")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)

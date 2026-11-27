@@ -51,7 +51,8 @@ async function waitForCropBox(page,viewport,raster={width:900,height:220}){
   return ready.box;
 }
 async function main(){
-  const args=['--test-mode','--test-data='+data,'--test-tray'];
+  // Keep English-label native acceptance deterministic regardless of host Windows locale.
+  const args=['--lang=en-US','--test-mode','--test-data='+data,'--test-tray'];
   application=await electron.launch({...(process.env.CLIPBOARDLINE_EXECUTABLE?{executablePath:path.resolve(process.env.CLIPBOARDLINE_EXECUTABLE)}:{args:[path.resolve('.'),...args]}),...(process.env.CLIPBOARDLINE_EXECUTABLE?{args}:{}),timeout:60000});
   const page=await application.firstWindow();activePage=page;await page.waitForFunction(()=>!!window.clipboardLine);
   report.rendererErrors=[];page.on('pageerror',error=>{if(report.rendererErrors.length<20)report.rendererErrors.push(String(error.stack||error.message).slice(0,2000));});
@@ -343,11 +344,12 @@ async function main(){
   // The original and this PNG are different managed originals, so the FileDrop
   // batch contains two actual files, with the first raster as an app fallback.
   const batchText=await application.evaluate(()=>global.__clipboardLineTest.store.insert('text','şğü ıİ').id);
-  const batch=await page.evaluate(ids=>window.clipboardLine.command('copy',{ids,keepOpen:true}),[imageItem.id,secondImage,batchText]);assert.ok(!batch.result?.error,batch.result?.error);
+  const batch=await page.evaluate(ids=>window.clipboardLine.command('copy',{ids,keepOpen:true}),[imageItem.id,secondImage,batchText]);assert.ok(!batch.result?.error,batch.result?.error);assert.notEqual(batch.message,'Copied','a multi-item copy leaves the counted toast to the renderer');
   await until(fixtureState,s=>s.dropCount===2&&s.pngAvailable);assert.equal(await application.evaluate(async({clipboard})=>clipboard.readText()),'şğü ıİ');
   await application.evaluate(()=>global.__clipboardLineTest.readClipboard());assert.equal((await page.evaluate(()=>window.clipboardLine.state())).items.length,batch.items.length);
   await page.evaluate(ids=>window.clipboardLine.command('trash',{ids}),[batchText]);await page.evaluate(ids=>window.clipboardLine.command('delete',{ids}),[batchText]);check('multi-image copy supplies native Windows FileDrop batch and full-resolution PNG fallback without recapture');
   const copied=await page.evaluate(id=>window.clipboardLine.command('copy',{ids:[id]}),textItem.id);assert.ok(!copied.result?.error);assert.equal(await application.evaluate(()=>global.__clipboardLineTest.getWindow().isVisible()),false);check('plain Enter copy dismisses shelves/preview host and restores previous application');
+  await require('./focus-return-placement-acceptance.cjs')({page,application,check,until,fixtureCommand,fixtureState});
   await fixtureCommand({action:'focus',target:'plain'});await application.evaluate(()=>global.__clipboardLineTest.command('show'));
   const closedTarget=await application.evaluate(()=>global.__clipboardLineTest.getTarget());assert.ok(closedTarget.editable);
   const exited=new Promise(resolve=>fixture.once('exit',resolve));fixture.kill();await exited;fixture=null;await application.evaluate(async({clipboard})=>await clipboard.writeText('Clipboard before closed target'));

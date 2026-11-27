@@ -23,6 +23,8 @@ struct LibraryRecord: Codable, Equatable, Identifiable {
     /// records need no migration; every new trash transition gets a fresh value.
     var trashRevision: UUID?
     var retainedAt: Date?
+    /// Set on records made by New note; a capture never merges with or drops one, as on Windows.
+    var createdAsNote: Bool?
     var favorite = false
     var onShelf = true
     var deletedAt: Date?
@@ -115,6 +117,8 @@ private enum LibrarySQL {
         if let days = query.days { whereParts.append("i.created>=?"); values.append(.real(now.addingTimeInterval(-Double(days) * 86400).timeIntervalSince1970)) }
         if !query.domain.isEmpty {
             var domain = query.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            // Stored hosts are ASCII (punycode), so an internationalized name typed as written is converted first; anything with a path, query, port or credentials is not a host name and stays as typed.
+            if domain.unicodeScalars.contains(where: { !$0.isASCII }), domain.rangeOfCharacter(from: CharacterSet(charactersIn: "/?#@:\\").union(.whitespaces)) == nil, let host = URL(string: "https://" + domain)?.host { domain = host }
             if domain.hasPrefix("www.") { domain.removeFirst(4) }
             let suffix = "." + domain
             // Literal host boundaries include subdomains without wildcard or
@@ -452,7 +456,7 @@ extension String {
     func imageSearchChanged() { searchRevision += 1 }
     @discardableResult func createNote() throws -> LibraryRecord {
         let date = now(); var record = LibraryRecord(id: UUID(), kind: .text, createdAt: date, updatedAt: date)
-        record.text = ""; record.retainedAt = date; record.title = L("Untitled note")
+        record.text = ""; record.retainedAt = date; record.createdAsNote = true
         try db.transaction { try put(record) }; changed(); return record
     }
     @discardableResult func captureImage(_ url: URL, capturedAt: Date? = nil) throws -> LibraryRecord {
@@ -466,7 +470,7 @@ extension String {
         var moved: LibraryRecord?
         try db.transaction {
             if let match = try identicalImage(to: url), var existing = try item(match.id), existing.deletedAt == nil {
-                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.captureRevision = UUID()
+                existing.createdAt = try frontDate(date); existing.updatedAt = date; existing.onShelf = true; existing.lastCapturedAt = date; existing.lastCopiedAt = date; existing.captureRevision = UUID()
                 try put(existing); moved = existing
             } else { try put(fresh) }
         }
@@ -515,6 +519,7 @@ extension String {
             var canonical: LibraryRecord?
             for row in rows {
                 guard let id = row["id"]?.string.flatMap(UUID.init(uuidString:)), var duplicate = try item(id) else { throw HistoryFiles.Failure.unsafeFile }
+                guard duplicate.createdAsNote != true else { continue }
                 guard let candidate = duplicate.text, TextIdentity.key(candidate).utf8.elementsEqual(identity.utf8) else { continue }
                 guard var current = canonical else { canonical = duplicate; continue }
                 // Preserve personal organization on the surviving identity.
@@ -821,11 +826,30 @@ extension String {
                 return !record.onShelf && record.deletedAt == entry.removedAt
             }
             guard !values.isEmpty else { shelfRemovalUndo.removeLast(); continue }
-            let ids = values.map(\.id)
+            // Copying the same text or link again while it was off the shelf made a new card; Undo must not hang it twice.
+            let restorable = try values.filter { entry in try item(entry.id).map { try !hasLiveTwin($0) } ?? false }
+            guard !restorable.isEmpty else { shelfRemovalUndo.removeLast(); return [] }
+            let ids = restorable.map(\.id)
             try mutate(ids, owning: false) { $0.onShelf = true; $0.deletedAt = nil; $0.trashRevision = nil }
             shelfRemovalUndo.removeLast(); return ids
         }
         return []
+    }
+    private func hasLiveTwin(_ record: LibraryRecord) throws -> Bool {
+        guard record.deletedAt != nil else { return false }
+        let id = [SQLValue.text(record.id.uuidString)]
+        if record.kind == .link, let normalized = record.normalizedURL {
+            return try !db.rows("SELECT 1 FROM items WHERE normalized=? AND kind='link' AND deleted IS NULL AND shelf=1 AND id<>?", [.text(normalized)] + id).isEmpty
+        }
+        guard record.kind == .text, let text = record.text else { return false }
+        let key = TextIdentity.key(text)
+        // A rollback app can edit text while this app stays open; repair the index after another connection writes, as captureText does.
+        let observed = try db.rows("PRAGMA data_version").first?["data_version"]?.number
+        if observed != textIdentityDataVersion { try db.transaction { try repairTextIdentity() }; textIdentityDataVersion = observed }
+        for row in try db.rows("SELECT i.id FROM text_identity t JOIN items i ON i.id=t.item WHERE t.digest=? AND i.kind='text' AND i.deleted IS NULL AND i.shelf=1 AND i.id<>?", [.blob(Self.textDigest(text))] + id) {
+            if let other = row["id"]?.string.flatMap(UUID.init(uuidString:)), let candidate = try item(other)?.text, TextIdentity.key(candidate).utf8.elementsEqual(key.utf8) { return true }
+        }
+        return false
     }
     private func invalidateShelfUndo(_ ids: [UUID]) {
         let affected = Set(ids)
@@ -966,7 +990,21 @@ extension String {
                 : "SELECT payload FROM items WHERE kind=? AND deleted IS NULL AND retained IS NULL AND created<=?"
             expired += try LibrarySQL.decode(db.rows(sql, [.text(kind.rawValue), .real(cutoff.timeIntervalSince1970)])).filter { ($0.lastCapturedAt ?? $0.createdAt) <= cutoff }
         }
+        // A screenshot deleted in Finder falls off the shelf, as it does without the Library.
+        let expiredIDs = Set(expired.map(\.id))
+        let gone = try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='image' AND shelf=1 AND deleted IS NULL AND retained IS NULL")).filter { record in
+            record.path.map(Self.fileWasDeleted) ?? false && !expiredIDs.contains(record.id)
+        }
+        expired += gone
         if !expired.isEmpty { try trash(expired.map(\.id)) }
+    }
+    /// Only a file that is really gone (ENOENT) while its folder can still be read counts as deleted.
+    /// A disk that is not mounted, a permission error or any other read failure keeps the item.
+    private static func fileWasDeleted(_ path: String) -> Bool {
+        var info = stat()
+        guard stat(path, &info) != 0, errno == ENOENT else { return false }
+        let folder = (path as NSString).deletingLastPathComponent
+        return stat(folder, &info) == 0 && info.st_mode & S_IFMT == S_IFDIR && access(folder, R_OK | X_OK) == 0
     }
     func collections() throws -> [LibraryCollection] {
         try db.rows("SELECT * FROM collections ORDER BY folded,id").map { row in
@@ -1041,15 +1079,19 @@ extension String {
     func removeTag(_ tag: UUID, from itemID: UUID? = nil) throws {
         let affected = try db.rows("SELECT item FROM item_tags WHERE tag=?", [.text(tag.uuidString)]).compactMap { $0["item"]?.string.flatMap(UUID.init(uuidString:)) }
         try db.transaction {
-            if let itemID { try db.execute("DELETE FROM item_tags WHERE tag=? AND item=?", [.text(tag.uuidString), .text(itemID.uuidString)]) }
+            if let itemID {
+                try db.execute("DELETE FROM item_tags WHERE tag=? AND item=?", [.text(tag.uuidString), .text(itemID.uuidString)])
+                try db.execute("DELETE FROM tags WHERE id=? AND NOT EXISTS(SELECT 1 FROM item_tags WHERE tag=?)", [.text(tag.uuidString), .text(tag.uuidString)])
+            }
             else { try db.execute("DELETE FROM item_tags WHERE tag=?", [.text(tag.uuidString)]); try db.execute("DELETE FROM tags WHERE id=?", [.text(tag.uuidString)]) }
             for id in affected { if let value = try item(id) { try put(value) } }
         }; changed()
     }
     func renameTag(_ id: UUID, name: String) throws {
-        let name = try cleanedName(name)
+        let name = try cleanedName(name.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "#")))
         let existing = try tags()
         guard existing.contains(where: { $0.id == id }), !existing.contains(where: { $0.id != id && $0.name.libraryFolded == name.libraryFolded }) else { throw HistoryFiles.Failure.invalidDestination }
+        if existing.first(where: { $0.id == id })?.name == name { return }
         let affected = try db.rows("SELECT item FROM item_tags WHERE tag=?", [.text(id.uuidString)]).compactMap { $0["item"]?.string.flatMap(UUID.init(uuidString:)) }
         try db.transaction { try db.execute("UPDATE tags SET name=?,folded=? WHERE id=?", [.text(name), .text(name.libraryFolded), .text(id.uuidString)]); for id in affected { if let value = try item(id) { try put(value) } } }; changed()
     }

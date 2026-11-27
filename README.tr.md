@@ -12,8 +12,8 @@ Görseller, metinler ve linkler elinin altında. Son kopyalarını üç askıda 
 
 ## İlk beş dakikan
 
-1. **Kur ve aç.** Son Mac sürümünü indir, uygulamayı Applications klasörüne taşı ve aç. ClipBoardLine menü çubuğunda yaşar.
-2. **Ne toplamak istediğini seç.** Ayarlar → Kaynaklar’dan istersen görsel veya metin yakalamayı aç. Tek URL yakalama varsayılan açık gelir ve kapatılabilir. Ekran görüntüsü yönetimini ayrıca seç.
+1. **Kur ve aç.** Son Mac sürümünü indir, uygulamayı Applications klasörüne taşı ve aç. ClipBoardLine menü çubuğunda yaşar. Windows’ta x64 kurulum dosyasını çalıştır; ClipBoardLine sistem tepsisinde yaşar.
+2. **Ne toplamak istediğini seç.** Ayarlar → Kaynaklar’dan görsel veya metin yakalamayı aç. İkisi de Mac’te ve Windows’ta kapalı gelir; açana kadar yalnızca linkler toplanır. Tek URL yakalama varsayılan açık gelir ve kapatılabilir. Ekran görüntüsü yönetimini ayrıca seç.
 3. **Akışını bozmadan gezin.** ⌃⌥T’ye bas, oklarla gezin, Space ile önizle. Enter kopyalar ve askıları kapatır; odak önceki uygulamaya döner.
 4. **İşe yarayanları sakla.** P ile sabitle, ⇧P ile klasör seç veya ⌥P ile anlamlı bir ad ver. Etiketlenen ya da klasöre eklenen kayıtlar normal geçmiş süresi sonunda kalır.
 5. **Kendine göre ayarla.** Her içerik türünün geçmiş süresini, kısayolları, renkleri ve otomatik güncelleme kontrolünü Ayarlar’dan düzenle.
@@ -253,7 +253,7 @@ Açıkken güncelleme kontrolü açılışta zamanı geldiyse ve uygulama çalı
 ## Yerel arşiv. Açıkça seçilen bağlantılar.
 
 - **Cihazında saklanır.** Geçmiş, klasör, etiket, not, küçük görsel ve arama indeksleri yerelde tutulur. ClipBoardLine bulut senkronizasyonu sunmaz. Yerel geçmiş bir parola kasası değildir; kopyaladığın ve sakladığın içerikleri sen seçersin.
-- **Görsel ve metin yakalama isteğe bağlıdır.** İzlemeyi açmak panodaki eski içeriği içeri aktarmaz. Gizli, geçici ve otomatik üretilmiş pano işaretleri denetlenir; Finder dosya kopyaları atlanır ve uygulamanın kendi kopyaları yeniden eklenmez.
+- **Görsel ve metin yakalama isteğe bağlıdır.** İzlemeyi açmak panodaki eski içeriği içeri aktarmaz. Gizli, geçici ve otomatik üretilmiş pano işaretleri denetlenir; Finder dosya kopyaları atlanır ve uygulamanın kendi kopyaları yeniden eklenmez. Yalnızca bir kart numarası (Luhn doğrulamalı) veya IBAN'dan oluşan kopya hiç kaydedilmez; bunları yalnızca içeren metinler kopyalandığı gibi tutulur.
 - **OCR ve görsel arama cihazda kalır.** Yazı tanıma, görsel vektörleri ve arama sorguları yerel çalışır. Çalışma anında OCR/görsel arama, görselleri veya sorgu metnini yüklemez.
 - **Link zenginleştirme isteğe bağlı ağ erişimidir.** Açıkken başlık ve küçük görsel için linkin sitesine veya YouTube’a bağlanır. Yerel adresler ve bilinen gizli parametreleri taşıyan URL’ler dışlanır; istemiyorsan Kaynaklar’dan kapat.
 - **Güncellemeler ağı kullanır, cihaz token’ı istemez.** Resmî Sparkle akışı ve arşivleri herkese açık ve imzalıdır. Kontrol ayarlanabilir; indirme ve kurulum senin işlemini gerektirir. Bu kanal GitHub hesabına giriş istemez.

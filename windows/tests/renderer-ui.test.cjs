@@ -11,11 +11,12 @@ const {execFileSync}=require('node:child_process');
 const os=require('node:os');
 const {exportCopies}=require('../lib/export-copies.cjs');
 
-function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,exporter=null}={}){
- const listeners=new Map(),nodes=new Map(),commands=[],imageLoads=[],animationFrames=[],paintCalls=[];let exportFailures=0;
+function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,exporter=null,trackFocus=false,serializeOverlayMarkup=false}={}){
+ const listeners=new Map(),nodes=new Map(),commands=[],imageLoads=[],animationFrames=[],paintCalls=[];let exportFailures=0,lastClick=null,testDocument;
  class Element{
-  constructor(id=''){this.id=id;this.innerHTML='';this.textContent='';this.dataset={};this.style={};this.className='';this.value='';this.selectionStart=0;this.selectionEnd=0;this.classList={add(){},remove(){},contains(){return false;}};}
-  setAttribute(){}querySelector(){return null;}querySelectorAll(){return [];}focus(){}blur(){}select(){}setSelectionRange(){}scrollIntoView(){}matches(){return false;}closest(){return null;}
+  constructor(id=''){this.id=id;this._innerHTML='';this.textContent='';this.dataset={};this.style={};this.className='';this.value='';this.selectionStart=0;this.selectionEnd=0;this.isConnected=true;this.classList={add(){},remove(){},contains(){return false;}};}
+  get innerHTML(){return this._innerHTML;}set innerHTML(value){if(trackFocus&&this.id==='app'&&lastClick)lastClick.isConnected=false;if(trackFocus&&this.id==='overlay-root'&&testDocument?.activeElement?.insideOverlay){testDocument.activeElement.isConnected=false;testDocument.activeElement=testDocument.body;}this._innerHTML=value;}
+  setAttribute(){}querySelector(){if(trackFocus&&this.id==='overlay-root'&&this.innerHTML){const target=new Element();target.insideOverlay=true;return target;}return null;}querySelectorAll(){return [];}focus(){if(trackFocus&&testDocument){this.isConnected=true;testDocument.activeElement=this;}}blur(){if(trackFocus&&testDocument?.activeElement===this)testDocument.activeElement=testDocument.body;}select(){}setSelectionRange(){}scrollIntoView(){}matches(){return false;}closest(){return null;}
  }
  class TextArea extends Element{}
  class Canvas extends Element{
@@ -28,7 +29,9 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
   constructor(){super();this.naturalWidth=imageRaster.width;this.naturalHeight=imageRaster.height;this.complete=true;}
   set src(value){imageLoads.push({url:value,crossOrigin:this.crossOrigin});if(this.onload)queueMicrotask(()=>this.onload());}
  }
- const document={body:new Element('body'),activeElement:null,querySelectorAll(){return[];},getElementById(id){if(!nodes.has(id))nodes.set(id,id==='markup-canvas'?new Canvas(id):new Element(id));return nodes.get(id);},createElement(tag){return tag==='canvas'?new Canvas():new Element();},querySelector(){return null;},addEventListener(name,listener){if(!listeners.has(name))listeners.set(name,[]);listeners.get(name).push(listener);}};
+ const document={body:new Element('body'),activeElement:null,querySelectorAll(){return[];},getElementById(id){if(!nodes.has(id))nodes.set(id,id==='markup-canvas'?new Canvas(id):new Element(id));return nodes.get(id);},createElement(tag){return tag==='canvas'?new Canvas():new Element();},querySelector(){return null;},addEventListener(name,listener){if(!listeners.has(name))listeners.set(name,[]);listeners.get(name).push(listener);}};testDocument=document;
+ const overlayNode=document.getElementById('overlay-root');let overlayWrites=0,overlayMarkup='';
+ Object.defineProperty(overlayNode,'innerHTML',{get(){return overlayMarkup;},set(value){overlayWrites++;overlayMarkup=serializeOverlayMarkup?value.replace(/ >/g,'>'):value;}});
  const image='00000000-0000-4000-8000-000000000001',text1='00000000-0000-4000-8000-000000000002',text2='00000000-0000-4000-8000-000000000003',link='00000000-0000-4000-8000-000000000004';
  const base=(id,kind,createdAt,extra)=>({id,kind,createdAt,updatedAt:createdAt,name:'',title:'',text:'',url:'',pinned:false,folderIds:[],tags:[],trashedAt:null,hiddenFromShelf:false,...extra});
  const state={items:[base(image,'image',1000,{name:'Synthetic image',...(imageDocument?{annotations:[],crop:null}:{}),mediaUrl:'appmedia://media/'+image,originalMediaUrl:'appmedia://media/'+image+'/original'}),base(text1,'text',900,{text:'Text one'}),base(text2,'text',800,{text:'Text two'}),base(link,'link',700,{url:'https://example.com/reference',title:'Reference link'})],folders:[],settings:{visibleKinds:['image','text','link'],retentionDays:{image:30,text:30,link:30},shortcuts:{toggle:'Control+Alt+Space',search:'Control+Alt+S'},localShortcuts:{},language:'en',theme:'soft',cardSize:'medium'},view:'shelves',version:'1.7.0',windowVisible:initialVisible,canUndo:false,canUndoTrash:false,libraryRevision:0};
@@ -60,11 +63,11 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
  vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../locales.js'),'utf8'),context,{filename:'locales.js'});vm.runInContext(fs.readFileSync(path.join(__dirname,'../renderer.js'),'utf8'),context,{filename:'renderer.js'});
  async function ready(){await new Promise(setImmediate);}
  async function key(code,{ctrl=false,alt=false,shift=false,key,target,composing=false,keyCode=0}={}){const event={code,key:key||(/^Key/.test(code)?code.slice(3).toLowerCase():code==='Space'?' ':code),ctrlKey:ctrl,metaKey:false,altKey:alt,shiftKey:shift,repeat:false,isComposing:composing,keyCode,target:target||new Element(),preventDefault(){this.prevented=true;}};for(const listener of listeners.get('keydown')||[])await listener(event);await ready();return event;}
- async function click(action,extra={}){const target=new Element();target.dataset.action=action;Object.assign(target.dataset,extra);target.closest=selector=>selector==='[data-action]'?target:null;for(const listener of listeners.get('click')||[])listener({target,stopPropagation(){}});await ready();}
+ async function click(action,extra={}){const target=new Element();target.dataset.action=action;Object.assign(target.dataset,extra);if(action==='record-local'||action==='record-global')target.id='settings-'+action+'-'+extra.keyAction;target.closest=selector=>selector==='[data-action]'?target:null;lastClick=target;if(trackFocus)target.focus();for(const listener of listeners.get('click')||[])listener({target,stopPropagation(){}});await ready();}
  async function pointer(type,x,y){const target=document.getElementById('markup-canvas');for(const listener of listeners.get(type)||[])listener({target,clientX:x,clientY:y,pointerId:1,shiftKey:false,preventDefault(){}});await ready();}
  async function input(id,value){const target=document.getElementById(id);target.value=value;target.selectionStart=value.length;for(const listener of listeners.get('input')||[])await listener({target});await ready();}
  async function change(id,value){const target=document.getElementById(id);target.value=value;for(const listener of listeners.get('change')||[])await listener({target});await ready();}
- return{async cardClick(id,{ctrl=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;for(const listener of listeners.get('click')||[])await listener({target:card,ctrlKey:ctrl,metaKey:false,shiftKey:false,stopPropagation(){}});await ready();},grid(columns){document.querySelectorAll=selector=>selector==='.library-grid > .card'?[...document.getElementById('app').innerHTML.matchAll(/<article class="[^"]*"[^>]*data-item-id="([^"]+)"/g)].map((match,index)=>({offsetTop:Math.floor(index/columns)*200,dataset:{itemId:match[1]}})):[];},editor(id){const node=document.getElementById(id);node.tagName='INPUT';node.matches=selector=>selector.includes('input');return node;},ready,key,input,change,click,pointer,async blur(){for(const listener of listeners.get('window:blur')||[])listener();await ready();},imageLoads,paintCalls,animationFrames,flushAnimationFrames(){for(const fn of animationFrames.splice(0))fn();},releaseInitialState(){releaseInitialState?.();},deferReply(action){let release;const promise=new Promise(resolve=>{release=resolve;});delayedReply={action,promise};return release;},deferImageBroadcast({surface=true}={}){deferredImageBroadcast={surface};},releaseImageBroadcast(){const next=pendingImageBroadcast;pendingImageBroadcast=null;if(next)subscriber?.(next);},failExportOnce(){exportFailures++;},failCleanupOnce(){cleanupFailures++;},failEditOnce(){editFailures++;},state,commands,nodes,image,text1,text2,link,api,get main(){return nodes.get('app').innerHTML;},get overlay(){return nodes.get('overlay-root').innerHTML;}};
+ return{async cardContextMenu(id,{child=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;const inner=new Element();inner.closest=card.closest;const event={target:child?inner:card,preventDefault(){this.prevented=true;}};for(const listener of listeners.get('contextmenu')||[])await listener(event);await ready();return event;},async cardClick(id,{ctrl=false,shift=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;for(const listener of listeners.get('click')||[])await listener({target:card,ctrlKey:ctrl,metaKey:false,shiftKey:shift,stopPropagation(){}});await ready();},grid(columns){document.querySelectorAll=selector=>selector==='.library-grid > .card'?[...document.getElementById('app').innerHTML.matchAll(/<article class="[^"]*"[^>]*data-item-id="([^"]+)"/g)].map((match,index)=>({offsetTop:Math.floor(index/columns)*200,dataset:{itemId:match[1]}})):[];},editor(id){const node=document.getElementById(id);node.tagName='INPUT';node.matches=selector=>selector.includes('input');return node;},ready,key,input,change,click,pointer,async blur(){for(const listener of listeners.get('window:blur')||[])listener();await ready();},imageLoads,paintCalls,animationFrames,flushAnimationFrames(){for(const fn of animationFrames.splice(0))fn();},releaseInitialState(){releaseInitialState?.();},deferReply(action){let release;const promise=new Promise(resolve=>{release=resolve;});delayedReply={action,promise};return release;},deferImageBroadcast({surface=true}={}){deferredImageBroadcast={surface};},releaseImageBroadcast(){const next=pendingImageBroadcast;pendingImageBroadcast=null;if(next)subscriber?.(next);},failExportOnce(){exportFailures++;},failCleanupOnce(){cleanupFailures++;},failEditOnce(){editFailures++;},state,commands,nodes,image,text1,text2,link,api,get main(){return nodes.get('app').innerHTML;},get overlay(){return nodes.get('overlay-root').innerHTML;},get focused(){return document.activeElement;},get lastClick(){return lastClick;},get overlayWrites(){return overlayWrites;}};
 }
 
 function selectedCards(f){return [...f.main.matchAll(/<article class="([^"]*)"[^>]*data-item-id="([^"]+)"/g)].filter(match=>match[1].split(' ').includes('selected')).map(match=>match[2]);}
@@ -109,6 +112,12 @@ test('an initial library older than a queued lightweight revision is refreshed b
 
 test('preview arrows move across shelf kinds, S keeps preview on neighbor, Backspace restores',async()=>{const f=fixture();await f.ready();await f.key('Space');await f.key('ArrowDown');assert.match(f.overlay,/aria-label="Text one"/);await f.key('KeyS');assert.match(f.overlay,/aria-label="Text two"/);assert.ok(f.state.items.find(item=>item.id===f.text1).trashedAt);await f.key('Backspace');assert.match(f.overlay,/aria-label="Text one"/);assert.equal(f.state.items.find(item=>item.id===f.text1).trashedAt,null);});
 
+test('Undo take down that leaves a copied-again text in Trash keeps the selection and preview where they are',async()=>{
+ const f=fixture();await f.ready();await f.key('Space');await f.key('ArrowDown');await f.key('KeyS');assert.match(f.overlay,/aria-label="Text two"/);
+ const command=f.api.command;f.api.command=async(action,payload)=>action==='undo'?structuredClone(f.state):command(action,payload);
+ await f.key('Backspace');assert.ok(f.state.items.find(item=>item.id===f.text1).trashedAt);assert.match(f.overlay,/aria-label="Text two"/);assert.doesNotMatch(f.overlay,/empty-preview/);assert.deepEqual(selectedCards(f),[f.text2]);
+});
+
 test('removing the final preview item keeps an empty Undo view and Backspace restores that exact item',async()=>{
  for(const pinned of [false,true]){
   const f=fixture();await f.ready();f.api.emit({items:[{...f.state.items[0],pinned}]});await f.ready();await f.key('Space');await f.key('KeyS');
@@ -143,6 +152,11 @@ test('native hide clears clean preview and does not leave it on the next opening
 
 test('editor requests anonymous CORS before loading managed original',async()=>{const f=fixture();await f.ready();await f.key('Space');await f.key('KeyC');assert.equal(f.imageLoads.length,1);assert.equal(f.imageLoads[0].crossOrigin,'anonymous');assert.match(f.imageLoads[0].url,/\/original$/);});
 
+test('a click without a drag in crop mode leaves the image uncropped like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyC');
+ await f.pointer('pointerdown',300,100);await f.pointer('pointerup',300,100);await f.key('Enter');
+ assert.deepEqual(f.commands.filter(value=>value.action==='saveImage'),[]);
+});
 test('canvas export rejection retains dirty crop and explicit Enter retry saves it',async()=>{const f=fixture();await f.ready();await f.key('Space');await f.key('KeyC');await f.pointer('pointerdown',60,30);await f.pointer('pointermove',500,150);await f.pointer('pointerup',500,150);f.failExportOnce();await f.key('Enter');assert.match(f.overlay,/id="markup-canvas"/);assert.equal(f.commands.filter(command=>command.action==='saveImage').length,0);assert.match(f.nodes.get('toast').textContent,/Image changes could not be saved/);await f.key('Enter');assert.doesNotMatch(f.overlay,/id="markup-canvas"/);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,{x:60,y:30,width:440,height:120});});
 
 for(const ordering of ['broadcast before reply','reply before broadcast','unrelated surface before reply'])test('preview crop undo and redo survive '+ordering,async()=>{
@@ -154,10 +168,51 @@ for(const ordering of ['broadcast before reply','reply before broadcast','unrela
  await f.key('KeyZ',{ctrl:true,shift:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,3);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,crop);
 });
 
+test('drawing a mark and undoing it saves no edit like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyM');await f.key('KeyR');
+ await f.pointer('pointerdown',60,30);await f.pointer('pointermove',200,150);await f.pointer('pointerup',200,150);
+ await f.key('KeyZ',{ctrl:true});await f.key('Escape');assert.deepEqual(f.commands.filter(value=>value.action==='saveImage'),[]);
+});
+test('undoing a mark saved while the store reply is late still saves the undo',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyM');await f.key('KeyR');
+ await f.pointer('pointerdown',60,30);await f.pointer('pointermove',200,150);await f.pointer('pointerup',200,150);
+ f.deferImageBroadcast({surface:true});await f.key('KeyS',{ctrl:true});await f.key('KeyZ',{ctrl:true});await f.key('Escape');f.releaseImageBroadcast();await f.ready();
+ assert.equal(f.commands.filter(value=>value.action==='saveImage').length,2);assert.deepEqual(f.state.items.find(item=>item.id===f.image).annotations,[]);
+});
+test('a mark undone while its save is pending is still undone on disk',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyM');await f.key('KeyR');
+ await f.pointer('pointerdown',60,30);await f.pointer('pointermove',200,150);await f.pointer('pointerup',200,150);
+ const release=f.deferReply('saveImage'),saving=f.key('KeyS',{ctrl:true});await f.ready();await f.key('KeyZ',{ctrl:true});release();await saving;await f.ready();
+ await f.key('Escape');await f.ready();
+ assert.deepEqual(f.state.items.find(item=>item.id===f.image).annotations,[]);
+});
 test('an external same-ID image edit invalidates acknowledged preview undo history',async()=>{
  const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyC');await f.pointer('pointerdown',60,30);await f.pointer('pointermove',500,150);await f.pointer('pointerup',500,150);f.deferImageBroadcast();await f.key('Enter');f.releaseImageBroadcast();await f.ready();
  const external={x:10,y:20,width:80,height:90};f.api.emit({items:f.state.items.map(value=>value.id===f.image?{...value,crop:external,mediaUrl:value.mediaUrl+'?v=external'}:value)});await f.ready();
  await f.key('KeyZ',{ctrl:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,1);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,external);
+});
+
+test('image undo history survives being moved to Trash and restored, but is pruned when permanently deleted',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('Space');await f.key('KeyC');await f.pointer('pointerdown',60,30);await f.pointer('pointermove',500,150);await f.pointer('pointerup',500,150);await f.key('Enter');
+ const crop={x:60,y:30,width:440,height:120};assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,crop);
+ await f.key('Escape');assert.equal(f.overlay,'');
+ // Move to Trash on shelves (item stays in state.items with trashedAt set)
+ await f.key('KeyS');assert.ok(f.state.items.find(item=>item.id===f.image).trashedAt);
+ // Restore from Trash on shelves
+ await f.key('Backspace');assert.equal(f.state.items.find(item=>item.id===f.image).trashedAt,null);
+ // Reopen preview and undo the crop
+ await f.key('Space');assert.match(f.overlay,/id="preview-dialog"/);
+ await f.key('KeyZ',{ctrl:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,2);assert.equal(f.state.items.find(item=>item.id===f.image).crop,null);
+ // Redo the crop
+ await f.key('KeyZ',{ctrl:true,shift:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,3);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,crop);
+ await f.key('Escape');
+ // Permanently deleting the item purges its undo history
+ f.api.emit({items:f.state.items.filter(item=>item.id!==f.image)});await f.ready();
+ // Re-inserting the item with crop cannot be undone because history was pruned
+ f.api.emit({items:[...f.state.items,{...f.state.items[0],id:f.image,kind:'image',crop,annotations:[],mediaUrl:'appmedia://media/'+f.image,originalMediaUrl:'appmedia://media/'+f.image+'/original'}]});await f.ready();
+ await f.cardClick(f.image);assert.equal(focusedCard(f),f.image);
+ await f.key('Space');assert.match(f.overlay,/id="preview-dialog"/);assert.match(f.overlay,/id="preview-media"/);
+ await f.key('KeyZ',{ctrl:true});assert.equal(f.commands.filter(command=>command.action==='saveImage').length,3);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,crop);
 });
 
 test('canvas export failure blocks native Settings until explicit Save succeeds',async()=>{const f=fixture();await f.ready();await f.key('Space');await f.key('KeyC');await f.pointer('pointerdown',60,30);await f.pointer('pointermove',500,150);await f.pointer('pointerup',500,150);f.failExportOnce();await f.api.command('settings');await f.ready();assert.match(f.overlay,/id="markup-canvas"/);assert.doesNotMatch(f.main,/class="settings-main"/);await f.click('save-image');assert.equal(f.overlay,'');assert.match(f.main,/class="settings-main"/);assert.deepEqual(f.state.items.find(item=>item.id===f.image).crop,{x:60,y:30,width:440,height:120});});
@@ -298,6 +353,25 @@ test('global native search survives a hidden resize broadcast before the same ev
  assert.doesNotMatch(f.main,/class="search-hud"/,'An unchanged broadcast must not reopen a dismissed search');
 });
 
+const markupHistory=f=>({undo:!/data-action="image-undo"[^>]*disabled/.test(f.overlay),redo:!/data-action="image-redo"[^>]*disabled/.test(f.overlay)});
+test('a click without a drag in a shape tool adds no mark and keeps undo and redo like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('KeyM');
+ await f.key('KeyR');await f.pointer('pointerdown',60,40);await f.pointer('pointermove',200,100);await f.pointer('pointerup',200,100);
+ await f.key('KeyZ',{ctrl:true});assert.deepEqual(markupHistory(f),{undo:false,redo:true});
+ for(const tool of ['KeyR','KeyO','KeyA','KeyD']){await f.key(tool);await f.pointer('pointerdown',300,100);await f.pointer('pointerup',300,100);assert.deepEqual(markupHistory(f),{undo:false,redo:true},tool);}
+ await f.key('KeyD');await f.pointer('pointerdown',300,40);await f.pointer('pointermove',300,160);await f.pointer('pointerup',300,160);assert.deepEqual(markupHistory(f),{undo:true,redo:false},'A vertical line is a mark');
+ await f.key('Escape');assert.deepEqual(f.state.items.find(value=>value.id===f.image).annotations.map(value=>value.type),['line']);
+});
+test('selecting a mark without moving it takes no undo step like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('KeyM');
+ await f.key('KeyR');await f.pointer('pointerdown',60,40);await f.pointer('pointermove',200,100);await f.pointer('pointerup',200,100);
+ await f.pointer('pointerdown',300,40);await f.pointer('pointermove',400,100);await f.pointer('pointerup',400,100);
+ await f.key('KeyZ',{ctrl:true});assert.deepEqual(markupHistory(f),{undo:true,redo:true});
+ await f.key('KeyV');await f.pointer('pointerdown',60,40);await f.pointer('pointerup',60,40);assert.deepEqual(markupHistory(f),{undo:true,redo:true},'Click a mark');
+ await f.pointer('pointerdown',800,200);await f.pointer('pointerup',800,200);assert.deepEqual(markupHistory(f),{undo:true,redo:true},'Click empty canvas');
+ await f.pointer('pointerdown',60,40);await f.pointer('pointermove',90,60);await f.pointer('pointerup',90,60);assert.deepEqual(markupHistory(f),{undo:true,redo:false},'Moving a mark is a step');
+ await f.key('KeyZ',{ctrl:true});await f.key('Escape');assert.deepEqual(f.state.items.find(value=>value.id===f.image).annotations.map(value=>value.x),[60]);
+});
 test('native image preview and crop event wait until the hidden window is shown',async()=>{
  const f=fixture();await f.ready();await f.api.command('hide');await f.ready();
  const viewEvent={selectId:f.image,kind:'image',preview:true,crop:true,serial:'capture-before-window-show'};
@@ -329,9 +403,9 @@ test('late Hide response cannot replace a newer native global search opening',as
 test('shared macOS/Windows shelf contract runs through actual renderer handlers',async()=>{
  const contractFile=path.resolve(__dirname,'../../contracts/shelf-behavior.json'),raw=fs.readFileSync(contractFile),contract=JSON.parse(raw);
  assert.equal(contract.schemaVersion,1);assert.equal(contract.contractId,'clipboardline.shelves.v1');
- const observations=[],errors=[];
- for(const scenario of contract.scenarios){
-  const f=fixture();await f.ready();const aliases=new Map(),values=contract.itemSets[scenario.itemSet].map((entry,index)=>{
+ const observations=[],errors=[],directories=[],{Store}=require('../lib/model.cjs');
+ try{for(const scenario of contract.scenarios){
+  const f=fixture();await f.ready();let store=null;const links=new Map(),aliases=new Map(),values=contract.itemSets[scenario.itemSet].map((entry,index)=>{
    const id='20000000-0000-4000-8000-'+String(index+1).padStart(12,'0');aliases.set(id,entry.id);
    const source=f.state.items.find(value=>value.kind===entry.kind);
    return{...structuredClone(source),id,createdAt:10000-index,name:entry.kind==='image'?entry.text:'',text:entry.kind==='text'?entry.text:'',title:entry.kind==='link'?entry.text:'',url:entry.kind==='link'?'https://example.com/contract/'+entry.id:''};
@@ -342,7 +416,7 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
   await f.api.command('hide');await f.ready();
   for(let index=0;index<scenario.steps.length;index++){
    const step=scenario.steps[index],commandsBefore=f.commands.length;const editor=f.nodes.get('search-input');if(editor)editor.matches=selector=>selector.includes('input');
-   const searchEditing=/class="search-hud"/.test(f.main);
+   const searchEditing=/class="search-hud"/.test(f.main);let copied=null;
    if(step.action==='open')await f.api.command('show');
    else if(step.action==='close')await f.api.command('hide');
    else if(step.action==='remap'){const localShortcuts={...f.state.settings.localShortcuts};if(step.key===null)delete localShortcuts[step.binding];else localShortcuts[step.binding]=step.key==='KeyX'?'X':step.key;f.api.emit({settings:{...f.state.settings,localShortcuts}});}
@@ -353,14 +427,18 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
    else if(step.action==='command')await f.key(step.code,step.ctrl?{ctrl:true}:{});
    else if(step.action==='openSearch')await f.key('KeyS',{shift:true});
    else if(step.action==='finishSearch')await f.key('Enter',{target:editor});
+   else if(step.action==='copyLink'){
+    if(!store){const directory=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-shelf-contract-'));directories.push(directory);store=new Store(directory);}
+    const item=store.insert('link',step.url);if(!links.has(item.id))links.set(item.id,'link-'+(links.size+1));copied={link:{item:links.get(item.id),address:item.url}};
+   }
    else throw new Error('Unsupported shared contract action: '+step.action);
    await f.ready();
    const active=activeKind(f),focusedAlias=aliases.get(focusedCard(f)),actual={activeKind:active,focused:kinds.get(focusedAlias)===active?focusedAlias:null,selected:selectedCards(f).map(id=>aliases.get(id)||id).sort(),visibleKinds:[...f.main.matchAll(/<section class="shelf(?: active-shelf)?\s*" data-shelf="([^"]+)"/g)].map(match=>match[1]),searchEditing:/class="search-hud"/.test(f.main)};
    if(step.action==='command')actual.effects=[...f.commands.slice(commandsBefore).map(value=>value.action),...(f.overlay?[/id="markup-canvas"/.test(f.overlay)?'markup':'preview']:[])];
-   observations.push({scenarioId:scenario.id,step:index,actual});
-   try{assert.deepEqual(actual,step.expect);}catch(error){errors.push(scenario.id+' step '+index+': '+error.message);}
+   const reported=copied||actual;observations.push({scenarioId:scenario.id,step:index,actual:reported});
+   try{assert.deepEqual(reported,step.expect);}catch(error){errors.push(scenario.id+' step '+index+': '+error.message);}
   }
- }
+ }}finally{for(const directory of directories)fs.rmSync(directory,{recursive:true,force:true});}
  if(process.env.CLIPBOARDLINE_PARITY_REPORT){
   const revision=process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(__dirname,'../..'),encoding:'utf8'}).trim();
   const implementationSHA256=crypto.createHash('sha256').update(fs.readFileSync(path.resolve(__dirname,'../renderer.js'))).digest('hex');
@@ -370,6 +448,15 @@ test('shared macOS/Windows shelf contract runs through actual renderer handlers'
  assert.deepEqual(errors,[]);
 });
 
+test('changing the markup tool clears the selection like macOS setTool',async()=>{
+ for(const [label,change] of [['Tool key',f=>f.key('KeyB')],['Toolbar tool',f=>f.click('image-tool',{tool:'ellipse'})],['Toolbar crop',f=>f.click('image-tool',{tool:'crop'})]]){
+  const f=fixture({imageDocument:true});await f.ready();await f.key('KeyM');
+  await f.key('KeyR');await f.pointer('pointerdown',60,40);await f.pointer('pointermove',200,100);await f.pointer('pointerup',200,100);
+  await f.key('KeyV');await f.pointer('pointerdown',60,40);await f.pointer('pointerup',60,40);await change(f);await f.key('Delete');
+  if(label==='Toolbar crop')await f.key('Escape');await f.key('Escape');
+  assert.equal(f.state.items.find(value=>value.id===f.image).annotations.length,1,label);
+ }
+});
 test('folder menu arrows retain folder operations and Enter creates a subfolder under the chosen folder',async()=>{
  const f=fixture();await f.ready();const folderId='10000000-0000-4000-8000-000000000000';
  f.api.emit({folders:[{id:folderId,name:'Chosen folder',parentId:null}]});
@@ -460,6 +547,25 @@ test('shortcut recorder rejects overlapping conflicts but allows a key owned by 
  await f.api.command('show');await f.key('KeyP',{ctrl:true});assert.equal(f.state.items.find(value=>value.id===f.image).pinned,false,'Reset restores the Ctrl+P alias');
 });
 
+test('a sideways drag of a text mark handle that keeps its size takes no undo step like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('KeyM');
+ await f.key('KeyT');await f.pointer('pointerdown',100,100);await f.pointer('pointerup',100,100);await f.input('simple-input','Hi');await f.click('confirm-modal');
+ await f.key('KeyR');await f.pointer('pointerdown',300,40);await f.pointer('pointermove',400,100);await f.pointer('pointerup',400,100);
+ await f.key('KeyZ',{ctrl:true});assert.deepEqual(markupHistory(f),{undo:true,redo:true});
+ await f.key('KeyV');await f.pointer('pointerdown',120,80);await f.pointer('pointerup',120,80);
+ await f.pointer('pointerdown',150,110);await f.pointer('pointermove',190,110);await f.pointer('pointerup',190,110);assert.deepEqual(markupHistory(f),{undo:true,redo:true},'Sideways');
+ await f.pointer('pointerdown',150,110);await f.pointer('pointermove',150,140);await f.pointer('pointerup',150,140);assert.deepEqual(markupHistory(f),{undo:true,redo:false},'Down');
+ await f.key('Escape');assert.deepEqual(f.state.items.find(value=>value.id===f.image).annotations.map(value=>value.fontSize),[50]);
+});
+test('a mark dragged back to where it started takes no undo step like macOS',async()=>{
+ const f=fixture({imageDocument:true});await f.ready();await f.key('KeyM');
+ await f.key('KeyT');await f.pointer('pointerdown',100,100);await f.pointer('pointerup',100,100);await f.input('simple-input','Hi');await f.click('confirm-modal');
+ await f.key('KeyR');await f.pointer('pointerdown',300,40);await f.pointer('pointermove',400,100);await f.pointer('pointerup',400,100);
+ await f.key('KeyZ',{ctrl:true});await f.key('KeyV');await f.pointer('pointerdown',120,80);await f.pointer('pointerup',120,80);
+ await f.pointer('pointerdown',150,110);await f.pointer('pointermove',150,140);await f.pointer('pointermove',150,110);await f.pointer('pointerup',150,110);assert.deepEqual(markupHistory(f),{undo:true,redo:true},'Resize');
+ await f.pointer('pointerdown',120,80);await f.pointer('pointermove',160,90);await f.pointer('pointermove',120,80);await f.pointer('pointerup',120,80);assert.deepEqual(markupHistory(f),{undo:true,redo:true},'Move');
+ await f.key('KeyZ',{ctrl:true,shift:true});await f.key('Escape');assert.deepEqual(f.state.items.find(value=>value.id===f.image).annotations.map(value=>value.type),['text','rectangle']);
+});
 test('remapped Actions works in native search but disabled Actions leaves editor typing alone',async()=>{
  const f=fixture();await f.ready();f.api.emit({settings:{...f.state.settings,localShortcuts:{actions:'Ctrl+J'}}});await f.ready();
  await f.key('KeyS',{shift:true});const editor=f.nodes.get('search-input');editor.matches=selector=>selector.includes('input');
@@ -495,6 +601,13 @@ test('action bar snapshots the focused member of a batch for Preview and keeps o
  assert.equal(f.state.items.find(value=>value.id===f.text1).name,'First batched note');assert.match(f.overlay,/2 \/ 2/);
 });
 
+test('the shelf action bar opens a selected link in the browser like macOS',async()=>{
+ const row=(f,id)=>{const start=f.overlay.indexOf('data-command="'+id+'"'),html=f.overlay.slice(start,f.overlay.indexOf('</button>',start));return{disabled:html.startsWith('data-command="'+id+'" disabled>'),title:html.match(/<span class="title">([^<]*)</)[1],detail:html.match(/<small>([^<]*)</)[1]};};
+ const f=fixture();await f.ready();await f.cardClick(f.link);await f.key('KeyK',{ctrl:true});
+ assert.deepEqual(row(f,'open'),{disabled:false,title:'Open in browser',detail:''});
+ await f.click('execute-command',{command:'open'});assert.deepEqual(f.commands.filter(value=>value.action==='openLink').map(value=>value.payload.id),[f.link]);
+ await f.cardClick(f.text1);await f.key('KeyK',{ctrl:true});assert.deepEqual(row(f,'open'),{disabled:true,title:'Open in browser',detail:'Select a link first.'});
+});
 test('action bar exposes real navigation, image tools, Library views and Settings destinations without synthetic key presses',async()=>{
  const f=fixture();await f.ready();await f.key('KeyK',{ctrl:true});await f.input('modal-query','Marker');await f.key('Enter');assert.match(f.overlay,/id="markup-canvas"/);assert.match(f.overlay,/data-tool="marker" aria-pressed="true"/);
  await f.key('Enter',{ctrl:true});await f.key('KeyK',{ctrl:true});await f.input('modal-query','Next item');assert.match(f.overlay,/data-command="next"/);await f.key('Escape');await f.key('Escape');
@@ -531,12 +644,43 @@ for(const [width,height]of[[3840,2160],[7680,4320]])test('retained '+width+'×'+
  assert.equal(f.paintCalls.filter(value=>value.canvas==='markup-canvas'&&value.operation==='clearRect').length,1);assert.equal(f.paintCalls.filter(value=>value.canvas==='markup-canvas'&&value.operation==='drawImage').length,0);assert.equal(f.imageLoads.length,1);
  await f.key('KeyS',{ctrl:true});const saved=f.commands.find(value=>value.action==='saveImage');assert.ok(saved);assert.equal(saved.payload.annotations[0].points.length,97);assert.deepEqual(saved.payload.annotations[0].points[0],{x:width*.1,y:height*.2});assert.ok(Math.abs(saved.payload.annotations[0].points.at(-1).x-width*666/900)<1e-7);
 });
+test('Settings and Actions show localized copy in the rendered UI',async()=>{
+ const f=fixture();await f.ready();const tr=require('../locales.js').tr;
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.api.command('settings');await f.ready();
+ assert.ok(f.main.includes(tr['Settings sections']));
+ await f.click('settings-tab',{tab:'shortcuts'});
+ assert.ok(f.main.includes(tr['Windows uses Control for copy, paste and app commands. Record a combination or turn an action off. Letter keys work only while browsing.']));
+ assert.ok(f.main.includes(tr['Find shortcut…']));
+ await f.click('settings-tab',{tab:'updates'});
+ assert.ok(f.main.includes(tr['Windows uses its own signed installer channel. Download integrity is checked before the app is replaced.']));
+ await f.key('KeyK',{ctrl:true});
+ for(const key of ['Search actions…','Browse','Run'])assert.ok(f.overlay.includes(tr[key]),key);
+});
+
+test('the Windows screenshot import setting is shown in each selected language',async()=>{
+ const f=fixture();await f.ready();const catalogs=require('../locales.js');await f.api.command('settings');await f.ready();
+ for(const language of ['az','es','fr','ja','ko','pt-BR','tr','zh-Hans']){
+  f.api.emit({settings:{...f.state.settings,language}});await f.ready();
+  for(const key of ['Import Windows screenshots','Watch the Windows Screenshots folder used by PrtSc, Win+Shift+S and Win+PrtSc.']){assert.notEqual(catalogs[language][key],key,language);assert.ok(f.main.includes(catalogs[language][key].replaceAll('&','&amp;').replaceAll('"','&quot;')),language+': '+key);assert.ok(!f.main.includes(key),language+': '+key);}
+ }
+});
+
+test('disabled action availability hints use selected language',async()=>{
+ const f=fixture();await f.ready();
+ const tr=require('../locales.js').tr;
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.key('KeyK',{ctrl:true});
+ assert.ok(f.overlay.includes(tr['Available in Library.']),'disabled Library-only action hint should be localized');
+ assert.ok(!f.overlay.includes('Available in Library'),'untranslated hint must not be shown');
+});
+
 test('Turkish Settings toggles use the same localized visible and accessible label',async()=>{const f=fixture();await f.ready();await f.api.command('settings');await f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();assert.match(f.main,/aria-label="Sesler"/);assert.doesNotMatch(f.main,/aria-label="Sounds"/);});
 
 test('closing an editor before its scheduled frame prevents stale overlay painting',async()=>{const f=fixture({queuedAnimationFrames:true});await f.ready();await f.key('Space');f.flushAnimationFrames();await f.key('KeyM');assert.equal(f.animationFrames.length,1);await f.key('Escape');assert.doesNotMatch(f.overlay,/id="markup-canvas"/);f.paintCalls.length=0;f.flushAnimationFrames();assert.equal(f.paintCalls.filter(value=>value.canvas==='markup-canvas').length,0);assert.match(f.overlay,/id="preview-dialog"/);});
 
-async function historyCleanupFixture(language='en'){
- const f=fixture();await f.ready();const basedOn=(kind,id,extra)=>({...structuredClone(f.state.items.find(value=>value.kind===kind)),id,retainedAt:null,pinned:false,folderIds:[],tags:[],trashedAt:null,...extra});
+async function historyCleanupFixture(language='en',fixtureOptions={}){
+ const f=fixture(fixtureOptions);await f.ready();const basedOn=(kind,id,extra)=>({...structuredClone(f.state.items.find(value=>value.kind===kind)),id,retainedAt:null,pinned:false,folderIds:[],tags:[],trashedAt:null,...extra});
  f.api.emit({settings:{...f.state.settings,language},items:[...f.state.items.map(value=>value.id===f.text2?{...value,retainedAt:1000}:value),
   basedOn('image','00000000-0000-4000-8000-000000000005',{pinned:true}),basedOn('link','00000000-0000-4000-8000-000000000006',{folderIds:['retained-folder']}),
   basedOn('text','00000000-0000-4000-8000-000000000007',{tags:['retained-tag']}),basedOn('link','00000000-0000-4000-8000-000000000008',{trashedAt:1000})]});
@@ -550,6 +694,14 @@ test('History cleanup selector counts each actual unsaved type and excludes save
 for(const cancel of['Escape','button'])test('History cleanup '+cancel+' cancel sends no backend operation and changes no records',async()=>{
  const f=await historyCleanupFixture(),before=structuredClone(f.state),calls=f.commands.length;await f.click('clear-history');assert.match(f.overlay,/aria-label="Clear unsaved copies\?"/);assert.match(f.overlay,/3 unsaved copies will move/);
  if(cancel==='Escape')await f.key('Escape');else await f.click('close-modal');assert.equal(f.overlay,'');assert.equal(f.commands.length,calls);assert.deepEqual(f.state,before);
+});
+test('History confirmation retains its Cancel button DOM across unrelated native state broadcasts',async()=>{
+ const f=await historyCleanupFixture('tr',{serializeOverlayMarkup:true});await f.change('history-cleanup-kind','text');await f.click('clear-history');
+ const original=f.overlay,writes=f.overlayWrites;
+ f.api.emit({items:f.state.items.map(value=>value.id===f.link?{...value,title:'Updated in background'}:value),libraryRevision:6});await f.ready();
+ assert.equal(f.overlay,original,'unchanged confirmation text must remain visible');
+ assert.equal(f.overlayWrites,writes,'background state updates must not replace a live Cancel button during pointer input');
+ await f.click('close-modal');assert.equal(f.overlay,'');
 });
 test('History cleanup confirmation keeps the chosen kind and captured IDs when later copies arrive or an item is newly saved',async()=>{
  const f=await historyCleanupFixture();await f.change('history-cleanup-kind','text');await f.click('clear-history');assert.match(f.overlay,/1 unsaved copies will move/);const later='00000000-0000-4000-8000-000000000009';
@@ -720,6 +872,17 @@ test('IME composing Enter Escape and arrows stay native in Library search, text 
  }
 });
 
+test('closing a Settings shortcut recorder restores focus to its opening control',async()=>{
+ const contract=JSON.parse(fs.readFileSync(path.join(__dirname,'../../contracts/shortcut-recording.json'),'utf8'));
+ const policy=contract.nativeExceptions?.find(entry=>entry.id==='shortcut-recorder-return-focus');
+ assert.ok(policy,'The cross-platform shortcut recorder contract must document native focus return');
+ assert.match(policy.windows,/Record button/);
+ assert.match(policy.macos,/NSPanel/);
+ const f=fixture({trackFocus:true});await f.ready();await f.api.command('settings');await f.ready();await f.click('settings-tab',{tab:'shortcuts'});await f.click('record-local',{keyAction:'pin'});assert.match(f.main,/id="settings-record-local-pin"/);
+ const trigger=f.lastClick;assert.ok(f.focused?.insideOverlay);assert.notEqual(f.focused,trigger);
+ await f.key('Escape');assert.equal(f.overlay,'');assert.equal(f.focused?.id,trigger.id);assert.notEqual(f.focused,trigger);assert.equal(f.focused?.isConnected,true);
+});
+
 test('an old shortcut save completion cannot close a newer recorder or release its owned global-shortcut lease',async()=>{
  const f=fixture();await f.ready();await f.api.command('settings');await f.ready();await f.click('record-local',{keyAction:'pin'});await f.ready();await f.key('KeyO');const release=f.deferReply('setSettings');await f.click('confirm-modal');await f.key('Escape');await f.click('record-local',{keyAction:'copy'});await f.ready();const begin=f.commands.filter(value=>value.action==='beginShortcutRecording').at(-1);assert.ok(begin);release();await f.ready();assert.match(f.overlay,/Record shortcut/);assert.equal(f.commands.some(value=>value.action==='endShortcutRecording'&&value.payload.token===begin.payload.token),false);await f.key('Escape');assert.equal(f.commands.some(value=>value.action==='endShortcutRecording'&&value.payload.token===begin.payload.token),true);
 });
@@ -756,11 +919,47 @@ test('export and shortcut-conflict notices follow the selected language',async()
  }finally{fs.rmSync(directory,{recursive:true,force:true});}
 });
 
+test('after unpinning the focused card in pinned-only mode, the next arrow selects the first remaining card like macOS',async()=>{
+ const f=fixture();await f.ready();const values=navigationItems(f,{image:4,text:0,link:0}).image.map(value=>({...value,pinned:true}));f.api.emit({items:values});await f.ready();
+ await f.key('KeyF');assert.equal(focusedCard(f),values[0].id);
+ await f.key('KeyP');assert.equal(f.state.items.find(value=>value.id===values[0].id).pinned,false);
+ await f.key('ArrowRight');assert.equal(focusedCard(f),values[1].id);
+});
+test('localized runtime messages render actual translated notice text in every language',async()=>{
+ const f=fixture();await f.ready();
+ for(const language of ['az','en','es','fr','ja','ko','pt-BR','tr','zh-Hans']){
+  f.api.emit({settings:{...f.state.settings,language},message:''});await f.ready();
+  f.api.emit({message:'Update check failed: Installer integrity check failed'});await f.ready();
+  const catalogs=require('../locales.js');
+  assert.equal(f.nodes.get('toast').textContent,catalogs[language]['Update check failed: %@'].replace('%@',catalogs[language]['Installer integrity check failed']),language);
+  f.api.emit({message:'ClipBoardLine 9.8.7 is available.'});await f.ready();
+  assert.equal(f.nodes.get('toast').textContent,catalogs[language]['ClipBoardLine %@ is available.'].replace('%@','9.8.7'),language);
+  f.api.emit({message:'Shortcut Ctrl+Alt+K is unavailable. Could not restore: search.'});await f.ready();
+  const restored=catalogs[language]['Could not restore: %@.'].replace('%@','search');
+  assert.equal(f.nodes.get('toast').textContent,catalogs[language]['Shortcut %@ is unavailable. %@'].replace('%@','Ctrl+Alt+K').replace('%@',restored),language);
+  f.api.emit({message:'Unexpected file%@%d.txt'});await f.ready();
+  assert.equal(f.nodes.get('toast').textContent,'Unexpected file%@%d.txt',language);
+ }
+});
+test('action palette and Settings display translated labels and private-data notice',async()=>{
+ const f=fixture();await f.ready();
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.key('KeyK',{ctrl:true});assert.match(f.overlay,/Kütüphaneyi aç/);await f.key('Escape');
+ await f.api.command('settings');await f.ready();await f.click('settings-tab',{tab:'sources'});
+ assert.match(f.main,/Panoya ait özel işaretler yok sayılır/);
+});
 test('Tab onto an empty shelf leaves copy, take down, pin and preview with nothing to act on',async()=>{
  const f=fixture();await f.ready();f.api.emit({items:f.state.items.filter(value=>value.kind!=='text')});await f.ready();
  await f.key('Tab');assert.equal(activeKind(f),'text');const commands=f.commands.length;
  for(const [code,extra]of [['Enter',{}],['KeyS',{}],['KeyP',{}],['Space',{}],['KeyC',{ctrl:true}]])await f.key(code,extra);
  assert.deepEqual(f.commands.slice(commands),[]);assert.equal(f.overlay,'');assert.equal(f.state.items.find(value=>value.id===f.image).trashedAt,null);assert.equal(f.state.windowVisible,true);
+});
+test('the Library action bar keeps the Take down title on its disabled row like macOS',async()=>{
+ const row=(f,id)=>{const start=f.overlay.indexOf('data-command="'+id+'"'),html=f.overlay.slice(start,f.overlay.indexOf('</button>',start));return{disabled:html.startsWith('data-command="'+id+'" disabled>'),title:html.match(/<span class="title">([^<]*)</)[1],detail:html.match(/<small>([^<]*)</)[1]};};
+ const f=fixture();await f.ready();f.state.items.find(value=>value.id===f.text1).retainedAt=1000;f.api.emit({items:f.state.items});await f.ready();
+ await f.key('KeyL');await f.click('scope',{scope:'saved'});await f.cardClick(f.text1);await f.key('KeyK',{ctrl:true});
+ assert.deepEqual(row(f,'remove'),{disabled:true,title:'Take down',detail:'Available on the shelves.'});
+ assert.deepEqual(row(f,'trash'),{disabled:false,title:'Move to Trash',detail:'1 selected'});
 });
 test('Library selection counts use the shared "%d selected" catalog entry in the chosen language',async()=>{
  const f=fixture();await f.ready();await f.key('KeyP');await f.key('ArrowDown');await f.key('KeyP');await f.api.command('library');await f.ready();await f.key('KeyA',{ctrl:true});
@@ -781,7 +980,7 @@ test('Settings shortcut filter matches the displayed localized action titles as 
 test('the empty-selection toast uses the shared "Select an item first" catalog entry',async()=>{
  const f=fixture();await f.ready();
  f.api.emit({items:[],settings:{...f.state.settings,language:'tr'}});await f.ready();await f.key('KeyC',{ctrl:true});
- assert.equal(f.nodes.get('toast').textContent,'Önce bir öğe seç');
+ assert.equal(f.nodes.get('toast').textContent,'Önce bir öğe seçin.');
 });
 test('the Move to Trash confirmation uses the shared localized catalog entry',async()=>{
  const f=fixture();await f.ready();await keyboardSaved(f);
@@ -816,3 +1015,113 @@ test('shelf markup does not consume M in native editors or open text and link it
  await f.key('Escape');await f.key('Escape');f.api.emit({settings:{...f.state.settings,localShortcuts:{markup:''}}});await f.ready();
  await f.key('KeyM');await f.key('KeyX');assert.equal(f.overlay,'');
  });
+test('rendered shelf and library card images carry no draggable=false and cards retain draggable=true with rope sag',async()=>{
+ const f=fixture();await f.ready();
+ const cards=[...f.main.matchAll(/<article class="card kind-([^"]+)"[^>]*style="([^"]*)"[^>]*draggable="([^"]+)"/g)];
+ assert.ok(cards.length>0);
+ for(const card of cards){
+  assert.equal(card[3],'true','Card must be draggable');
+  assert.match(card[2],/--sag:\d+(\.\d+)?px/,'Shelf card must retain --sag rope curve');
+ }
+ const shelfImages=[...f.main.matchAll(/<article class="card[^"]*"[^>]*>[\s\S]*?<img [^>]*draggable="false"/g)];
+ assert.equal(shelfImages.length,0,'Shelf card images must not carry draggable="false"');
+ await f.click('library');
+ const libraryImages=[...f.main.matchAll(/<article class="card[^"]*"[^>]*>[\s\S]*?<img [^>]*draggable="false"/g)];
+ assert.equal(libraryImages.length,0,'Library card images must not carry draggable="false"');
+});
+test('shelf page-next and page-back advance and rewind ui.pages and synchronize selection to visible cards',async()=>{
+ const f=fixture();await f.ready();
+ const extra=navigationItems(f,{image:18,text:4,link:4});
+ f.api.emit({items:[...extra.image,...extra.text,...extra.link]});
+ await f.ready();
+ assert.match(f.main,/<span class="selection-info">1 \/ 2<\/span>/);
+ await f.click('page-next',{kind:'image'});
+ assert.match(f.main,/<span class="selection-info">2 \/ 2<\/span>/);
+ assert.equal(selectedCards(f).length,1);
+ await f.click('page-back',{kind:'image'});
+ assert.match(f.main,/<span class="selection-info">1 \/ 2<\/span>/);
+ assert.deepEqual(selectedCards(f),[extra.image[0].id]);
+});
+test('Take down of a ctrl-selected pair continues right of the removed focus like macOS',async()=>{
+ const f=fixture();await f.ready();const values=navigationItems(f,{image:6,text:0,link:0}).image;f.api.emit({items:values});await f.ready();
+ await f.cardClick(values[2].id,{ctrl:true});assert.deepEqual(selectedCards(f),[values[0].id,values[2].id]);assert.equal(focusedCard(f),values[2].id);
+ await f.key('KeyS');assert.equal(focusedCard(f),values[3].id);assert.deepEqual(selectedCards(f),[values[3].id]);
+});
+test('the corner cross on another card keeps the focused card like macOS',async()=>{
+ const f=fixture();await f.ready();const values=navigationItems(f,{image:6,text:0,link:0}).image;f.api.emit({items:values});await f.ready();
+ await f.key('ArrowRight');assert.equal(focusedCard(f),values[1].id);
+ await f.click('card-remove',{id:values[0].id});assert.ok(f.state.items.find(value=>value.id===values[0].id).trashedAt||f.state.items.find(value=>value.id===values[0].id).hiddenFromShelf);
+ assert.equal(focusedCard(f),values[1].id);assert.deepEqual(selectedCards(f),[values[1].id]);
+});
+test('Take down shows the page of the card it focuses next',async()=>{
+ const f=fixture();await f.ready();const values=navigationItems(f,{image:25,text:0,link:0}).image;f.api.emit({items:values});await f.ready();
+ for(let index=0;index<9;index++)await f.key('ArrowRight',{shift:true});assert.equal(focusedCard(f),values[9].id);
+ await f.key('KeyS');assert.equal(focusedCard(f),values[10].id);assert.deepEqual(selectedCards(f),[values[10].id]);
+});
+test('the corner cross keeps an unselected focus selected',async()=>{
+ const f=fixture();await f.ready();const values=navigationItems(f,{image:6,text:0,link:0}).image;f.api.emit({items:values});await f.ready();
+ await f.cardClick(values[1].id,{ctrl:true});await f.cardClick(values[1].id,{ctrl:true});assert.equal(focusedCard(f),values[1].id);assert.deepEqual(selectedCards(f),[values[0].id]);
+ await f.click('card-remove',{id:values[0].id});assert.equal(focusedCard(f),values[1].id);assert.deepEqual(selectedCards(f),[values[1].id]);
+});
+
+test('right-clicking a shelf card selects it and opens Actions for that card',async()=>{
+ const f=fixture();await f.ready();assert.deepEqual(selectedCards(f),[f.image]);
+ const event=await f.cardContextMenu(f.text2);assert.equal(event.prevented,true);
+ assert.deepEqual(selectedCards(f),[f.text2]);assert.match(f.overlay,/class="dialog palette"/);
+ await f.input('modal-query','pin');await f.key('Enter');
+ assert.equal(f.state.items.find(value=>value.id===f.text2).pinned,true);assert.equal(f.state.items.find(value=>value.id===f.image).pinned,false);
+});
+
+test('right-clicking a card inside a multi-selection keeps the selection for Actions',async()=>{
+ const f=fixture();await f.ready();await f.cardClick(f.text1,{ctrl:true});await f.cardClick(f.text2,{ctrl:true});await f.cardClick(f.image,{ctrl:true});
+ assert.deepEqual(selectedCards(f).sort(),[f.text1,f.text2].sort());
+ await f.cardContextMenu(f.text1);assert.deepEqual(selectedCards(f).sort(),[f.text1,f.text2].sort());
+ await f.input('modal-query','pin');await f.key('Enter');
+ assert.equal(f.state.items.find(value=>value.id===f.text1).pinned,true);assert.equal(f.state.items.find(value=>value.id===f.text2).pinned,true);
+});
+
+test('right-clicking inside a card resolves the card and keeps only its shelf in a mixed selection',async()=>{
+ const f=fixture();await f.ready();await f.cardClick(f.text1,{ctrl:true});
+ assert.deepEqual(selectedCards(f).sort(),[f.image,f.text1].sort());
+ // Leave the anchor on the image shelf, so the Shift-click below tests the cross-shelf anchor.
+ await f.cardClick(f.image,{ctrl:true});await f.cardClick(f.image,{ctrl:true});
+ assert.deepEqual(selectedCards(f).sort(),[f.image,f.text1].sort());
+ const event=await f.cardContextMenu(f.text1,{child:true});assert.equal(event.prevented,true);
+ assert.deepEqual(selectedCards(f),[f.text1]);
+ await f.input('modal-query','pin');await f.key('Enter');
+ assert.equal(f.state.items.find(value=>value.id===f.text1).pinned,true);assert.equal(f.state.items.find(value=>value.id===f.image).pinned,false);
+ await f.cardClick(f.text2,{shift:true});
+ assert.deepEqual(selectedCards(f).sort(),[f.text1,f.text2].sort());
+});
+
+test('right-click does nothing while a preview is open',async()=>{
+ const f=fixture();await f.ready();await f.key('Space');assert.match(f.overlay,/id="preview-dialog"/);
+ const before=selectedCards(f);
+ const event=await f.cardContextMenu(f.text1);assert.equal(event.prevented,undefined);assert.match(f.overlay,/id="preview-dialog"/);
+ assert.deepEqual(selectedCards(f),before);
+});
+
+test('right-clicking a Library card opens Actions and keeps a selection that spans kinds',async()=>{
+ const f=fixture();await f.ready();f.api.emit({items:f.state.items.map(value=>({...value,pinned:true}))});await f.ready();await f.key('KeyL');assert.equal(f.state.view,'library');
+ const event=await f.cardContextMenu(f.text2);assert.equal(event.prevented,true);
+ assert.deepEqual(selectedCards(f),[f.text2]);assert.match(f.overlay,/class="dialog palette"/);await f.key('Escape');
+ await f.cardClick(f.image,{ctrl:true});assert.deepEqual(selectedCards(f).sort(),[f.image,f.text2].sort());
+ await f.cardContextMenu(f.image);assert.deepEqual(selectedCards(f).sort(),[f.image,f.text2].sort());
+ await f.input('modal-query','unpin');await f.key('Enter');
+ assert.equal(f.state.items.find(value=>value.id===f.text2).pinned,false);assert.equal(f.state.items.find(value=>value.id===f.image).pinned,false);
+ assert.equal(f.state.items.find(value=>value.id===f.text1).pinned,true);
+});
+
+test('Action Palette finds both English and Turkish Settings History commands in Turkish locale', async()=>{
+ const f=fixture();await f.ready();
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ await f.key('KeyK',{ctrl:true});
+ await f.input('modal-query','Ayarlar · Geçmiş');
+ assert.match(f.overlay,/data-command="settings-history"/);
+ await f.input('modal-query','Settings · History');
+ assert.match(f.overlay,/data-command="settings-history"/);
+ await f.key('Enter');
+ assert.equal(f.state.view,'settings');
+ assert.match(f.main,/data-retention="text"/);
+ assert.match(f.main,/data-retention="link"/);
+});

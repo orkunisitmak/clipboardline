@@ -14,7 +14,7 @@ const DEFAULTS = Object.freeze({
   retentionDays: {image: 30, text: 30, link: 30},
   shortcuts: {toggle: 'Control+Alt+T', search: 'Control+Alt+S', library:'', copyLatest:'', screenshot: 'Control+Alt+A'},
   localShortcuts: {},
-  autoCheckUpdates: true, watchFolders: [], openAfterScreenshot: true, copyNewCaptures: false,
+  autoCheckUpdates: true, watchFolders: [], watchSystemScreenshots: true, openAfterScreenshot: true, copyNewCaptures: false,
   theme:'soft', cardSize:'medium', sounds:false, launchAtLogin:false, language:'system',indexImages:true,
   libraryListMode:false,libraryInspectorVisible:true,librarySidebarVisible:true,librarySidebarWidth:220,libraryInspectorWidth:300,
   libraryListColumns:{title:300,kind:80,tags:150,created:130},recentPinFolderIds:[]
@@ -38,7 +38,7 @@ function settings(patch, previous = DEFAULTS) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) fail('Invalid settings');
   const out = clone(previous);
   for (const [key, value] of Object.entries(patch)) {
-    if (['captureText', 'captureImages', 'captureLinks', 'fetchLinkMetadata','autoCheckUpdates', 'openAfterScreenshot','copyNewCaptures','sounds','launchAtLogin','indexImages','libraryListMode','libraryInspectorVisible','librarySidebarVisible'].includes(key)) {
+    if (['captureText', 'captureImages', 'captureLinks', 'fetchLinkMetadata','autoCheckUpdates', 'watchSystemScreenshots', 'openAfterScreenshot','copyNewCaptures','sounds','launchAtLogin','indexImages','libraryListMode','libraryInspectorVisible','librarySidebarVisible'].includes(key)) {
       if (typeof value !== 'boolean') fail('Invalid preference');
       out[key] = value;
     } else if (key === 'visibleKinds') {
@@ -109,6 +109,25 @@ function plainURL(value) {
   value = value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, '');
   if (!value || /\s/.test(value) || value.length > 8192 || !/^https?:\/\/[^/\\]/i.test(value)) return null;
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch { return null; }
+}
+
+// Match macOS LinkIdentity.youtubeID.
+function youtubeID(u) {
+  const pieces = u.pathname.split('/').filter(Boolean), host = u.hostname;
+  const id = ['youtu.be', 'www.youtu.be'].includes(host) ? pieces[0] : ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(host) ? (['shorts', 'embed', 'live'].includes(pieces[0]) && pieces.length > 1 ? pieces[1] : u.searchParams.get('v')) : null;
+  return /^[A-Za-z0-9_-]{11}$/.test(id || '') ? id : null;
+}
+
+// Match macOS LinkIdentity.normalized: utm_*, fbclid and gclid (any case) do not make a different link.
+function linkIdentity(href) {
+  try {
+    const u = new URL(href), drop = part => { const name = part.split('=')[0]; let decoded = name; try { decoded = decodeURIComponent(name); } catch {} return /^utm_/i.test(decoded) || /^(fbclid|gclid)$/i.test(decoded); };
+    u.search = u.search.slice(1).split('&').filter(part => !drop(part)).join('&');
+    // Like macOS, every address of one YouTube video is https://www.youtube.com/watch?v=ID; si is a share token.
+    const video = youtubeID(u);
+    if (video) return 'https://www.youtube.com/watch?' + ['v=' + video, ...u.search.slice(1).split('&').filter(part => part && !['v', 'si'].includes(part.split('=')[0]))].join('&') + u.hash;
+    return u.href;
+  } catch { return href; }
 }
 
 // A cold PowerShell start can exceed 15 seconds on a busy machine, for example
@@ -298,7 +317,8 @@ class Store {
   async insertRecording(value){
     const assets=await this.recordingAssets(value);
     try{
-      const matching=this.data.items.filter(item=>item.recording&&!item.trashedAt&&item.videoFile===assets.videoFile),prior=matching.sort((a,b)=>b.createdAt-a.createdAt)[0];
+      // Like macOS identicalImage, a trimmed recording no longer matches its original.
+      const matching=this.data.items.filter(item=>item.recording&&!item.trashedAt&&!item.renderedVideoFile&&item.videoFile===assets.videoFile),prior=matching.sort((a,b)=>b.createdAt-a.createdAt)[0];
       if(value.signal?.aborted)fail('Video operation canceled');
       if(!prior&&this.data.items.length>=20000){
         this.releaseInFlightMedia(assets.inFlightMediaFiles);assets.inFlightMediaFiles=[];
@@ -333,8 +353,20 @@ class Store {
     // A new note is always its own record, like macOS createNote; only captures deduplicate,
     // and they never match a note (createdAsNote), so a capture or import cannot merge or drop one.
     const matching = extra.fresh ? [] : this.data.items.filter(i => i.kind === kind && !i.trashedAt && !i.createdAsNote &&
-      (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? i.url === url : !i.recording&&i.imageFile === imageFile));
+      (kind === 'text' ? this.textIdentity(i) === identity : kind === 'link' ? linkIdentity(i.url) === linkIdentity(url) : !i.recording&&i.imageFile === imageFile));
     const prior = matching.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (kind === 'link' && matching.length > 1) {
+      // Libraries made before tracking parameters were ignored can hold several of these. Merge only the ones whose name and note do not clash with the kept
+      // item's (macOS never deletes them); the others stay as they are. The merged item keeps the address of the oldest copy.
+      let name = prior.name, note = prior.note;
+      const merged = [prior];
+      for (const other of matching.slice(1)) {
+        if ((other.name && name && other.name !== name) || (other.note && note && other.note !== note)) continue;
+        name ||= other.name; note ||= other.note; merged.push(other);
+      }
+      matching.splice(0, matching.length, ...merged);
+      prior.url = merged.reduce((a, b) => b.createdAt < a.createdAt ? b : a).url;
+    }
     if(!prior&&this.data.items.length>=20000){
       if(kind==='image'){
         const referenced=this.mediaReferencesForCapacityCleanup();
@@ -345,7 +377,7 @@ class Store {
     const now = this.clock();
     const item = prior || {id: crypto.randomUUID(), kind, text: textValue, url, title: '', name: '', pinned: false, folderIds: [], tags: [],
       imageFile, renderedFile: '', ocrText: '', annotations: [], crop: null, note:'', retainedAt:null, lastCopiedAt:null, createdAt: now, updatedAt: now, trashedAt: null, hiddenFromShelf: false};
-    if(prior)item.lastCapturedAt=now;if(kind==='link'&&prior)item.lastCopiedAt=now;else item.createdAt=now;
+    if(prior){item.lastCopiedAt=now;item.lastCapturedAt=now;}if(!(kind==='link'&&prior))item.createdAt=now;
     item.updatedAt = now; item.hiddenFromShelf = false;item.captureRevision=crypto.randomUUID();
     if(kind==='text')item.text=textValue;
     if (extra.title) item.title = text(extra.title, 500, true);
@@ -355,9 +387,16 @@ class Store {
       item.folderIds = [...new Set(matching.flatMap(i => i.folderIds))]; item.tags = [...new Set(matching.flatMap(i => i.tags))];
       item.name ||= matching.find(i => i.name)?.name || '';
       item.note ||= matching.find(i => i.note)?.note || '';
+      for(const key of ['title','author','thumbnailFile'])if(!item[key]){const from=matching.find(i=>i[key]);if(from)item[key]=from[key];}
       const dates=matching.map(i=>i.retainedAt).filter(Number.isFinite);if(dates.length)item.retainedAt=Math.min(...dates);
+      const copied=matching.map(i=>i.lastCopiedAt).filter(Number.isFinite);if(copied.length)item.lastCopiedAt=Math.max(...copied);
     }
-    this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id && !matching.includes(i))];
+    // Like macOS, merged duplicates stay recoverable in Trash instead of disappearing.
+    for (const other of matching) if (other !== item) { other.trashedAt = now; other.trashRevision = crypto.randomUUID(); other.hiddenFromShelf = true; other.updatedAt = now; }
+    // As with the trash action, older undo entries must not bring a trashed duplicate back.
+    const trashed = new Set(matching.filter(other => other !== item).map(other => other.id));
+    if (trashed.size) this.undoStack = this.undoStack.map(batch => batch.filter(entry => !trashed.has(entry.id))).filter(batch => batch.length);
+    this.data.items = [item, ...this.data.items.filter(i => i.id !== item.id)];
     this.expire(false); this.persist(); return item;
   }
   /** A new, retained note record, like macOS createNote. It never reuses a matching capture. */
@@ -448,16 +487,22 @@ class Store {
       if(!tag||!affected.length)fail('Tag unavailable');
       let name;
       if(action==='renameTag'){
-        name=text(payload.name,TAG_INPUT_LIMIT).trim();
+        name=text(payload.name,TAG_INPUT_LIMIT).trim().replace(/^#+|#+$/g,'').trim();
         if(!name||!validTagName(name))fail('Invalid tag name');
         if(this.data.items.some(item=>item.tags.some(value=>value!==tag&&foldedName(value)===foldedName(name))))fail('A tag with this name already exists');
+        if(name===tag)return {name};
       }
       for(const item of affected){item.retainedAt??=now;item.tags=action==='renameTag'?[...new Set(item.tags.map(value=>value===tag?name:value))]:item.tags.filter(value=>value!==tag);}
-      this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return;
+      this.persist();this.invalidateTrashUndo(affected.map(item=>item.id));return action==='renameTag'?{name}:undefined;
     }
     if (action === 'undo') {
       const batch = this.undoStack.pop(); if (!batch) return;
-      for (const before of batch) { const item = this.data.items.find(i => i.id === before.id); if (item) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; } }
+      // Copying the same text or link again while it was off the shelf made a new card; Undo must not hang it twice.
+      // Decide for the whole batch first, like macOS, so two items of one take down never block each other.
+      const twin = item => item.trashedAt && item.kind !== 'image' && !item.createdAsNote && this.data.items.some(other => other !== item && !other.trashedAt && !other.hiddenFromShelf && !other.createdAsNote && other.kind === item.kind &&
+        (item.kind === 'text' ? this.textIdentity(other) === this.textIdentity(item) : linkIdentity(other.url) === linkIdentity(item.url)));
+      const entries = batch.map(before => ({before, item: this.data.items.find(i => i.id === before.id)})).filter(entry => entry.item && !(entry.before.trashedAt == null && twin(entry.item)));
+      for (const {before, item} of entries) { item.trashedAt = before.trashedAt; item.trashRevision=before.trashedAt==null?null:crypto.randomUUID(); item.hiddenFromShelf = before.hiddenFromShelf; }
       this.persist(); return;
     }
     const items = this.selected(payload.ids || (payload.id ? [payload.id] : []));

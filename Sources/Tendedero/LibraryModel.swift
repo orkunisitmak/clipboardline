@@ -9,7 +9,8 @@ import Combine
     @Published private(set) var ids = [UUID]()
     @Published private(set) var selectedIDs = Set<UUID>()
     @Published private(set) var focusedID: UUID?
-    @Published private(set) var collections = [LibraryCollection]()
+    @Published private(set) var collections = [LibraryCollection]() { didSet { folderPaths = nil } }
+    private var folderPaths: [UUID: String]?
     @Published private(set) var tags = [LibraryTag]()
     @Published private(set) var loading = false
     @Published private(set) var notice: String?
@@ -76,6 +77,7 @@ import Combine
     private var feedbackGeneration = 0
     private(set) var contentFocusPending = false
     private var pendingKeyboardSelection: (id: UUID?, query: LibraryQuery)?
+    private var restoringIDs = Set<UUID>()
     private struct PendingDetailsSelection {
         let id: UUID
         let query: LibraryQuery
@@ -109,13 +111,17 @@ import Combine
         }
     }
     /// A subfolder reads "Parent / Middle / Child" (the whole parent chain, cycle-safe), as on Windows.
-    private func folderPath(_ id: UUID) -> String? {
-        guard collections.contains(where: { $0.id == id }) else { return nil }
-        var names: [String] = [], visited = Set<UUID>(), next: UUID? = id
-        while let current = next, visited.insert(current).inserted, let folder = collections.first(where: { $0.id == current }) {
-            names.insert(folder.name, at: 0); next = folder.parentID
+    func folderPath(_ id: UUID) -> String? {
+        if let folderPaths { return folderPaths[id] }
+        let byID = Dictionary(collections.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var paths = [UUID: String]()
+        for folder in collections {
+            var names: [String] = [], visited = Set<UUID>(), next: UUID? = folder.id
+            while let current = next, visited.insert(current).inserted, let item = byID[current] { names.insert(item.name, at: 0); next = item.parentID }
+            paths[folder.id] = names.joined(separator: " / ")
         }
-        return names.joined(separator: " / ")
+        folderPaths = paths
+        return paths[id]
     }
     func clearNotice() { notice = nil; store.notice = nil }
     func report(_ message: String) { notice = message }
@@ -140,6 +146,7 @@ import Combine
         else if let focus = onContentFocus { contentFocusPending = false; focus() }
     }
     private func finishKeyboardSelection() {
+        restoringIDs = []
         guard let pending = pendingKeyboardSelection else { return }
         pendingKeyboardSelection = nil
         var expected = pending.query, actual = query
@@ -326,6 +333,8 @@ import Combine
     @discardableResult func select(_ id: UUID, toggle: Bool = false, extending: Bool = false, preservingSelection: Bool = false) -> Bool {
         guard let target = indices[id], id == focusedID || flushEdits() else { return false }
         pendingDetailsSelection = nil
+        // A different pick replaces the pending one. Picking the focused item again keeps it, and so does picking one that is leaving Trash, so focus lands on an item that stays.
+        if !restoringIDs.contains(id), id != focusedID || toggle || extending { pendingKeyboardSelection = nil }
         if extending, let anchor, let start = indices[anchor] { selectedIDs = Set(ids[min(start,target)...max(start,target)]) }
         else if toggle { if !selectedIDs.insert(id).inserted { selectedIDs.remove(id) }; anchor = id }
         else if !preservingSelection || !selectedIDs.contains(id) { selectedIDs = [id]; anchor = id }
@@ -362,13 +371,20 @@ import Combine
         if selectedIDs.count == ids.count { return ids }
         return selectedIDs.filter { indices[$0] != nil }.sorted { indices[$0]! < indices[$1]! }
     }
+    /// Right-click "Name and pin…": a row inside a multi-selection names the whole selection, like the key.
+    func requestNameAndPin(_ id: UUID) {
+        let ids = actionIDs
+        if selectedIDs.contains(id), ids.count > 1 { onNameAndPinBatchRequested?(ids) } else { onNameAndPinRequested?(id) }
+    }
     func copy(to board: NSPasteboard? = nil) {
         guard flushEdits(), !actionIDs.isEmpty else { return }
         copyRecords(actionIDs, to: board ?? copyPasteboard)
     }
     func copyCurrent(_ id: UUID) { guard flushEdits() else { return }; copyRecords([id], to: copyPasteboard) }
+    /// Pin, tag and folder actions refuse a selection that is in Trash, like the disabled action bar rows.
+    private var selectionInTrash: Bool { actionIDs.contains { (try? store.item($0))?.deletedAt != nil } }
     func dragItems(_ id: UUID) -> [ShelfDragItem] {
-        guard flushEdits(), selectedIDs.contains(id) || select(id) else { return [] }
+        guard flushEdits(), selectedIDs.contains(id) || select(id), !selectionInTrash else { return [] }
         do { return try LibraryTransfer.dragItems(store.records(actionIDs), store: store) }
         catch { notice = error.localizedDescription; return [] }
     }
@@ -384,17 +400,25 @@ import Combine
     }
     /// True when favorite() would unpin: every acted-on item is already pinned.
     var actionsArePinned: Bool { (try? store.allPinned(actionIDs)) ?? false }
-    func favorite() { guard flushEdits() else { return }; perform { try store.toggleFavorite(actionIDs) } }
+    func favorite() {
+        guard flushEdits(), !selectionInTrash else { return }
+        let targets = actionIDs, pinning = !((try? store.allPinned(targets)) ?? true)
+        // Pinning saves a recent copy and unpinning leaves Pinned, so the selection would vanish: move it to the neighbour, as Move to Trash does.
+        let leaves = (query.scope == .recent && pinning) || (query.scope == .favorites && !pinning)
+        if leaves, !targets.isEmpty { pendingKeyboardSelection = (neighbour(excluding: Set(targets)), query) }
+        do { try store.toggleFavorite(targets) } catch { pendingKeyboardSelection = nil; notice = error.localizedDescription }
+    }
+    private func neighbour(excluding removed: Set<UUID>) -> UUID? {
+        let pivot = focusedID.flatMap { indices[$0] } ?? 0
+        return ids.dropFirst(pivot).first { !removed.contains($0) } ?? ids.prefix(pivot).reversed().first { !removed.contains($0) }
+    }
     func retain() { guard flushEdits() else { return }; perform { try store.retain(actionIDs) } }
     func trash() { trashSelection() }
     func trashSelection(_ explicitIDs: [UUID]? = nil) {
         guard query.scope != .trash, flushEdits() else { return }
         let targets = explicitIDs ?? actionIDs, removed = Set(targets)
         guard !targets.isEmpty else { return }
-        let pivot = focusedID.flatMap { indices[$0] } ?? 0
-        let next = ids.dropFirst(pivot).first { !removed.contains($0) }
-            ?? ids.prefix(pivot).reversed().first { !removed.contains($0) }
-        pendingKeyboardSelection = (next, query)
+        pendingKeyboardSelection = (neighbour(excluding: removed), query)
         do { try store.trashUndoably(targets) }
         catch { pendingKeyboardSelection = nil; report(error.localizedDescription) }
     }
@@ -408,13 +432,19 @@ import Combine
             if !loading { finishKeyboardSelection() }
         } catch { report(error.localizedDescription) }
     }
-    func restore() {
-        let targets = actionIDs
+    func restore(_ ids: [UUID]? = nil) {
+        let targets = ids ?? actionIDs
         guard !targets.isEmpty else { return }
         // The restored items leave Trash: select the first one that remains, as Windows does.
-        if query.scope == .trash { pendingKeyboardSelection = (nil, query) }
+        let priorPending = pendingKeyboardSelection, priorRestoring = restoringIDs
+        if query.scope == .trash { pendingKeyboardSelection = (nil, query); restoringIDs.formUnion(targets) }
         do { try store.restore(targets) }
-        catch { pendingKeyboardSelection = nil; report(error.localizedDescription) }
+        catch {
+            // A failed Restore leaves the pick and the earlier pending restores as they were.
+            pendingKeyboardSelection = priorPending
+            restoringIDs = priorRestoring
+            report(error.localizedDescription)
+        }
     }
     func assign(_ folder: UUID, moving: Bool = false) {
         guard flushEdits() else { return }
@@ -429,6 +459,13 @@ import Combine
         var done = false
         perform { try store.removeCollection(id); done = true }
         if done, case let .collection(current) = query.scope, removed.contains(current) { changeScope(.saved) }
+    }
+    /// Delete a tag everywhere. Only the view of that tag falls back to My library, as removing a folder does.
+    func deleteTag(_ id: UUID) {
+        guard flushEdits() else { return }
+        var done = false
+        perform { try store.removeTag(id); done = true }
+        if done, case let .tag(current) = query.scope, current == id { changeScope(.saved) }
     }
     func unassign(_ folder: UUID) { guard flushEdits(), let id = inspected?.id else { return }; perform { try store.unassign(id, from: folder) } }
     func removeTag(_ tag: UUID) { guard flushEdits(), let id = inspected?.id else { return }; perform { try store.removeTag(tag, from: id) } }
@@ -508,7 +545,7 @@ import Combine
         case .images: setKind(.image); _ = focusContent()
         case .texts: setKind(.text); _ = focusContent()
         case .links: setKind(.link); _ = focusContent()
-        case .tag: onTagRequested?()
+        case .tag: if !selectionInTrash { onTagRequested?() }
         case .export: onExportRequested?()
         case .trash: trashSelection()
         case .editText, .markup, .cropImage:

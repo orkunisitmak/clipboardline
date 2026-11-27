@@ -5,6 +5,18 @@ const {Store,plainURL,protectDirectory,protectionFailureDetail}=require('../lib/
 const {windowsEnvironment}=require('../lib/windows-environment.cjs');
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
 function fixture(fn){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'clipboardline-model-'));let now=1000;try{const store=new Store(dir,{clock:()=>now});return fn(store,value=>{now=value;},dir);}finally{fs.rmSync(dir,{recursive:true,force:true});}}
+test('Undo take down does not bring back a text or link that was copied again meanwhile',()=>fixture((s,time)=>{for(const [kind,value] of [['text','Hang once'],['link','https://a.example.com/']]){const old=s.insert(kind,value);s.modify('remove',{ids:[old.id]});time(s.clock()+1000);const fresh=s.insert(kind,value);assert.notEqual(fresh.id,old.id);s.modify('undo',{});assert.equal(s.data.items.filter(i=>i.kind===kind&&!i.trashedAt).length,1);assert.equal(s.item(old.id).trashedAt!=null,true);}}));
+test('Undo take down leaves a link in Trash when the copy differs only by tracking parameters',()=>fixture((s,time)=>{const old=s.insert('link','https://a.example.com/a?utm_source=old');s.modify('remove',{ids:[old.id]});time(2000);const fresh=s.insert('link','https://a.example.com/a?utm_source=new');assert.notEqual(fresh.id,old.id);s.modify('undo',{});assert.ok(s.item(old.id).trashedAt);const other=s.insert('link','https://a.example.com/a?page=1');s.modify('remove',{ids:[other.id]});time(3000);s.insert('link','https://a.example.com/a?page=2');s.modify('undo',{});assert.equal(s.item(other.id).trashedAt,null);}));
+test('every address of one YouTube video is one link like macOS LinkIdentity',()=>fixture((s,time)=>{
+ const first=s.insert('link','https://youtu.be/jNQXAC9IVRw?si=share');time(2000);
+ for(const copy of ['https://www.youtube.com/watch?v=jNQXAC9IVRw','http://m.youtube.com/watch?si=x&v=jNQXAC9IVRw','https://youtube.com/shorts/jNQXAC9IVRw','https://www.youtube.com/embed/jNQXAC9IVRw','https://music.youtube.com/watch?v=jNQXAC9IVRw&utm_source=x','https://youtube.com:8443/live/jNQXAC9IVRw','https://YOUTU.BE/jNQXAC9IVRw'])assert.equal(s.insert('link',copy).id,first.id,copy);
+ for(const other of ['https://youtu.be/jNQXAC9IVRw?t=30','https://youtu.be/jNQXAC9IVRw#x','https://www.youtube.com/watch?v=jNQXAC9IVRw&list=PL1','https://www.youtube.com/watch?v=jNQXAC9IVRx','https://www.youtube.com/watch?v=short','https://www.youtube.com/channel/jNQXAC9IVRw','https://youtube.com.example.com/watch?v=jNQXAC9IVRw'])assert.notEqual(s.insert('link',other).id,first.id,other);
+ assert.equal(s.insert('link','https://www.youtube.com/watch?t=30&v=jNQXAC9IVRw&si=y').id,s.insert('link','https://youtu.be/jNQXAC9IVRw?t=30').id);
+ assert.equal(s.item(first.id).url,'https://youtu.be/jNQXAC9IVRw?si=share');
+}));
+test('Undo take down brings back both items of one take down that share their content',()=>fixture(s=>{const first=s.insert('link','https://a.example.com/a?utm_source=one'),second=s.insert('link','https://a.example.com/a?utm_source=two',{fresh:true});s.modify('remove',{ids:[first.id,second.id]});assert.ok(s.item(first.id).trashedAt&&s.item(second.id).trashedAt);s.modify('undo',{});assert.equal(s.item(first.id).trashedAt,null);assert.equal(s.item(second.id).trashedAt,null);}));
+test('Undo take down still brings back a text or link whose copy is hidden from the shelf',()=>fixture((s,time)=>{for(const [kind,value] of [['text','Hang once'],['link','https://a.example.com/']]){const old=s.insert(kind,value);s.modify('remove',{ids:[old.id]});time(s.clock()+1000);const fresh=s.insert(kind,value);assert.notEqual(fresh.id,old.id);s.item(fresh.id).hiddenFromShelf=true;s.modify('undo',{});assert.equal(s.item(old.id).trashedAt,null);}}));
+test('copying a stored text or image again records the copy, so it leads Last copied',()=>fixture((s,time)=>{const other=Buffer.concat([png,Buffer.from([0])]);const text=s.insert('text','Again');const image=s.insert('image',png);time(2000);s.markCopied([text.id,image.id]);time(3000);s.insert('text','Newer');s.insert('image',other);time(4000);const t=s.insert('text','Again'),i=s.insert('image',png);assert.equal(t.id,text.id);assert.equal(i.id,image.id);assert.equal(t.lastCopiedAt,4000);assert.equal(i.lastCopiedAt,4000);assert.equal(t.createdAt,4000);assert.equal(i.createdAt,4000);}));
 test('exact image recopy moves the image in front of another image and preserves saved organization',()=>fixture((s,time)=>{const other=Buffer.concat([png,Buffer.from([0])]);const first=s.insert('image',png);s.modify('name',{id:first.id,name:'Logo'});const folder=s.modify('createFolder',{name:'Work'});s.modify('folder',{ids:[first.id],folderId:folder.id});s.modify('tag',{ids:[first.id],tags:['brand']});time(1500);const second=s.insert('image',other);assert.notEqual(second.id,first.id);time(2000);const latest=s.insert('image',png);assert.equal(s.data.items.filter(i=>i.kind==='image').length,2);assert.equal(latest.id,first.id);assert.equal(latest.name,'Logo');assert.equal(latest.pinned,true);assert.deepEqual(latest.folderIds,[folder.id]);assert.deepEqual(latest.tags,['brand']);assert.equal(latest.createdAt,2000);assert.deepEqual(s.data.items.filter(i=>i.kind==='image').map(i=>i.id),[first.id,second.id]);}));
 test('exact recopy moves a text to front and preserves saved organization',()=>fixture((s,time)=>{const first=s.insert('text','API key exact value');s.modify('name',{id:first.id,name:'Service key'});const folder=s.modify('createFolder',{name:'Work'});s.modify('folder',{ids:[first.id],folderId:folder.id});s.modify('tag',{ids:[first.id],tags:['api']});time(2000);s.insert('text','something else');time(3000);const latest=s.insert('text','API key exact value');assert.equal(s.data.items.length,2);assert.equal(latest.id,first.id);assert.equal(latest.name,'Service key');assert.deepEqual(latest.folderIds,[folder.id]);assert.deepEqual(latest.tags,['api']);assert.equal(latest.createdAt,3000);assert.equal(s.data.items[0].id,first.id);}));
 test('copying a stored link again keeps its date added and records the copy, so it leads the Link shelf but not Newest first',()=>fixture((s,time)=>{const first=s.insert('link','https://a.example.com/');time(2000);s.insert('link','https://b.example.com/');time(3000);const again=s.insert('link','https://a.example.com/');assert.equal(again.id,first.id);assert.equal(s.data.items.length,2);assert.equal(again.createdAt,1000);assert.equal(again.lastCopiedAt,3000);assert.equal(again.updatedAt,3000);assert.deepEqual(s.data.items.filter(i=>i.kind==='link').sort((a,b)=>b.createdAt-a.createdAt).map(i=>i.url),['https://b.example.com/','https://a.example.com/']);}));
@@ -67,6 +79,25 @@ test('a capture or import of a note\'s text never merges or removes notes, also 
 test('a note keeps its marker on disk even when creation stops after the first write',()=>fixture((s,_time,dir)=>{
  s.modify=()=>{throw new Error('stopped');};assert.throws(()=>s.createNote({title:'Agenda'}),/stopped/);
  const note=new Store(dir).data.items.find(i=>i.text==='New note');assert.equal(note?.createdAsNote,true);
+}));
+test('recopying a text that has live duplicates merges them and keeps the extras in Trash like macOS',()=>fixture((s,time)=>{
+ const first=s.insert('text','duplicate body');s.modify('remove',{ids:[first.id]});
+ // Undo take down no longer brings back a recopied text; restoring from Trash by hand still makes two live copies.
+ time(2000);const second=s.insert('text','duplicate body');assert.notEqual(second.id,first.id);s.modify('restore',{ids:[first.id]});
+ assert.equal(s.data.items.filter(i=>!i.trashedAt&&i.text==='duplicate body').length,2);s.modify('tag',{id:first.id,tags:['kept']});
+ time(3000);const merged=s.insert('text','duplicate body');
+ const live=s.data.items.filter(i=>!i.trashedAt),trashed=s.data.items.filter(i=>i.trashedAt);
+ assert.deepEqual(live.map(i=>i.id),[merged.id]);assert.equal(trashed.length,1);assert.equal(s.data.items.length,2);
+ assert.ok(merged.tags.includes('kept'));assert.equal(trashed[0].hiddenFromShelf,true);assert.ok(trashed[0].trashRevision);
+ s.modify('restore',{ids:[trashed[0].id]});assert.equal(s.data.items.filter(i=>!i.trashedAt).length,2);
+}));
+test('undo of an earlier removal cannot revive a duplicate that a recopy merged into Trash',()=>fixture((s,time)=>{
+ const saved=s.insert('text','first body');s.modify('pin',{ids:[saved.id]});s.modify('remove',{ids:[saved.id]});assert.equal(saved.hiddenFromShelf,true);
+ time(2000);const other=s.insert('text','second body');s.modify('editText',{id:other.id,text:'first body'});
+ time(3000);const merged=s.insert('text','first body');
+ assert.equal(s.data.items.filter(i=>!i.trashedAt).length,1);
+ s.modify('undo');
+ assert.deepEqual(s.data.items.filter(i=>!i.trashedAt).map(i=>i.id),[merged.id]);
 }));
 test('explicit Trash invalidates removal undo and deletion requires Trash',()=>fixture(s=>{const item=s.insert('text','text');assert.throws(()=>s.modify('delete',{ids:[item.id]}));s.modify('remove',{ids:[item.id]});s.modify('restore',{ids:[item.id]});assert.equal(s.undoStack.length,0);s.modify('trash',{ids:[item.id]});s.modify('delete',{ids:[item.id]});assert.equal(s.data.items.length,0);}));
 test('batch operations are atomic when one content kind is invalid',()=>fixture(s=>{const text=s.insert('text','before'),image=s.insert('image',png);assert.throws(()=>s.modify('editText',{ids:[text.id,image.id],text:'after'}));assert.equal(s.item(text.id).text,'before');}));
@@ -274,6 +305,33 @@ test('selection lookups keep request order and reject missing items',()=>fixture
  assert.throws(()=>s.selected([first.id,'00000000-0000-4000-8000-000000000000']),/no longer exists/);
  s.modify('trash',{ids:[first.id]});s.modify('delete',{ids:[first.id]});assert.deepEqual(s.data.items.map(item=>item.id),[second.id]);
 }));
+test('links differing only by tracking parameters share one item like macOS LinkIdentity.normalized',()=>fixture((s,time)=>{
+ const first=s.insert('link','https://example.com/a?id=7&utm_source=news&UTM_Medium=mail');s.modify('pin',{ids:[first.id]});time(2000);
+ for(const copy of ['https://example.com/a?id=7','https://example.com/a?fbclid=x&id=7&gclid=y','https://EXAMPLE.com:443/a?utm_campaign=z&id=7']){const again=s.insert('link',copy);assert.equal(again.id,first.id);}
+ assert.equal(s.data.items.length,1);assert.equal(s.data.items[0].url,'https://example.com/a?id=7&utm_source=news&UTM_Medium=mail');assert.equal(s.data.items[0].pinned,true);
+ assert.notEqual(s.insert('link','https://example.com/a?id=8').id,first.id);assert.notEqual(s.insert('link','https://example.com/a?id=7&ref=x').id,first.id);assert.notEqual(s.insert('link','https://example.com/a?id=7#top').id,first.id);
+ assert.equal(s.insert('link','https://example.com/?utm_source=x').id,s.insert('link','https://example.com/').id);assert.equal(s.data.items.length,5);
+}));
+test('old duplicate links that differ only by tracking parameters merge on the next copy and keep the first stored address, names and notes',()=>fixture((s,time)=>{
+ const old=(url,createdAt,fields)=>Object.assign(s.insert('link','https://example.com/seed-'+s.data.items.length),{url,createdAt,updatedAt:createdAt,...fields});
+ const first=old('https://example.com/a?utm_source=x',1000,{name:'Reading list',pinned:true,title:'Example',author:'Ann',thumbnailFile:'a'.repeat(64)+'.png'}),second=old('https://example.com/a',2000,{note:'from a friend',tags:['later'],lastCopiedAt:4000}),newest=old('https://example.com/a?fbclid=z',3000,{});
+ time(5000);const copy=s.insert('link','https://example.com/a?gclid=q');
+ assert.equal(copy.id,newest.id);assert.deepEqual(s.data.items.filter(i=>i.kind==='link'&&!i.trashedAt).map(i=>i.id),[newest.id]);
+ // The merged copies stay recoverable in Trash with what they held.
+ assert.deepEqual(s.data.items.filter(i=>i.kind==='link'&&i.trashedAt).map(i=>i.id).sort(),[first.id,second.id].sort());
+ assert.deepEqual([first.name,first.pinned,second.note,second.tags,first.hiddenFromShelf,second.hiddenFromShelf],['Reading list',true,'from a friend',['later'],true,true]);
+ assert.equal(copy.url,first.url);assert.equal(copy.name,'Reading list');assert.equal(copy.note,'from a friend');assert.deepEqual(copy.tags,['later']);assert.equal(copy.pinned,true);assert.equal(copy.lastCopiedAt,5000);
+ assert.equal(copy.title,'Example');assert.equal(copy.author,'Ann');assert.equal(copy.thumbnailFile,'a'.repeat(64)+'.png');
+}));
+test('old duplicate links whose names or notes differ are not merged, so none of them is lost',()=>fixture((s,time)=>{
+ const old=(url,createdAt,fields)=>Object.assign(s.insert('link','https://example.com/seed-'+s.data.items.length),{url,createdAt,updatedAt:createdAt,...fields});
+ const work=old('https://example.com/a?id=7&utm_source=x',1000,{name:'Work',note:'shared note'}),home=old('https://example.com/a?id=7',2000,{name:'Home',note:'other note'}),newest=old('https://example.com/a?id=7&utm_campaign=y',3000,{note:'shared note'});
+ for(const at of [5000,6000]){time(at);const copy=s.insert('link','https://example.com/a?id=7&gclid=q');
+  assert.equal(copy.id,newest.id);assert.deepEqual([copy.name,copy.note,copy.url],['Work','shared note',work.url]);
+  assert.deepEqual(s.data.items.filter(i=>i.kind==='link'&&!i.trashedAt).map(i=>i.id).sort(),[newest.id,home.id].sort());
+  assert.deepEqual(s.data.items.filter(i=>i.kind==='link'&&i.trashedAt).map(i=>i.id),[work.id]);assert.equal(work.trashedAt,5000);
+  assert.deepEqual([home.name,home.note,home.url],['Home','other note','https://example.com/a?id=7']);}
+}));
 test('Name and pin follows macOS nameAndPin: 1-160 characters, 1024 bytes, no control or line separators',()=>fixture(s=>{
  const id=s.insert('text','Synthetic text').id,family='\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}';
  for(const name of ['',' \n ','x'.repeat(161),'a\nb','a\u0007b','a b','a b','\u{1F600}'.repeat(161),family.repeat(41),'x'.repeat(4097),'a\0b',undefined,42])assert.throws(()=>s.modify('name',{id,name}),{message:'Enter a name (1–160 characters)'});
@@ -308,3 +366,13 @@ test('pin on a mixed selection pins every item and only a fully pinned selection
 test('a note or edited text over 1 MiB of UTF-8 bytes is refused like on macOS',()=>fixture(s=>{const item=s.insert('text','x');const big='ş'.repeat(600000);assert.throws(()=>s.modify('note',{ids:[item.id],note:big}),/Invalid text/);assert.throws(()=>s.modify('editText',{ids:[item.id],text:big}),/Invalid text/);assert.throws(()=>s.insert('text',big),/Invalid text/);s.modify('note',{ids:[item.id],note:'ş'.repeat(500000)});assert.equal(s.data.items[0].note.length,500000);}));
 test('an item can get a 51st tag, like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello');for(let i=1;i<=51;i++)s.modify('tag',{ids:[item.id],tags:[...s.item(item.id).tags,'tag'+i]});assert.equal(s.item(item.id).tags.length,51);}));
 test('a Library inspector title over 200 characters is saved like on the Mac',()=>fixture(s=>{const item=s.insert('text','hello'),title='Quarterly planning notes '.repeat(10).trim();assert.equal(title.length,249);s.modify('details',{ids:[item.id],id:item.id,name:title});assert.equal(s.item(item.id).name,title);assert.throws(()=>s.modify('details',{ids:[item.id],id:item.id,name:'ş'.repeat(600000)}),/Invalid text/);assert.equal(s.item(item.id).name,title);}));
+
+test('renaming a tag to the name it already has changes nothing and keeps Trash undo',()=>fixture(s=>{
+ const item=s.insert('text','tagged');s.modify('tag',{ids:[item.id],tags:['urgent']});s.modify('trashUndoably',{ids:[item.id]});
+ let persisted=0;const persist=s.persist.bind(s);s.persist=()=>{persisted++;return persist();};
+ s.modify('renameTag',{tag:'urgent',name:'#urgent'});s.modify('renameTag',{tag:'urgent',name:'urgent'});
+ assert.equal(persisted,0);assert.deepEqual(s.item(item.id).tags,['urgent']);
+ s.modify('undoTrash');assert.equal(s.item(item.id).trashedAt,null);persisted=0;
+ s.modify('renameTag',{tag:'urgent',name:'Urgent'});assert.equal(persisted,1);assert.deepEqual(s.item(item.id).tags,['Urgent']);
+}));
+test('system screenshot watching is on by default, takes only booleans and survives other settings changes and a reload',()=>fixture((s,_clock,dir)=>{assert.equal(s.data.settings.watchSystemScreenshots,true);for(const value of ['false',0,null,[],{}])assert.throws(()=>s.modify('setSettings',{patch:{watchSystemScreenshots:value}}),/Invalid preference/);assert.equal(s.data.settings.watchSystemScreenshots,true);s.modify('setSettings',{patch:{watchSystemScreenshots:false}});s.modify('setSettings',{patch:{sounds:true,watchFolders:[path.join(dir,'shots')]}});assert.equal(s.data.settings.watchSystemScreenshots,false);assert.equal(new Store(dir).data.settings.watchSystemScreenshots,false);const saved=JSON.parse(fs.readFileSync(s.file,'utf8'));delete saved.settings.watchSystemScreenshots;fs.writeFileSync(s.file,JSON.stringify(saved));assert.equal(new Store(dir).data.settings.watchSystemScreenshots,true,'a library saved before the setting existed starts with it on');}));
