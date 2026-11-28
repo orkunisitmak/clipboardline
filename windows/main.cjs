@@ -35,6 +35,7 @@ const {createOcrQueue}=require('./lib/ocr-queue.cjs');
 const {StatusTray,trayIcon,translated,translatedKnown,languageCode}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
+const {PeekController,PEEK_DURATION_MS}=require('./lib/peek-controller.cjs');
 const {shouldStartHidden,shouldShowOnSecondInstance,applyLoginItemSetting,migrateLoginItemSetting}=require('./lib/login-launch.cjs');
 const {watchedFolders,shelfRevealPatch}=require('./lib/watch-folders.cjs');
 const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
@@ -51,8 +52,10 @@ let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboard
 let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,folderWatchers=null,normalBounds=null,normalMaximized=false,applyingBounds=false;
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
-let visibilityGeneration=0,desiredVisible=false;
+let visibilityGeneration=0,desiredVisible=false,pendingPeekGeneration=0,pendingPeekEvent=null;
 const shelfMotion=new MotionBridge(value=>{if(window&&!window.isDestroyed())window.webContents.send('clipboardline:shelf-motion',value);});
+const peek=new PeekController({onExpire:generation=>{if(closing||generation!==visibilityGeneration||!desiredVisible||window?.isFocused?.())return;void hide(false);}});
+function cancelPeekState(){const wasActive=peek.cancel();pendingPeekGeneration=0;pendingPeekEvent=null;return wasActive;}
 const windowBounds=new WindowBounds();
 const pasteTargets=new PasteTargetTracker(process.pid);
 const entry = pathToFileURL(path.join(__dirname,'index.html')).href;
@@ -87,7 +90,7 @@ async function readSemanticImage(id){
  const resized=image.getSize();return{bitmap:image.toBitmap(),width:resized.width,height:resized.height};
 }
 
-function state(result,{surfaceOnly=false}={}) { const light=surfaceOnly&&lastBroadcastLibraryRevision===store.revision;return {...(light?{surfaceOnly:true}:store.publicState()),libraryRevision:store.revision,version:app.getVersion(),build:BUILD_NUMBER,platform:process.platform,development,view,windowMode:view==='shelves'?'overlay':'normal',windowMaximized:window?.isMaximized()||false,windowVisible:desiredVisible&&(window?.isVisible()||false),shortcutRecordingToken:shortcutRecording?.token||null,message:message||store.privacyWarning||'',viewEvent,imageSearch:{...(imageSearch?.state||{available:false,indexing:false,pending:0,revision:0})},update:{...updates.state},...(result===undefined?{}:{result})}; }
+function state(result,{surfaceOnly=false}={}) { const light=surfaceOnly&&lastBroadcastLibraryRevision===store.revision;return {...(light?{surfaceOnly:true}:store.publicState()),libraryRevision:store.revision,version:app.getVersion(),build:BUILD_NUMBER,platform:process.platform,development,view,windowMode:view==='shelves'?'overlay':'normal',windowMaximized:window?.isMaximized()||false,windowVisible:desiredVisible&&(window?.isVisible()||false),peeking:peek.active,shortcutRecordingToken:shortcutRecording?.token||null,message:message||store.privacyWarning||'',viewEvent,imageSearch:{...(imageSearch?.state||{available:false,indexing:false,pending:0,revision:0})},update:{...updates.state},...(result===undefined?{}:{result})}; }
 function broadcast({surfaceOnly=false}={}) {
   // Visibility and native bounds do not change library content. Retain the
   // renderer's existing rows instead of cloning and sending the full history
@@ -125,11 +128,11 @@ function trusted(event) {
 }
 function rememberNormalBounds(){if(window&&view!=='shelves'&&!applyingBounds&&!window.isMinimized()){normalBounds=window.getNormalBounds();normalMaximized=window.isMaximized();}}
 function fitNormalBounds(area){const width=Math.min(area.width,normalBounds?.width||1180),height=Math.min(area.height,normalBounds?.height||800);return{width,height,x:Math.min(area.x+area.width-width,Math.max(area.x,normalBounds?.x??Math.round(area.x+(area.width-width)/2))),y:Math.min(area.y+area.height-height,Math.max(area.y,normalBounds?.y??Math.round(area.y+(area.height-height)/2)))};}
-async function show(next='shelves',event=null) {
-  cancelRecordingTrims();
+async function show(next='shelves',event=null,{focus=true,peekMs=0}={}) {
+  cancelRecordingTrims();cancelPeekState();
   const reveal=shelfRevealPatch(store.data.settings,next,event);if(reveal)store.modify('setSettings',{patch:reveal});
   if(pastePromise){pasteGeneration++;cancelNativePaste();}
-  const generation=++visibilityGeneration,wasClosing=!desiredVisible&&window.isVisible();desiredVisible=true;shelfMotion.cancel();showing++;
+  const generation=++visibilityGeneration,wasClosing=!desiredVisible&&window.isVisible(),peeking=next==='shelves'&&!focus&&peekMs>0;desiredVisible=true;pendingPeekGeneration=peeking?generation:0;pendingPeekEvent=peeking?event:null;if(peeking)peek.beginPending(generation);shelfMotion.cancel();showing++;
   try {
     // A hidden window can still be restoring its previous native field.
     // Complete that operation before a rapid reopen captures and takes focus.
@@ -140,7 +143,8 @@ async function show(next='shelves',event=null) {
       if(generation!==visibilityGeneration)return;
       previous=pasteTargets.capture(target);
     }
-    rememberNormalBounds();view=next;viewEvent=event?{...event,serial:crypto.randomUUID()}:null;message='';
+    const initialEvent=peeking&&pendingPeekEvent?pendingPeekEvent:event;
+    rememberNormalBounds();view=next;viewEvent=initialEvent?{...initialEvent,serial:crypto.randomUUID()}:null;message='';
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     applyingBounds=true;
     try{
@@ -152,14 +156,20 @@ async function show(next='shelves',event=null) {
     if(animate)await shelfMotion.request('prepare',{hidden:!window.isVisible()});else await shelfMotion.request('reset');
     if(generation!==visibilityGeneration)return;
     try{window.setIgnoreMouseEvents(false);}catch{}
-    window.show();window.focus();windowBounds.shown(window);broadcast({surfaceOnly:true});
+    const shouldPeek=peeking&&pendingPeekGeneration===generation&&peek.pending&&!window.isFocused?.();
+    if(!focus&&shouldPeek&&typeof window.showInactive==='function')window.showInactive();
+    else{window.show();if(focus)window.focus();}
+    if(shouldPeek&&!window.isFocused?.())peek.commitPending(generation,peekMs);
+    else peek.clearPending(generation);
+    pendingPeekGeneration=0;pendingPeekEvent=null;
+    windowBounds.shown(window);broadcast({surfaceOnly:true});
     // Commands can await the settled pixels, but the window and keyboard are
     // available immediately. A concurrent toggle can cancel this animation.
     if(animate)await shelfMotion.request('open');
-  }finally{showing--;}
+  }finally{if(pendingPeekGeneration===generation){pendingPeekGeneration=0;pendingPeekEvent=null;peek.clearPending(generation);}showing--;}
 }
 async function hide(restore=true) {
-  cancelRecordingTrims();
+  cancelRecordingTrims();cancelPeekState();
   if(restore&&pastePromise){pasteGeneration++;cancelNativePaste();}
   // A reopen can cancel an older close while its promise is still unwinding.
   // A subsequent close must supersede that reopen rather than reuse the
@@ -182,6 +192,13 @@ async function hide(restore=true) {
 async function clipboardContent() {
   return readClipboardContent({clipboard,sequence:()=>native.clipboardSequence(),marker:copyMarker,plainURL,captureLinks:store?.data.settings.captureLinks!==false});
 }
+async function revealCapturedImage(item) {
+  if(!item||!store.data.settings.openAfterScreenshot)return;
+  const event={selectId:item.id,kind:'image'};
+  if(!desiredVisible){await show('shelves',event,{focus:false,peekMs:PEEK_DURATION_MS});return;}
+  if(peek.pending&&pendingPeekGeneration===visibilityGeneration){pendingPeekEvent=event;viewEvent={...event,serial:crypto.randomUUID()};return;}
+  if(view==='shelves'&&peek.active){viewEvent={...event,serial:crypto.randomUUID()};peek.start(visibilityGeneration,PEEK_DURATION_MS);broadcast({surfaceOnly:true});}
+}
 async function readClipboard() {
   if(capturing){pendingClipboard=true;return;}if(!store||closing||!['captureText','captureImages','captureLinks'].some(key=>store.data.settings[key]))return;capturing=true;
   try{
@@ -194,7 +211,7 @@ async function readClipboard() {
     const item=store.insert(content.kind,content.value);broadcast();
     if(item.kind==='link')void enrich(item.id);
     if(item.kind==='image'){queueOCR(item.id);refreshImageSearch();}
-    if(item.kind==='image'&&store.data.settings.openAfterScreenshot&&!desiredVisible)await show('shelves',{selectId:item.id,kind:'image'});
+    if(item.kind==='image')await revealCapturedImage(item);
   }catch(error){notify('Clipboard capture: '+error.message);}finally{capturing=false;if(pendingClipboard){pendingClipboard=false;queueMicrotask(()=>void readClipboard());}}
 }
 async function enrich(id,{refresh=false}={}) {
@@ -271,7 +288,7 @@ async function importFile(file) {
   const image=nativeImage.createFromPath(file);if(image.isEmpty())throw new Error('Unsupported image file');const item=store.insert('image',image.toPNG());queueOCR(item.id);refreshImageSearch();return item;
 }
 async function capture() {
-  const wasVisible=window.isVisible();visibilityGeneration++;desiredVisible=false;shelfMotion.cancel();if(wasVisible)window.hide();viewEvent=null;broadcast({surfaceOnly:true});await shelfMotion.request('reset');
+  const wasVisible=window.isVisible();peek.cancel();pendingPeekGeneration=0;pendingPeekEvent=null;visibilityGeneration++;desiredVisible=false;shelfMotion.cancel();if(wasVisible)window.hide();viewEvent=null;broadcast({surfaceOnly:true});await shelfMotion.request('reset');
   try{
     // Capture only after the shelf window has left the compositor.
     await new Promise(resolve=>setTimeout(resolve,150));
@@ -329,7 +346,7 @@ function systemScreenshotFolder(resolve) {
   return systemScreenshots;
 }
 function configureWatchers(resolve=true) {
-  folderWatchers??=new FolderWatchers({importFile,notify,closing:()=>closing,imported:record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}});
+  folderWatchers??=new FolderWatchers({importFile,notify,closing:()=>closing,imported:record=>{broadcast();void revealCapturedImage(record);}});
   folderWatchers.configure(watchedFolders(store.data.settings,systemScreenshotFolder(resolve)));
 }
 let shortcutRegistry,shortcutRecording=null;
@@ -364,6 +381,15 @@ function configureShortcuts(previousPreferences=null) {
 const modelActions=new Set(['pin','name','details','retain','note','unassign','removeTag','renameTag','deleteTag','folder','createFolder','renameFolder','removeFolder','tag','remove','undo','trash','trashUndoably','undoTrash','restore','delete','editText','saveImage','cleanup','clearUnsavedHistory']);
 async function command(action,payload={}) {
   if(typeof action!=='string'||!payload||typeof payload!=='object'||Array.isArray(payload)||JSON.stringify(payload).length>92_000_000)throw new Error('Invalid command');
+  if(action==='peekHold')return{ok:peek.hold(),peeking:peek.active||peek.pending};
+  if(action==='peekRelease')return{ok:peek.release(),peeking:peek.active||peek.pending};
+  if(action==='cancelPeek'){
+    const wasPending=peek.pending,canceled=cancelPeekState()||wasPending;
+    if(canceled&&window&&!window.isDestroyed()&&desiredVisible&&!window.isFocused())window.focus();
+    const packet=canceled?broadcast({surfaceOnly:true}):state(undefined,{surfaceOnly:true});
+    return{...packet,result:{canceled}};
+  }
+  cancelPeekState();
   message='';let result;
   if(action==='beginShortcutRecording')startShortcutRecording(payload.token);
   else if(action==='endShortcutRecording'){if(typeof payload.token==='string')finishShortcutRecording(payload.token);}
@@ -521,7 +547,7 @@ else app.whenReady().then(async()=>{
   window.webContents.on('will-frame-navigate',event=>{if(!event.isMainFrame||event.url!==entry)event.preventDefault();});
   window.webContents.on('will-attach-webview',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
-  window.on('focus',()=>{if(!showing&&!pastePromise)previous=pasteTargets.reenter();});
+  window.on('focus',()=>{if(!showing&&!pastePromise)previous=pasteTargets.reenter();if(cancelPeekState())broadcast({surfaceOnly:true});});
   window.on('close',event=>{finishShortcutRecording();if(!closing){event.preventDefault();void hide();}});
   window.on('resize',()=>{if(applyingBounds)return;rememberNormalBounds();broadcast({surfaceOnly:true});});window.on('move',rememberNormalBounds);window.on('maximize',()=>{if(applyingBounds)return;rememberNormalBounds();broadcast({surfaceOnly:true});});window.on('unmaximize',()=>{if(applyingBounds)return;rememberNormalBounds();broadcast({surfaceOnly:true});});
   window.webContents.on('did-finish-load',()=>{lastBroadcastLibraryRevision=-1;});
@@ -551,8 +577,8 @@ else app.whenReady().then(async()=>{
   }
   windowReady=true;if(!startHidden)await show('shelves');
   // Test hooks are main-process only and require an explicit isolated data path.
-  if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
+  if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getPeekState:()=>({active:peek.active,held:peek.held,pending:peek.pending,pendingHeld:peek.pendingHeld,generation:peek.generation}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
 }).catch(error=>{dialog.showErrorBox(mainText('ClipBoardLine could not start'),mainText(error.message));app.exit(1);});
 app.on('second-instance',(_event,commandLine)=>{if(!shouldShowOnSecondInstance({commandLine}))return;startHidden=false;if(window&&windowReady)void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});
-app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();folderWatchers?.close();shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
+app.on('before-quit',()=>{closing=true;cancelPeekState();visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();folderWatchers?.close();shortcutRegistry?.dispose();globalShortcut.unregisterAll();});

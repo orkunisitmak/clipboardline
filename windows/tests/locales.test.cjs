@@ -44,8 +44,8 @@ const settingsText = [
   'Small',
   'Medium',
   'Large',
-  'Open after screenshot',
-  'Focus the captured image immediately so Enter and Space work.',
+  'When something new hangs',
+  'Peek briefly without taking focus when a new image or screenshot arrives.',
   'Sounds',
   'Launch at login',
   'Images',
@@ -148,7 +148,7 @@ const windowsRuntimeMessages = [
 const translatedLabels = [
   'Settings', 'General', 'Sources', 'History', 'Keyboard shortcuts', 'Updates',
   'About', 'Language', 'System language', 'Colors', 'Soft colors',
-  'Neutral glass', 'Card size', 'Open after screenshot', 'Launch at login',
+  'Neutral glass', 'Card size', 'When something new hangs', 'Launch at login',
   'Images', 'Texts', 'Links', 'Capture copied images', 'Capture copied text',
   'Capture copied links', 'Fetch link titles and thumbnails',
   'Recognize text in new images', 'Watch image folders', 'Add folder'

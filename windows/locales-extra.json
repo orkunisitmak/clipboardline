@@ -335,7 +335,8 @@
     "Could not restore: %@.": "Bərpa etmək mümkün olmadı: %@.",
     "Working previous shortcuts are kept.": "İşlənir; əvvəlki qısayollar saxlanılır.",
     "Choose another combination in Settings.": "Parametrlərdə başqa düymə kombinasiyası seçin.",
-    "Shortcut %@ is unavailable. %@": "%@ qısayolu əlçatan deyil. %@"
+    "Shortcut %@ is unavailable. %@": "%@ qısayolu əlçatan deyil. %@",
+    "Peek briefly without taking focus when a new image or screenshot arrives.": "Yeni şəkil və ya ekran görüntüsü gəldikdə fokusu almadan qısa göstər."
   },
   "en": {
     "Automatic link metadata needs a named host.": "Automatic link metadata needs a named host.",
@@ -673,7 +674,8 @@
     "Could not restore: %@.": "Could not restore: %@.",
     "Working previous shortcuts are kept.": "Working previous shortcuts are kept.",
     "Choose another combination in Settings.": "Choose another combination in Settings.",
-    "Shortcut %@ is unavailable. %@": "Shortcut %@ is unavailable. %@"
+    "Shortcut %@ is unavailable. %@": "Shortcut %@ is unavailable. %@",
+    "Peek briefly without taking focus when a new image or screenshot arrives.": "Peek briefly without taking focus when a new image or screenshot arrives."
   },
   "es": {
     "Automatic link metadata needs a named host.": "Los metadatos automáticos de enlaces requieren un nombre de host.",
@@ -1011,7 +1013,8 @@
     "Could not restore: %@.": "No se pudo restaurar: %@.",
     "Working previous shortcuts are kept.": "Se conservan los atajos anteriores que funcionan.",
     "Choose another combination in Settings.": "Elige otra combinación en Ajustes.",
-    "Shortcut %@ is unavailable. %@": "El atajo %@ no está disponible. %@"
+    "Shortcut %@ is unavailable. %@": "El atajo %@ no está disponible. %@",
+    "Peek briefly without taking focus when a new image or screenshot arrives.": "Muestra brevemente la vista previa sin quitar el foco cuando llega una imagen o captura."
   },
   "fr": {
     "Automatic link metadata needs a named host.": "Les métadonnées automatiques des liens nécessitent un nom d’hôte.",
@@ -1349,7 +1352,8 @@
     "Could not restore: %@.": "Restauration impossible : %@.",
     "Working previous shortcuts are kept.": "Les raccourcis précédents qui fonctionnent sont conservés.",
     "Choose another combination in Settings.": "Choisissez une autre combinaison dans Réglages.",
-    "Shortcut %@ is unavailable. %@": "Le raccourci %@ n’est pas disponible. %@"
+    "Shortcut %@ is unavailable. %@": "Le raccourci %@ n’est pas disponible. %@",
+    "Peek briefly without taking focus when a new image or screenshot arrives.": "Affiche un bref aperçu sans prendre le focus lorsqu’une image ou une capture arrive."
   },
   "ja": {
     "Automatic link metadata needs a named host.": "リンクのメタデータを自動取得するにはホスト名が必要です。",
@@ -1687,7 +1691,8 @@
     "Could not restore: %@.": "復元できませんでした: %@。",
     "Working previous shortcuts are kept.": "動作中です。以前のショートカットは保持されています。",
     "Choose another combination in Settings.": "設定で別のキーの組み合わせを選択してください。",
-    "Shortcut %@ is unavailable. %@": "ショートカット %@ は使用できません。%@"
+    "Shortcut %@ is unavailable. %@": "ショートカット %@ は使用できません。%@",
+    "Peek briefly without taking focus when a new image or screenshot arrives.": "新しい画像やスクリーンショットが届いたとき、フォーカスを奪わずに少しだけ表示します。"
   },
   "ko": {
     "Automatic link metadata needs a named host.": "자동 링크 메타데이터를 가져오려면 호스트 이름이 필요합니다.",
@@ -2025,7 +2030,8 @@
     "Could not restore: %@.": "복원할 수 없습니다: %@.",
     "Working previous shortcuts are kept.": "작동 중입니다. 이전 단축키는 유지됩니다.",
     "Choose another combination in Settings.": "설정에서 다른 키 조합을 선택하세요.",
-    "Shortcut %@ is unavailable. %@": "단축키 %@을(를) 사용할 수 없습니다. %@"
+    "Shortcut %@ is unavailable. %@": "단축키 %@을(를) 사용할 수 없습니다. %@",
+    "Peek briefly without taking focus when a new image or screenshot arrives.": "새 이미지나 스크린샷이 도착하면 포커스를 뺏지 않고 잠시 표시합니다."
   },
   "pt-BR": {
     "Automatic link metadata needs a named host.": "Os metadados automáticos de links exigem um nome de host.",
@@ -2363,7 +2369,8 @@
     "Could not restore: %@.": "Não foi possível restaurar: %@.",
     "Working previous shortcuts are kept.": "Processando; os atalhos anteriores são mantidos.",
     "Choose another combination in Settings.": "Escolha outra combinação em Configurações.",
-    "Shortcut %@ is unavailable. %@": "O atalho %@ não está disponível. %@"
+    "Shortcut %@ is unavailable. %@": "O atalho %@ não está disponível. %@",
+    "Peek briefly without taking focus when a new image or screenshot arrives.": "Exibe uma prévia rápida sem tirar o foco quando uma nova imagem ou captura chegar."
   },
   "tr": {
     "Automatic link metadata needs a named host.": "Link meta verisinin otomatik alınması için bir ana makine adı gerekir.",
@@ -2701,7 +2708,8 @@
     "Could not restore: %@.": "Geri yüklenemedi: %@.",
     "Working previous shortcuts are kept.": "Önceki çalışan kısayollar korunuyor.",
     "Choose another combination in Settings.": "Ayarlar'dan başka bir kısayol birleşimi seçin.",
-    "Shortcut %@ is unavailable. %@": "%@ kısayolu kullanılamıyor. %@"
+    "Shortcut %@ is unavailable. %@": "%@ kısayolu kullanılamıyor. %@",
+    "Peek briefly without taking focus when a new image or screenshot arrives.": "Yeni bir görsel veya ekran görüntüsü geldiğinde odak çalmadan kısaca önizle."
   },
   "zh-Hans": {
     "Automatic link metadata needs a named host.": "自动获取链接元数据需要主机名。",
@@ -3039,6 +3047,7 @@
     "Could not restore: %@.": "无法恢复：%@。",
     "Working previous shortcuts are kept.": "正在处理，之前的快捷键将保留。",
     "Choose another combination in Settings.": "请在“设置”中选择其他按键组合。",
-    "Shortcut %@ is unavailable. %@": "快捷键 %@ 不可用。%@"
+    "Shortcut %@ is unavailable. %@": "快捷键 %@ 不可用。%@",
+    "Peek briefly without taking focus when a new image or screenshot arrives.": "有新图片或截图到达时短暂预览，不抢占焦点。"
   }
 }

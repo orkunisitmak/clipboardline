@@ -11,7 +11,7 @@ const {execFileSync}=require('node:child_process');
 const os=require('node:os');
 const {exportCopies}=require('../lib/export-copies.cjs');
 
-function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,exporter=null,trackFocus=false,serializeOverlayMarkup=false}={}){
+function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFrames=false,imageRaster={width:900,height:220},imageDocument=false,exporter=null,trackFocus=false,serializeOverlayMarkup=false,withDocumentElement=false}={}){
  const listeners=new Map(),nodes=new Map(),commands=[],imageLoads=[],animationFrames=[],paintCalls=[];let exportFailures=0,lastClick=null,testDocument;
  class Element{
   constructor(id=''){this.id=id;this._innerHTML='';this.textContent='';this.dataset={};this.style={};this.className='';this.value='';this.selectionStart=0;this.selectionEnd=0;this.isConnected=true;this.classList={add(){},remove(){},contains(){return false;}};}
@@ -29,7 +29,7 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
   constructor(){super();this.naturalWidth=imageRaster.width;this.naturalHeight=imageRaster.height;this.complete=true;}
   set src(value){imageLoads.push({url:value,crossOrigin:this.crossOrigin});if(this.onload)queueMicrotask(()=>this.onload());}
  }
- const document={body:new Element('body'),activeElement:null,querySelectorAll(){return[];},getElementById(id){if(!nodes.has(id))nodes.set(id,id==='markup-canvas'?new Canvas(id):new Element(id));return nodes.get(id);},createElement(tag){return tag==='canvas'?new Canvas():new Element();},querySelector(){return null;},addEventListener(name,listener){if(!listeners.has(name))listeners.set(name,[]);listeners.get(name).push(listener);}};testDocument=document;
+ const document={body:new Element('body'),activeElement:null,...(withDocumentElement?{documentElement:{addEventListener(name,listener){const key='documentElement:'+name;if(!listeners.has(key))listeners.set(key,[]);listeners.get(key).push(listener);}}}:{}),querySelectorAll(){return[];},getElementById(id){if(!nodes.has(id))nodes.set(id,id==='markup-canvas'?new Canvas(id):new Element(id));return nodes.get(id);},createElement(tag){return tag==='canvas'?new Canvas():new Element();},querySelector(){return null;},addEventListener(name,listener){if(!listeners.has(name))listeners.set(name,[]);listeners.get(name).push(listener);}};testDocument=document;
  const overlayNode=document.getElementById('overlay-root');let overlayWrites=0,overlayMarkup='';
  Object.defineProperty(overlayNode,'innerHTML',{get(){return overlayMarkup;},set(value){overlayWrites++;overlayMarkup=serializeOverlayMarkup?value.replace(/ >/g,'>'):value;}});
  const image='00000000-0000-4000-8000-000000000001',text1='00000000-0000-4000-8000-000000000002',text2='00000000-0000-4000-8000-000000000003',link='00000000-0000-4000-8000-000000000004';
@@ -50,7 +50,9 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
   if(action==='undo'){for(const before of removed)Object.assign(state.items.find(item=>item.id===before.id),before);state.canUndo=false;}
   if(action==='trashUndoably'){trashRemoved=selected.filter(item=>!item.trashedAt).map(clone);trashResult={ids:trashRemoved.map(item=>item.id)};selected.forEach(item=>{item.trashedAt=Date.now();item.hiddenFromShelf=true;});state.canUndoTrash=trashRemoved.length>0;}
   if(action==='undoTrash'){trashResult={ids:trashRemoved.map(item=>item.id)};for(const before of trashRemoved)Object.assign(state.items.find(item=>item.id===before.id),before);trashRemoved=[];state.canUndoTrash=false;}
-  if(action==='copy'&&!payload.keepOpen||action==='paste'||action==='hide')state.windowVisible=false;
+  if(action==='copy'&&!payload.keepOpen||action==='paste'||action==='hide'){state.windowVisible=false;state.peeking=false;}
+  if(action==='cancelPeek'||action==='dragStartOverlay'||action==='startDrag')state.peeking=false;
+  if(action==='dragEndOverlay'&&payload.completed&&state.view==='shelves'){state.windowVisible=false;state.peeking=false;}
   if(action==='show'){state.view='shelves';state.windowVisible=true;state.viewEvent={serial:String(commands.length)};}
   if(action==='library'||action==='settings'){state.view=action;state.windowVisible=true;}
   const output=clone(state);if(trashResult)output.result=trashResult;if(cleanupError)output.result={error:cleanupError};
@@ -64,10 +66,12 @@ function fixture({deferInitialState=false,initialVisible=true,queuedAnimationFra
  async function ready(){await new Promise(setImmediate);}
  async function key(code,{ctrl=false,alt=false,shift=false,key,target,composing=false,keyCode=0}={}){const event={code,key:key||(/^Key/.test(code)?code.slice(3).toLowerCase():code==='Space'?' ':code),ctrlKey:ctrl,metaKey:false,altKey:alt,shiftKey:shift,repeat:false,isComposing:composing,keyCode,target:target||new Element(),preventDefault(){this.prevented=true;}};for(const listener of listeners.get('keydown')||[])await listener(event);await ready();return event;}
  async function click(action,extra={}){const target=new Element();target.dataset.action=action;Object.assign(target.dataset,extra);if(action==='record-local'||action==='record-global')target.id='settings-'+action+'-'+extra.keyAction;target.closest=selector=>selector==='[data-action]'?target:null;lastClick=target;if(trackFocus)target.focus();for(const listener of listeners.get('click')||[])listener({target,stopPropagation(){}});await ready();}
- async function pointer(type,x,y){const target=document.getElementById('markup-canvas');for(const listener of listeners.get(type)||[])listener({target,clientX:x,clientY:y,pointerId:1,shiftKey:false,preventDefault(){}});await ready();}
+ async function pointer(type,x,y,target=document.getElementById('markup-canvas')){for(const listener of listeners.get(type)||[])listener({target,clientX:x,clientY:y,pointerId:1,shiftKey:false,preventDefault(){}});await ready();}
+ async function wheel(target,deltaY=40){for(const listener of listeners.get('wheel')||[])listener({target,deltaX:0,deltaY,shiftKey:false,preventDefault(){}});await ready();}
+ async function mouseleave(){for(const listener of listeners.get('documentElement:mouseleave')||[])listener({target:document.documentElement});await ready();}
  async function input(id,value){const target=document.getElementById(id);target.value=value;target.selectionStart=value.length;for(const listener of listeners.get('input')||[])await listener({target});await ready();}
  async function change(id,value){const target=document.getElementById(id);target.value=value;for(const listener of listeners.get('change')||[])await listener({target});await ready();}
- return{async cardContextMenu(id,{child=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;const inner=new Element();inner.closest=card.closest;const event={target:child?inner:card,preventDefault(){this.prevented=true;}};for(const listener of listeners.get('contextmenu')||[])await listener(event);await ready();return event;},async cardClick(id,{ctrl=false,shift=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;for(const listener of listeners.get('click')||[])await listener({target:card,ctrlKey:ctrl,metaKey:false,shiftKey:shift,stopPropagation(){}});await ready();},grid(columns){document.querySelectorAll=selector=>selector==='.library-grid > .card'?[...document.getElementById('app').innerHTML.matchAll(/<article class="[^"]*"[^>]*data-item-id="([^"]+)"/g)].map((match,index)=>({offsetTop:Math.floor(index/columns)*200,dataset:{itemId:match[1]}})):[];},editor(id){const node=document.getElementById(id);node.tagName='INPUT';node.matches=selector=>selector.includes('input');return node;},ready,key,input,change,click,pointer,async blur(){for(const listener of listeners.get('window:blur')||[])listener();await ready();},imageLoads,paintCalls,animationFrames,flushAnimationFrames(){for(const fn of animationFrames.splice(0))fn();},releaseInitialState(){releaseInitialState?.();},deferReply(action){let release;const promise=new Promise(resolve=>{release=resolve;});delayedReply={action,promise};return release;},deferImageBroadcast({surface=true}={}){deferredImageBroadcast={surface};},releaseImageBroadcast(){const next=pendingImageBroadcast;pendingImageBroadcast=null;if(next)subscriber?.(next);},failExportOnce(){exportFailures++;},failCleanupOnce(){cleanupFailures++;},failEditOnce(){editFailures++;},state,commands,nodes,image,text1,text2,link,api,get main(){return nodes.get('app').innerHTML;},get overlay(){return nodes.get('overlay-root').innerHTML;},get focused(){return document.activeElement;},get lastClick(){return lastClick;},get overlayWrites(){return overlayWrites;}};
+ return{async cardContextMenu(id,{child=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;const inner=new Element();inner.closest=card.closest;const event={target:child?inner:card,preventDefault(){this.prevented=true;}};for(const listener of listeners.get('contextmenu')||[])await listener(event);await ready();return event;},async cardClick(id,{ctrl=false,shift=false}={}){const card=new Element();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;for(const listener of listeners.get('click')||[])await listener({target:card,ctrlKey:ctrl,metaKey:false,shiftKey:shift,stopPropagation(){}});await ready();},async cardDrag(id,{alt=false}={}){const card=new Element(),cardListeners=new Map(),data=new Map();card.dataset.itemId=id;card.closest=selector=>selector==='[data-item-id]'?card:null;card.addEventListener=(name,fn)=>{if(!cardListeners.has(name))cardListeners.set(name,[]);cardListeners.get(name).push(fn);};card.removeEventListener=(name,fn)=>{const list=cardListeners.get(name);if(list)cardListeners.set(name,list.filter(entry=>entry!==fn));};const dataTransfer={effectAllowed:'none',dropEffect:'none',setData(type,value){data.set(type,String(value));},getData(type){return data.get(type)||'';},get types(){return[...data.keys()];}};for(const listener of listeners.get('dragstart')||[])await listener({target:card,altKey:alt,dataTransfer,preventDefault(){this.prevented=true;}});await ready();return{dataTransfer,async end({dropEffect='none'}={}){dataTransfer.dropEffect=dropEffect;for(const listener of [...(cardListeners.get('dragend')||[])])await listener({target:card,dataTransfer});await ready();}};},grid(columns){document.querySelectorAll=selector=>selector==='.library-grid > .card'?[...document.getElementById('app').innerHTML.matchAll(/<article class="[^"]*"[^>]*data-item-id="([^"]+)"/g)].map((match,index)=>({offsetTop:Math.floor(index/columns)*200,dataset:{itemId:match[1]}})):[];},editor(id){const node=document.getElementById(id);node.tagName='INPUT';node.matches=selector=>selector.includes('input');return node;},ready,key,input,change,click,pointer,wheel,mouseleave,async blur(){for(const listener of listeners.get('window:blur')||[])listener();await ready();},imageLoads,paintCalls,animationFrames,flushAnimationFrames(){for(const fn of animationFrames.splice(0))fn();},releaseInitialState(){releaseInitialState?.();},deferReply(action){let release;const promise=new Promise(resolve=>{release=resolve;});delayedReply={action,promise};return release;},deferImageBroadcast({surface=true}={}){deferredImageBroadcast={surface};},releaseImageBroadcast(){const next=pendingImageBroadcast;pendingImageBroadcast=null;if(next)subscriber?.(next);},failExportOnce(){exportFailures++;},failCleanupOnce(){cleanupFailures++;},failEditOnce(){editFailures++;},state,commands,nodes,image,text1,text2,link,api,get main(){return nodes.get('app').innerHTML;},get overlay(){return nodes.get('overlay-root').innerHTML;},get focused(){return document.activeElement;},get lastClick(){return lastClick;},get overlayWrites(){return overlayWrites;}};
 }
 
 function selectedCards(f){return [...f.main.matchAll(/<article class="([^"]*)"[^>]*data-item-id="([^"]+)"/g)].filter(match=>match[1].split(' ').includes('selected')).map(match=>match[2]);}
@@ -1062,6 +1066,85 @@ test('the corner cross keeps an unselected focus selected',async()=>{
  const f=fixture();await f.ready();const values=navigationItems(f,{image:6,text:0,link:0}).image;f.api.emit({items:values});await f.ready();
  await f.cardClick(values[1].id,{ctrl:true});await f.cardClick(values[1].id,{ctrl:true});assert.equal(focusedCard(f),values[1].id);assert.deepEqual(selectedCards(f),[values[0].id]);
  await f.click('card-remove',{id:values[0].id});assert.equal(focusedCard(f),values[1].id);assert.deepEqual(selectedCards(f),[values[1].id]);
+});
+
+test('Settings General renders the localized When something new hangs peek toggle',async()=>{
+ const f=fixture();await f.ready();await f.api.command('settings');await f.ready();
+ assert.match(f.main,/When something new hangs/);
+ assert.match(f.main,/Peek briefly without taking focus when a new image or screenshot arrives\./);
+ assert.doesNotMatch(f.main,/Open after screenshot/);
+ f.api.emit({settings:{...f.state.settings,language:'tr'}});await f.ready();
+ assert.match(f.main,/Yeni bir şey asıldığında/);
+ assert.match(f.main,/Yeni bir görsel veya ekran görüntüsü geldiğinde odak çalmadan kısaca önizle\./);
+});
+
+test('pointer hover over shelf UI holds a peeking shelf and leaving emits peekRelease',async()=>{
+ const f=fixture({withDocumentElement:true});await f.ready();
+ const matching=cls=>({closest:selector=>selector.split(',').some(part=>part.trim()===cls)?{}:null});
+ const emptyBackdrop={closest:()=>null};
+ f.api.surface({view:'shelves',windowVisible:true,peeking:true});await f.ready();
+ await f.pointer('pointermove',10,10,matching('.card'));
+ await f.pointer('pointermove',20,20,matching('.shelf-head'));
+ await f.pointer('pointermove',30,30,emptyBackdrop);
+ await f.pointer('pointermove',40,40,matching('.card'));
+ await f.mouseleave();
+ assert.deepEqual(f.commands.map(entry=>entry.action),['peekHold','peekRelease','peekHold','peekRelease']);
+
+ const beforeIdle=f.commands.length;
+ f.api.surface({view:'shelves',windowVisible:true,peeking:false});await f.ready();
+ await f.pointer('pointermove',10,10,matching('.card'));
+ await f.mouseleave();
+ assert.deepEqual(f.commands.slice(beforeIdle),[]);
+});
+
+test('pointer interaction and shelf wheel promote an active peek once via cancelPeek',async()=>{
+ const f=fixture();await f.ready();
+ const cardsTarget={closest:selector=>selector.includes('.cards')?{}:null};
+ const cardTarget={closest:selector=>selector.includes('.card')?{}:null};
+ f.api.surface({view:'shelves',windowVisible:true,peeking:true});await f.ready();
+ await f.pointer('pointermove',10,10,cardTarget);
+ await f.wheel(cardsTarget,50);
+ await f.pointer('pointerdown',10,10,cardTarget);
+ assert.deepEqual(f.commands.map(entry=>entry.action),['peekHold','cancelPeek']);
+
+ const second=fixture();await second.ready();
+ second.api.surface({view:'shelves',windowVisible:true,peeking:true});await second.ready();
+ await second.pointer('pointerdown',10,10,cardTarget);
+ await second.pointer('pointermove',15,15,cardTarget);
+ assert.deepEqual(second.commands.map(entry=>entry.action),['cancelPeek']);
+});
+
+test('dragging a card out from a peeking shelf promotes the peek and closes only on completed dragEndOverlay',async()=>{
+ const f=fixture();await f.ready();
+ f.api.surface({view:'shelves',windowVisible:true,peeking:true});await f.ready();
+
+ // Text drag promotes peek before dragStartOverlay and stays visible when canceled.
+ const textDrag=await f.cardDrag(f.text1);
+ assert.deepEqual(f.commands.map(entry=>entry.action),['cancelPeek','dragStartOverlay']);
+ assert.equal(f.state.peeking,false);
+ assert.equal(f.state.windowVisible,true);
+
+ await textDrag.end({dropEffect:'none'});
+ assert.deepEqual(f.commands.at(-1),{action:'dragEndOverlay',payload:{completed:false}});
+ assert.equal(f.state.windowVisible,true);
+
+ // Completed drag-out closes the shelves solely via dragEndOverlay.
+ f.commands.length=0;
+ f.api.surface({view:'shelves',windowVisible:true,peeking:true});await f.ready();
+ const completedDrag=await f.cardDrag(f.text1);
+ await completedDrag.end({dropEffect:'copy'});
+ assert.deepEqual(f.commands.map(entry=>entry.action),['cancelPeek','dragStartOverlay','dragEndOverlay']);
+ assert.deepEqual(f.commands.at(-1).payload,{completed:true});
+ assert.equal(f.state.peeking,false);
+ assert.equal(f.state.windowVisible,false);
+
+ // Image drag from a peeking shelf also promotes peek before startDrag without calling hide.
+ f.commands.length=0;
+ f.api.surface({view:'shelves',windowVisible:true,peeking:true});await f.ready();
+ await f.cardDrag(f.image);
+ assert.deepEqual(f.commands.map(entry=>entry.action),['cancelPeek','startDrag']);
+ assert.equal(f.state.peeking,false);
+ assert.equal(f.state.windowVisible,true);
 });
 
 test('right-clicking a shelf card selects it and opens Actions for that card',async()=>{
