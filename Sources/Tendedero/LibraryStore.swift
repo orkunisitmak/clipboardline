@@ -1072,7 +1072,7 @@ extension String {
     }
     private func cleanedName(_ name: String) throws -> String { let value = name.trimmingCharacters(in: .whitespacesAndNewlines); guard !value.isEmpty, value.count <= 64, value.rangeOfCharacter(from: .controlCharacters) == nil else { throw HistoryFiles.Failure.invalidDestination }; return value }
     func addTag(_ name: String, to ids: [UUID]) throws {
-        let name = try cleanedName(name.trimmingCharacters(in: CharacterSet(charactersIn: "#"))), folded = name.libraryFolded
+        let name = try cleanedName(name.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "#"))), folded = name.libraryFolded
         let existing = try tags().first { $0.name.libraryFolded == folded }, tagID = existing?.id ?? UUID()
         var values = try ids.map { id -> LibraryRecord in guard let value = try item(id) else { throw HistoryFiles.Failure.unsafeFile }; return value }
         for index in values.indices { values[index].retainedAt = values[index].retainedAt ?? now(); try ensureOwned(&values[index]) }
