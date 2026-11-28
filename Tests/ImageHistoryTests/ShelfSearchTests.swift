@@ -19,7 +19,7 @@ import XCTest
     private func indexOCR(_ text: String, item: LibraryRecord, store: LibraryStore, path: String? = nil) throws {
         let db = try LibraryDatabase(url: store.databaseURL, verify: false)
         try db.execute("INSERT INTO image_analysis(item,path,fingerprint,version,content,ocr,vectors) VALUES(?,?,?,?,?,?,?) ON CONFLICT(item) DO UPDATE SET path=excluded.path,content=excluded.content,ocr=excluded.ocr", [
-            .text(item.id.uuidString), .text(try XCTUnwrap(path ?? item.path)), .text("synthetic"), .text("vision-ocr-v1"), .text(text.libraryFolded), .text(text), .blob(Data())
+            .text(item.id.uuidString), .text(try XCTUnwrap(path ?? item.path)), .text("synthetic"), .text("vision-ocr-v1"), .text(text.searchFolded), .text(text), .blob(Data())
         ])
     }
     func testShelfSearchScopesTemporaryAndSavedMatchesToCurrentKindMembershipAndPins() throws {
