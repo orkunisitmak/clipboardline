@@ -149,6 +149,25 @@ test('permanent deletion purges orphan managed rasters and refreshes both JSON s
   for(const file of [s.file,s.file+'.backup']){const snapshot=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(snapshot.items.length,0);assert.ok(!fs.readFileSync(file,'utf8').includes(secret.text));}
   assert.equal(s.publicState().needsDeletionCleanup,false);
 }));
+test('Empty Trash erases exactly the Trash items the confirmation listed, like macOS',()=>fixture((s,time)=>{
+  const generation=item=>String(item.trashedAt)+':'+(item.trashRevision||'');
+  const gone=s.insert('text','synthetic emptied note'),image=s.insert('image',png),file=image.imageFile,restored=s.insert('text','restored meanwhile'),again=s.insert('text','trashed again meanwhile'),late=s.insert('text','trashed after the confirmation'),live=s.insert('text','never trashed');
+  s.modify('trash',{ids:[gone.id,image.id,restored.id]});s.modify('remove',{ids:[again.id]});
+  const confirmed=Object.fromEntries(s.publicState().items.filter(item=>item.trashedAt!=null).map(item=>[item.id,generation(item)]));
+  assert.equal(Object.keys(confirmed).length,4);
+  // While the confirmation is open: one item is restored, one is restored and trashed again, one arrives in Trash.
+  time(2000);s.modify('restore',{ids:[restored.id,again.id]});time(3000);s.modify('remove',{ids:[again.id]});s.modify('trash',{ids:[late.id]});
+  assert.deepEqual(new Set(s.modify('emptyTrash',{confirmed}).ids),new Set([gone.id,image.id]));
+  assert.deepEqual(new Set(s.data.items.map(item=>item.id)),new Set([restored.id,again.id,late.id,live.id]));
+  assert.equal(s.item(restored.id).trashedAt,null);assert.ok(s.item(again.id).trashedAt);assert.ok(s.item(late.id).trashedAt);
+  assert.equal(fs.existsSync(path.join(s.mediaDirectory,file)),false);
+  for(const snapshot of [s.file,s.file+'.backup'])assert.ok(!fs.readFileSync(snapshot,'utf8').includes('synthetic emptied note'));
+  // Nothing left of that confirmation: a second run erases nothing, and a malformed one is refused.
+  assert.deepEqual(s.modify('emptyTrash',{confirmed}).ids,[]);assert.equal(s.data.items.length,4);
+  assert.throws(()=>s.modify('emptyTrash',{confirmed:[late.id]}),/Invalid Trash confirmation/);assert.throws(()=>s.modify('emptyTrash',{}),/Invalid Trash confirmation/);
+  assert.deepEqual(new Set(s.modify('emptyTrash',{confirmed:Object.fromEntries(s.data.items.filter(item=>item.trashedAt!=null).map(item=>[item.id,generation(item)]))}).ids),new Set([again.id,late.id]));
+  assert.deepEqual(s.data.items.map(item=>item.id).sort(),[restored.id,live.id].sort());
+}));
 test('permanent deletion keeps rasters referenced by live items or recoverable Trash',()=>fixture(s=>{
   const first=s.insert('image',png),file=path.join(s.mediaDirectory,first.imageFile);s.modify('trash',{ids:[first.id]});
   const second=s.insert('image',png);s.modify('delete',{ids:[first.id]});assert.ok(fs.existsSync(file));

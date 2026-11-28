@@ -1878,6 +1878,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 do { if action == .retain { try line.library?.retain(snapshot.ids) } else { try line.library?.restore(snapshot.ids) } }
                 catch { reportActionStatus(error.localizedDescription) }
             }
+        case .deletePermanently: if snapshot.inLibrary { libraryController?.confirmDeletePermanently(ids: snapshot.ids) }
+        case .emptyTrash: if snapshot.inLibrary { libraryController?.confirmEmptyTrash() }
         case .scopeSaved: library()?.model.changeScope(.saved)
         case .scopeFavorites: library()?.model.changeScope(.favorites)
         case .scopeUnorganized: library()?.model.changeScope(.unorganized)

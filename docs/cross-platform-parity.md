@@ -94,6 +94,12 @@ code points stay literal.
 `trash-restore-selection` requires restoring items from Library Trash to move
 focus and selection to the first item that remains in Trash and to clear the
 details panel when none remain.
+`trash-permanent-delete-and-empty` requires Delete permanently for the selected
+Trash items and Empty Trash for all of them on both platforms: each asks with the
+number of items it will erase and erases exactly those, so an item restored or
+trashed while the confirmation is open stays, and the delete keys never erase
+anything for good. macOS moves the app's own copies to the system Trash; Windows
+removes its managed media files as its permanent deletion already did.
 `trash-copy` requires the Copy action to stay enabled for an item in Library
 Trash, as the copy shortcut already works there, while editing actions wait for
 Restore.

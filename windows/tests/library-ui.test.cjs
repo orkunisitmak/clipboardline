@@ -51,6 +51,8 @@ function fixture({deferInitialState=false,initialVisible=true}={}){
   let renamedTag;if(action==='renameTag'){renamedTag=payload.name.trim().replace(/^#+|#+$/g,'').trim();state.items.forEach(item=>item.tags=item.tags.map(tag=>tag===payload.tag?renamedTag:tag));}
   if(action==='deleteTag')state.items.forEach(item=>item.tags=item.tags.filter(tag=>tag!==payload.tag));
   if(action==='pin')selected.forEach(item=>item.pinned=typeof payload.value==='boolean'?payload.value:!item.pinned);
+  let erased;if(action==='delete'){erased=selected.map(item=>item.id);state.items=state.items.filter(item=>!erased.includes(item.id));}
+  if(action==='emptyTrash'){erased=state.items.filter(item=>item.trashedAt!=null&&payload.confirmed[item.id]===String(item.trashedAt)+':'+(item.trashRevision||'')).map(item=>item.id);state.items=state.items.filter(item=>!erased.includes(item.id));}
    if(action==='restore')selected.forEach(item=>{item.trashedAt=null;item.trashRevision=null;item.retainedAt??=Date.now();});
   if(action==='name')selected.forEach(item=>{item.name=payload.name;item.pinned=true;});
   if(action==='remove'){removed=selected.map(clone);selected.forEach(item=>{if(item.pinned)item.hiddenFromShelf=true;else item.trashedAt=Date.now();});state.canUndo=true;}
@@ -58,7 +60,7 @@ function fixture({deferInitialState=false,initialVisible=true}={}){
   if(action==='copy'&&!payload.keepOpen||action==='paste'||action==='hide')state.windowVisible=false;
   if(action==='show'){state.view='shelves';state.windowVisible=true;state.viewEvent={serial:String(commands.length)};}
   if(action==='library'||action==='settings'){state.view=action;state.windowVisible=true;}
-  const output=clone(state);if(newNote)output.result={id:newNote.id};if(renamedTag!==undefined)output.result={name:renamedTag};if(action==='searchImages')output.result=await visualSearch(clone(payload));if(cleanupError)output.result={error:cleanupError};subscriber?.(output);
+  const output=clone(state);if(newNote)output.result={id:newNote.id};if(renamedTag!==undefined)output.result={name:renamedTag};if(action==='emptyTrash')output.result={ids:erased};if(action==='searchImages')output.result=await visualSearch(clone(payload));if(cleanupError)output.result={error:cleanupError};subscriber?.(output);
   if(delayedReply?.action===action){const pending=delayedReply;delayedReply=null;await pending.promise;}
   return output;
  }};
@@ -289,6 +291,33 @@ test('disabled undo rows name the surface before saying there is nothing to undo
  await f.key('KeyK',{ctrl:true});assert.equal(detail('undoTrash'),'Available in Library.');assert.equal(detail('undo'),'Nothing to undo.');
  await f.key('Escape');await savedLibrary(f);await f.key('KeyK',{ctrl:true});
  assert.equal(detail('undo'),'Available on the shelves.');assert.equal(detail('undoTrash'),'Nothing to undo.');
+});
+test('Empty Trash asks with the number of Trash items and erases exactly those, like macOS',async()=>{
+ const f=fixture();await f.ready();const sent=()=>f.commands.filter(value=>['delete','emptyTrash','trash','trashUndoably','remove'].includes(value.action));
+ await f.key('KeyL');await f.click('scope',{scope:'saved'});assert.doesNotMatch(f.main,/data-action="empty-trash"/,'The button belongs to the Trash view');
+ await f.click('scope',{scope:'trash'});assert.match(f.main,/data-action="empty-trash"/);
+ await f.click('empty-trash');assert.equal(f.overlay,'','An empty Trash opens no confirmation');assert.equal(f.document.getElementById('toast').textContent,'Trash is empty');assert.deepEqual(sent(),[]);
+ Object.assign(f.state.items[0],{trashedAt:1000});Object.assign(f.state.items[1],{trashedAt:1100,trashRevision:'a'});Object.assign(f.state.items[2],{trashedAt:1200});f.api.emit({items:f.state.items});await f.ready();
+ assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);
+ await f.click('empty-trash');assert.match(f.overlay,/Empty Trash and delete 3 items permanently\? They cannot be restored\./);assert.match(f.overlay,/data-action="confirm-modal" class="danger">Empty Trash</);
+ await f.click('close-modal');assert.equal(f.overlay,'');assert.deepEqual(sent(),[],'Cancel erases nothing');assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);
+ // While the confirmation is open one item is restored and trashed again, and the link arrives in Trash: both stay.
+ await f.click('empty-trash');Object.assign(f.state.items[1],{trashedAt:1300,trashRevision:'b'});f.state.items[3].trashedAt=1400;f.api.emit({items:f.state.items});await f.ready();
+ assert.match(f.overlay,/delete 3 items permanently/,'The open confirmation keeps what it listed');
+ await f.click('confirm-modal');assert.deepEqual(sent().map(value=>value.action),['emptyTrash']);assert.deepEqual(Object.keys(sent()[0].payload.confirmed).sort(),[f.image,f.text1,f.text2].sort());
+ assert.equal(f.overlay,'');assert.deepEqual(cards(f),[f.text1,f.link]);assert.equal(f.document.getElementById('toast').textContent,'Deleted 2 items permanently');
+});
+test('Delete permanently in Trash confirms with the selected count; Delete, S and Ctrl+Backspace never erase',async()=>{
+ const f=fixture();await f.ready();for(const value of f.state.items.slice(0,3))value.trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});
+ for(const [code,options] of [['Delete',{}],['KeyS',{}],['Backspace',{ctrl:true}]]){await f.key(code,options);assert.equal(f.overlay,'',code+' opens no confirmation in Trash');}
+ assert.deepEqual(f.commands.filter(value=>['delete','emptyTrash'].includes(value.action)),[]);assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);
+ await f.key('KeyK',{ctrl:true});const row=id=>f.overlay.match(new RegExp('<button[^>]*data-command="'+id+'"[^>]*>'))[0];
+ assert.doesNotMatch(row('delete'),/disabled/);assert.doesNotMatch(row('empty-trash'),/disabled/);
+ await f.click('execute-command',{command:'delete'});assert.match(f.overlay,/Delete 1 items permanently\? They cannot be restored\./);
+ await f.click('confirm-modal');assert.deepEqual(f.commands.filter(value=>value.action==='delete').map(value=>value.payload.ids),[[f.image]]);
+ assert.deepEqual(cards(f),[f.text1,f.text2]);assert.equal(f.document.getElementById('toast').textContent,'Deleted 1 items permanently');
+ await f.key('KeyK',{ctrl:true});await f.click('execute-command',{command:'empty-trash'});assert.match(f.overlay,/Empty Trash and delete 2 items permanently\?/);await f.click('close-modal');
+ await f.click('shelves');await f.key('KeyK',{ctrl:true});assert.match(row('empty-trash'),/disabled/,'Empty Trash is a Library action');
 });
 test('restoring from Trash moves focus and selection to the first remaining item',async()=>{
  const f=fixture();await f.ready();for(const value of f.state.items.slice(0,3))value.trashedAt=1000;f.api.emit({items:f.state.items});await f.ready();await f.key('KeyL');await f.click('scope',{scope:'trash'});assert.deepEqual(cards(f),[f.image,f.text1,f.text2]);

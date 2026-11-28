@@ -658,7 +658,11 @@ extension String {
         try handle.write(contentsOf: data); try handle.synchronize()
         guard files.isFavoriteCopy(url) else { throw HistoryFiles.Failure.unsafeFile }
     }
-    private func drainMarkupGarbage() {
+    /// Always under the writer lock, so no other instance can make a queued
+    /// file referenced again between the check and the move. Every caller is
+    /// outside a transaction; a busy lock leaves the queue for the next drain.
+    private func drainMarkupGarbage() { try? db.transaction { drainMarkupGarbageLocked() } }
+    private func drainMarkupGarbageLocked() {
         guard let queued = try? db.rows("SELECT path FROM image_markup_garbage"), !queued.isEmpty,
               let records = try? LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='image'")) else { return }
         let referenced = Set(records.flatMap { [$0.path, $0.markupBasePath, $0.recordingOriginalPath].compactMap { $0 } }).union(recordingTrimPending)
@@ -668,7 +672,9 @@ extension String {
             let url = URL(fileURLWithPath: path)
             do {
                 if FileManager.default.fileExists(atPath: path) {
-                    guard files.isFavoriteCopy(url) else { continue }
+                    // Markup leftovers are favorite copies; permanently deleted
+                    // items also queue clipboard copies. Never anything else.
+                    guard files.isAppCopy(url) else { continue }
                     _ = try files.trashAppCopy(url)
                 }
                 try db.execute("DELETE FROM image_markup_garbage WHERE path=?", [.text(path)])
@@ -977,6 +983,90 @@ extension String {
         return eligible
     }
     func restore(_ ids: [UUID]) throws { try mutate(ids, owning: false) { $0.deletedAt = nil; $0.onShelf = true; $0.trashRevision = nil; $0.lastCapturedAt = self.now() }; invalidateShelfUndo(ids) }
+    /// Every item currently in Trash, for Empty Trash.
+    func trashedIDs() throws -> [UUID] {
+        try db.rows("SELECT id FROM items WHERE deleted IS NOT NULL").compactMap { $0["id"]?.string.flatMap(UUID.init(uuidString:)) }
+    }
+    /// Erases items that are already in Trash: the record, its folders, tags and
+    /// search entries. The app's own copies (clipboard and favorite copies, the
+    /// unmarked base of an edit, a recording's first bytes) go to the system
+    /// Trash and link thumbnails are removed; original files elsewhere are never
+    /// touched, and a file another record still uses stays. Items not in Trash
+    /// are ignored. Returns how many items were erased.
+    @discardableResult func deletePermanently(_ ids: [UUID]) throws -> Int { try deletePermanently(ids, generations: nil) }
+    /// The items among `ids` that are in Trash, each with its Trash generation,
+    /// for a confirmation to show and later erase exactly.
+    func trashSnapshot(_ ids: [UUID]) throws -> [UUID: String] {
+        try ids.reduce(into: [UUID: String]()) { result, id in
+            if let value = try item(id), value.deletedAt != nil { result[id] = value.trashRevision?.uuidString ?? "" }
+        }
+    }
+    /// Erases only what the user confirmed: an item restored and trashed
+    /// again in the meantime is a new generation and stays.
+    @discardableResult func deletePermanently(confirmed snapshot: [UUID: String]) throws -> Int {
+        try deletePermanently(Array(snapshot.keys), generations: snapshot)
+    }
+    private func deletePermanently(_ ids: [UUID], generations: [UUID: String]?) throws -> Int {
+        // Read inside the write transaction: another instance may have restored
+        // an item since the caller looked, and a live record keeps its rows.
+        let targets = try db.transaction { () throws -> [LibraryRecord] in
+            let targets = try Set(ids).compactMap { try item($0) }.filter { value in
+                value.deletedAt != nil && (generations.map { $0[value.id] == (value.trashRevision?.uuidString ?? "") } ?? true)
+            }
+            // One statement per table for each chunk of ids, not one per item:
+            // search_fts has no index on id, so every delete there reads the
+            // whole table, and this runs on the main thread.
+            let erased = targets.map { SQLValue.text($0.id.uuidString) }
+            for start in stride(from: 0, to: erased.count, by: 500) {
+                let chunk = Array(erased[start..<min(start + 500, erased.count)])
+                let marks = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+                try db.execute("DELETE FROM item_collections WHERE item IN (\(marks))", chunk)
+                try db.execute("DELETE FROM item_tags WHERE item IN (\(marks))", chunk)
+                try db.execute("DELETE FROM search_fts WHERE id IN (\(marks))", chunk)
+                try db.execute("DELETE FROM text_identity WHERE item IN (\(marks))", chunk)
+                try db.execute("DELETE FROM image_analysis WHERE item IN (\(marks))", chunk)
+                try db.execute("DELETE FROM items WHERE deleted IS NOT NULL AND id IN (\(marks))", chunk)
+            }
+            for value in targets {
+                // Queue the app's own copies in the same write: if moving them
+                // fails now, the queue is retried on the next save or launch.
+                for path in Set([value.path, value.markupBasePath, value.recordingOriginalPath].compactMap { $0 })
+                where files.isAppCopy(URL(fileURLWithPath: path)) {
+                    try db.execute("INSERT OR IGNORE INTO image_markup_garbage VALUES(?)", [.text(path)])
+                }
+            }
+            return targets
+        }
+        guard !targets.isEmpty else { return 0 }
+        let erased = targets.map(\.id)
+        invalidateTrashUndo(erased); invalidateShelfUndo(erased)
+        // Under the writer lock, so no other instance can capture the same file
+        // between the reference check and the move.
+        drainMarkupGarbage()
+        releaseDerivedFiles(of: targets)
+        changed()
+        return targets.count
+    }
+    /// Files derived from erased records: the per-item text/link files made for
+    /// drag and copy (they hold the item's content, so they go to the system
+    /// Trash with it) and link thumbnails, a cache removed once no link uses it.
+    private func releaseDerivedFiles(of erased: [LibraryRecord]) {
+        for value in erased where value.kind != .image {
+            let folder = files.inbox.appendingPathComponent(value.kind == .text ? "Texts" : "Links", isDirectory: true)
+            let file = folder.appendingPathComponent(value.kind == .text ? "Text \(value.id).txt" : "Link \(value.id).webloc")
+            guard folder.resolvingSymlinksInPath().path == folder.standardizedFileURL.path, files.isRegularFile(file) else { continue }
+            do { _ = try files.moveToTrash(file) } catch { log.error("A deleted item's drag file could not be moved to the Trash") }
+        }
+        let thumbnails = erased.compactMap(\.thumbnailPath)
+        guard !thumbnails.isEmpty, let remaining = try? LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind='link'")) else { return }
+        let referenced = Set(remaining.compactMap(\.thumbnailPath))
+        for value in erased {
+            if let path = value.thumbnailPath, !referenced.contains(path) {
+                let file = URL(fileURLWithPath: path)
+                if file.deletingLastPathComponent() == thumbnailsFolder, file.resolvingSymlinksInPath() == file { try? FileManager.default.removeItem(at: file) }
+            }
+        }
+    }
     func markCopied(_ ids: [UUID]) throws { try mutate(ids) { $0.lastCopiedAt = self.now(); $0.captureRevision = UUID() } }
     func prune() throws {
         var expired = [LibraryRecord]()

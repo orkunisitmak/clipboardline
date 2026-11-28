@@ -158,6 +158,7 @@ enum HistoryTestRunner {
         let shelfPresentation = ShelfPresentationTests()
         let textIdentityParity = TextIdentityParityTests()
         let keyboardSpeedTests = KeyboardSpeedTests()
+        let permanentDelete = LibraryPermanentDeleteTests()
         let shelfPaging = ShelfPagingTests()
         let markupPersistence = ImageMarkupPersistenceTests()
         let markupRenderer = ImageMarkupTests()
@@ -311,6 +312,7 @@ enum HistoryTestRunner {
             ("testCatalogKeepsNativeMarkupShortcutHintsAndAvailabilityInMarkupContext", actionBarCatalog.testCatalogKeepsNativeMarkupShortcutHintsAndAvailabilityInMarkupContext),
             ("testCatalogShelfLibraryTrashAndUpdateAvailabilityDoNotBleedAcrossContexts", actionBarCatalog.testCatalogShelfLibraryTrashAndUpdateAvailabilityDoNotBleedAcrossContexts),
             ("testCopyStaysAvailableForTrashedItemsWhileEditingActionsDoNot", actionBarCatalog.testCopyStaysAvailableForTrashedItemsWhileEditingActionsDoNot),
+            ("testDeletePermanentlyNeedsATrashSelectionAndEmptyTrashNeedsTheLibrary", actionBarCatalog.testDeletePermanentlyNeedsATrashSelectionAndEmptyTrashNeedsTheLibrary),
             ("testCatalogFolderTagCommandsUseStableIDsAndCurrentScope", actionBarCatalog.testCatalogFolderTagCommandsUseStableIDsAndCurrentScope),
             ("testCatalogBilingualKeywordsAreExplicitAndNeverIncludeOpaqueIdentifiers", actionBarCatalog.testCatalogBilingualKeywordsAreExplicitAndNeverIncludeOpaqueIdentifiers),
             ("testCatalogActiveStatesFollowCurrentShelfAndLibraryFilters", actionBarCatalog.testCatalogActiveStatesFollowCurrentShelfAndLibraryFilters),
@@ -451,6 +453,11 @@ enum HistoryTestRunner {
             ("testQuickNumbersDoNotCompressImageColumnsWhileAnItemIsFalling", keyboardSpeedTests.testQuickNumbersDoNotCompressImageColumnsWhileAnItemIsFalling),
             ("testSpeedActionsAndQuickSelectionRemapAndUseOnlyTheActiveRow", keyboardSpeedTests.testSpeedActionsAndQuickSelectionRemapAndUseOnlyTheActiveRow),
             ("testGlobalSearchShortcutDefaultDisableAndCustomPersistenceRejectInvalidValues", keyboardSpeedTests.testGlobalSearchShortcutDefaultDisableAndCustomPersistenceRejectInvalidValues),
+            ("testDeletePermanentlyErasesTrashedRecordsAndOnlyTheAppsOwnCopies", permanentDelete.testDeletePermanentlyErasesTrashedRecordsAndOnlyTheAppsOwnCopies),
+            ("testTextDragFileLeavesWithTheRecord", permanentDelete.testTextDragFileLeavesWithTheRecord),
+            ("testItemsOutsideTrashAndFilesStillInUseAreKept", permanentDelete.testItemsOutsideTrashAndFilesStillInUseAreKept),
+            ("testConfirmedSnapshotSparesAnItemTrashedAgainAfterConfirmation", permanentDelete.testConfirmedSnapshotSparesAnItemTrashedAgainAfterConfirmation),
+            ("testLargeTrashIsErasedInChunksAndLeavesLiveItemsSearchable", permanentDelete.testLargeTrashIsErasedInChunksAndLeavesLiveItemsSearchable),
             ("testUnreadableImageAfterRemovalOrUndoKeepsUndoablePanelWithoutStaleActions", previewRemoval.testUnreadableImageAfterRemovalOrUndoKeepsUndoablePanelWithoutStaleActions),
             ("testSessionRemovalActsOnCurrentItemOnlyAndSelectsNextThenPrevious", previewRemoval.testSessionRemovalActsOnCurrentItemOnlyAndSelectsNextThenPrevious),
             ("testPreviewRemoveAndUndoReuseVisiblePanelForEveryKind", previewRemoval.testPreviewRemoveAndUndoReuseVisiblePanelForEveryKind),
@@ -554,6 +561,7 @@ enum HistoryTestRunner {
             ("testUnnamedItemTitlesAreTheTrimmedFirstLineAndLinkHostLikeWindows", libraryInteraction.testUnnamedItemTitlesAreTheTrimmedFirstLineAndLinkHostLikeWindows),
             ("testRemovingAnotherFolderKeepsTheOpenViewLikeWindows", libraryInteraction.testRemovingAnotherFolderKeepsTheOpenViewLikeWindows),
             ("testRestoringFromTrashSelectsTheFirstRemainingItemLikeWindows", libraryInteraction.testRestoringFromTrashSelectsTheFirstRemainingItemLikeWindows),
+            ("testTrashActionInTrashNeitherErasesNorAsksToDeletePermanentlyLikeWindows", libraryInteraction.testTrashActionInTrashNeitherErasesNorAsksToDeletePermanentlyLikeWindows),
             ("testInspectorEditsPersistAndFailedSaveKeepsDraftAndSelection", libraryInteraction.testInspectorEditsPersistAndFailedSaveKeepsDraftAndSelection),
             ("testMixedTransferExportAndDragPreserveRepresentationsOrderAndOriginals", libraryInteraction.testMixedTransferExportAndDragPreserveRepresentationsOrderAndOriginals),
             ("testYouTubeParserIgnoresHTMLAndRejectsMalformedOrUntrustedImages", libraryInteraction.testYouTubeParserIgnoresHTMLAndRejectsMalformedOrUntrustedImages),

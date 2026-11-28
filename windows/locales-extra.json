@@ -92,7 +92,6 @@
     "Import": "İdxal et",
     "Screenshot": "Ekran şəkli",
     "Hide": "Gizlət",
-    "Delete permanently": "Həmişəlik sil",
     "Try another search or filter.": "Başqa axtarış və ya filtr sınayın.",
     "Copy something or import a file to get started.": "Başlamaq üçün nəsə kopyalayın və ya fayl idxal edin.",
     "Apply": "Tətbiq et",
@@ -164,7 +163,6 @@
     "Select an annotation first.": "Əvvəlcə işarə seçin.",
     "No annotations to clear.": "Təmizlənəcək işarə yoxdur.",
     "Start image markup first.": "Əvvəlcə şəkli işarələməyə başlayın.",
-    "Permanently remove %d records? This cannot be undone.": "%d qeydi həmişəlik silmək istəyirsiniz? Bu əməliyyatı geri almaq mümkün deyil.",
     "Changes could not be saved. Keep this draft open; use Done or Save to retry.": "Dəyişiklikləri saxlamaq mümkün olmadı. Qaralamanı açıq saxlayın; yenidən sınamaq üçün Hazır və ya Saxla seçin.",
     "Wait for the original image to load.": "Orijinal şəklin yüklənməsini gözləyin.",
     "Image changes could not be saved.": "Şəkil dəyişikliklərini saxlamaq mümkün olmadı.",
@@ -335,7 +333,8 @@
     "Could not restore: %@.": "Bərpa etmək mümkün olmadı: %@.",
     "Working previous shortcuts are kept.": "İşlənir; əvvəlki qısayollar saxlanılır.",
     "Choose another combination in Settings.": "Parametrlərdə başqa düymə kombinasiyası seçin.",
-    "Shortcut %@ is unavailable. %@": "%@ qısayolu əlçatan deyil. %@"
+    "Shortcut %@ is unavailable. %@": "%@ qısayolu əlçatan deyil. %@",
+    "They cannot be restored.": "Onları bərpa etmək olmaz."
   },
   "en": {
     "Automatic link metadata needs a named host.": "Automatic link metadata needs a named host.",
@@ -430,7 +429,6 @@
     "Import": "Import",
     "Screenshot": "Screenshot",
     "Hide": "Hide",
-    "Delete permanently": "Delete permanently",
     "Try another search or filter.": "Try another search or filter.",
     "Copy something or import a file to get started.": "Copy something or import a file to get started.",
     "Apply": "Apply",
@@ -502,7 +500,6 @@
     "Select an annotation first.": "Select an annotation first.",
     "No annotations to clear.": "No annotations to clear.",
     "Start image markup first.": "Start image markup first.",
-    "Permanently remove %d records? This cannot be undone.": "Permanently remove %d records? This cannot be undone.",
     "Changes could not be saved. Keep this draft open; use Done or Save to retry.": "Changes could not be saved. Keep this draft open; use Done or Save to retry.",
     "Wait for the original image to load.": "Wait for the original image to load.",
     "Image changes could not be saved.": "Image changes could not be saved.",
@@ -673,7 +670,8 @@
     "Could not restore: %@.": "Could not restore: %@.",
     "Working previous shortcuts are kept.": "Working previous shortcuts are kept.",
     "Choose another combination in Settings.": "Choose another combination in Settings.",
-    "Shortcut %@ is unavailable. %@": "Shortcut %@ is unavailable. %@"
+    "Shortcut %@ is unavailable. %@": "Shortcut %@ is unavailable. %@",
+    "They cannot be restored.": "They cannot be restored."
   },
   "es": {
     "Automatic link metadata needs a named host.": "Los metadatos automáticos de enlaces requieren un nombre de host.",
@@ -768,7 +766,6 @@
     "Import": "Importar",
     "Screenshot": "Captura de pantalla",
     "Hide": "Ocultar",
-    "Delete permanently": "Eliminar permanentemente",
     "Try another search or filter.": "Prueba otra búsqueda o filtro.",
     "Copy something or import a file to get started.": "Para empezar, copia algo o importa un archivo.",
     "Apply": "Aplicar",
@@ -840,7 +837,6 @@
     "Select an annotation first.": "Selecciona primero una anotación.",
     "No annotations to clear.": "No hay anotaciones que borrar.",
     "Start image markup first.": "Empieza por anotar una imagen.",
-    "Permanently remove %d records? This cannot be undone.": "¿Eliminar permanentemente %d elementos? Esta acción no se puede deshacer.",
     "Changes could not be saved. Keep this draft open; use Done or Save to retry.": "No se pudieron guardar los cambios. Mantén abierto este borrador; usa Listo o Guardar para volver a intentarlo.",
     "Wait for the original image to load.": "Espera a que se cargue la imagen original.",
     "Image changes could not be saved.": "No se pudieron guardar los cambios de la imagen.",
@@ -1011,7 +1007,8 @@
     "Could not restore: %@.": "No se pudo restaurar: %@.",
     "Working previous shortcuts are kept.": "Se conservan los atajos anteriores que funcionan.",
     "Choose another combination in Settings.": "Elige otra combinación en Ajustes.",
-    "Shortcut %@ is unavailable. %@": "El atajo %@ no está disponible. %@"
+    "Shortcut %@ is unavailable. %@": "El atajo %@ no está disponible. %@",
+    "They cannot be restored.": "No se podrán recuperar."
   },
   "fr": {
     "Automatic link metadata needs a named host.": "Les métadonnées automatiques des liens nécessitent un nom d’hôte.",
@@ -1106,7 +1103,6 @@
     "Import": "Importer",
     "Screenshot": "Capture d’écran",
     "Hide": "Masquer",
-    "Delete permanently": "Supprimer définitivement",
     "Try another search or filter.": "Essayez une autre recherche ou un autre filtre.",
     "Copy something or import a file to get started.": "Pour commencer, copiez quelque chose ou importez un fichier.",
     "Apply": "Appliquer",
@@ -1178,7 +1174,6 @@
     "Select an annotation first.": "Sélectionnez d’abord une annotation.",
     "No annotations to clear.": "Aucune annotation à effacer.",
     "Start image markup first.": "Commencez par annoter une image.",
-    "Permanently remove %d records? This cannot be undone.": "Supprimer définitivement %d éléments ? Cette action est irréversible.",
     "Changes could not be saved. Keep this draft open; use Done or Save to retry.": "Impossible d’enregistrer les modifications. Gardez ce brouillon ouvert ; utilisez Terminé ou Enregistrer pour réessayer.",
     "Wait for the original image to load.": "Attendez le chargement de l’image d’origine.",
     "Image changes could not be saved.": "Impossible d’enregistrer les modifications de l’image.",
@@ -1349,7 +1344,8 @@
     "Could not restore: %@.": "Restauration impossible : %@.",
     "Working previous shortcuts are kept.": "Les raccourcis précédents qui fonctionnent sont conservés.",
     "Choose another combination in Settings.": "Choisissez une autre combinaison dans Réglages.",
-    "Shortcut %@ is unavailable. %@": "Le raccourci %@ n’est pas disponible. %@"
+    "Shortcut %@ is unavailable. %@": "Le raccourci %@ n’est pas disponible. %@",
+    "They cannot be restored.": "Ils ne pourront pas être restaurés."
   },
   "ja": {
     "Automatic link metadata needs a named host.": "リンクのメタデータを自動取得するにはホスト名が必要です。",
@@ -1444,7 +1440,6 @@
     "Import": "読み込む",
     "Screenshot": "スクリーンショット",
     "Hide": "隠す",
-    "Delete permanently": "完全に削除",
     "Try another search or filter.": "別の検索語またはフィルタをお試しください。",
     "Copy something or import a file to get started.": "コピーするかファイルを読み込むと始められます。",
     "Apply": "適用",
@@ -1516,7 +1511,6 @@
     "Select an annotation first.": "まず注釈を選択してください。",
     "No annotations to clear.": "消去する注釈はありません。",
     "Start image markup first.": "まず画像のマークアップを開始してください。",
-    "Permanently remove %d records? This cannot be undone.": "%d件の記録を完全に削除しますか？この操作は取り消せません。",
     "Changes could not be saved. Keep this draft open; use Done or Save to retry.": "変更を保存できませんでした。下書きを開いたままにし、「完了」または「保存」から再試行してください。",
     "Wait for the original image to load.": "元の画像が読み込まれるまでお待ちください。",
     "Image changes could not be saved.": "画像の変更を保存できませんでした。",
@@ -1687,7 +1681,8 @@
     "Could not restore: %@.": "復元できませんでした: %@。",
     "Working previous shortcuts are kept.": "動作中です。以前のショートカットは保持されています。",
     "Choose another combination in Settings.": "設定で別のキーの組み合わせを選択してください。",
-    "Shortcut %@ is unavailable. %@": "ショートカット %@ は使用できません。%@"
+    "Shortcut %@ is unavailable. %@": "ショートカット %@ は使用できません。%@",
+    "They cannot be restored.": "元に戻すことはできません。"
   },
   "ko": {
     "Automatic link metadata needs a named host.": "자동 링크 메타데이터를 가져오려면 호스트 이름이 필요합니다.",
@@ -1782,7 +1777,6 @@
     "Import": "가져오기",
     "Screenshot": "스크린샷",
     "Hide": "가리기",
-    "Delete permanently": "영구 삭제",
     "Try another search or filter.": "다른 검색어나 필터를 사용해 보세요.",
     "Copy something or import a file to get started.": "복사하거나 파일을 가져와 시작하세요.",
     "Apply": "적용",
@@ -1854,7 +1848,6 @@
     "Select an annotation first.": "먼저 주석을 선택하세요.",
     "No annotations to clear.": "지울 주석이 없습니다.",
     "Start image markup first.": "먼저 이미지 마크업을 시작하세요.",
-    "Permanently remove %d records? This cannot be undone.": "%d개 기록을 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
     "Changes could not be saved. Keep this draft open; use Done or Save to retry.": "변경 사항을 저장할 수 없습니다. 초안을 열어 두고 완료 또는 저장을 눌러 다시 시도하세요.",
     "Wait for the original image to load.": "원본 이미지가 로드될 때까지 기다리세요.",
     "Image changes could not be saved.": "이미지 변경 사항을 저장할 수 없습니다.",
@@ -2025,7 +2018,8 @@
     "Could not restore: %@.": "복원할 수 없습니다: %@.",
     "Working previous shortcuts are kept.": "작동 중입니다. 이전 단축키는 유지됩니다.",
     "Choose another combination in Settings.": "설정에서 다른 키 조합을 선택하세요.",
-    "Shortcut %@ is unavailable. %@": "단축키 %@을(를) 사용할 수 없습니다. %@"
+    "Shortcut %@ is unavailable. %@": "단축키 %@을(를) 사용할 수 없습니다. %@",
+    "They cannot be restored.": "복구할 수 없습니다."
   },
   "pt-BR": {
     "Automatic link metadata needs a named host.": "Os metadados automáticos de links exigem um nome de host.",
@@ -2120,7 +2114,6 @@
     "Import": "Importar",
     "Screenshot": "Captura de tela",
     "Hide": "Ocultar",
-    "Delete permanently": "Excluir permanentemente",
     "Try another search or filter.": "Tente outra busca ou filtro.",
     "Copy something or import a file to get started.": "Copie algo ou importe um arquivo para começar.",
     "Apply": "Aplicar",
@@ -2192,7 +2185,6 @@
     "Select an annotation first.": "Selecione uma anotação primeiro.",
     "No annotations to clear.": "Não há anotações para limpar.",
     "Start image markup first.": "Comece a marcar a imagem primeiro.",
-    "Permanently remove %d records? This cannot be undone.": "Remover %d registros permanentemente? Essa ação não pode ser desfeita.",
     "Changes could not be saved. Keep this draft open; use Done or Save to retry.": "Não foi possível salvar as alterações. Mantenha o rascunho aberto; use Concluir ou Salvar para tentar novamente.",
     "Wait for the original image to load.": "Aguarde a imagem original carregar.",
     "Image changes could not be saved.": "Não foi possível salvar as alterações da imagem.",
@@ -2363,7 +2355,8 @@
     "Could not restore: %@.": "Não foi possível restaurar: %@.",
     "Working previous shortcuts are kept.": "Processando; os atalhos anteriores são mantidos.",
     "Choose another combination in Settings.": "Escolha outra combinação em Configurações.",
-    "Shortcut %@ is unavailable. %@": "O atalho %@ não está disponível. %@"
+    "Shortcut %@ is unavailable. %@": "O atalho %@ não está disponível. %@",
+    "They cannot be restored.": "Eles não poderão ser restaurados."
   },
   "tr": {
     "Automatic link metadata needs a named host.": "Link meta verisinin otomatik alınması için bir ana makine adı gerekir.",
@@ -2458,7 +2451,6 @@
     "Import": "İçe aktar",
     "Screenshot": "Ekran görüntüsü",
     "Hide": "Gizle",
-    "Delete permanently": "Kalıcı olarak sil",
     "Try another search or filter.": "Başka bir arama veya filtre deneyin.",
     "Copy something or import a file to get started.": "Başlamak için bir şey kopyalayın veya dosya içe aktarın.",
     "Apply": "Uygula",
@@ -2530,7 +2522,6 @@
     "Select an annotation first.": "Önce bir işaretleme seçin.",
     "No annotations to clear.": "Temizlenecek işaretleme yok.",
     "Start image markup first.": "Önce görsel işaretlemeyi başlatın.",
-    "Permanently remove %d records? This cannot be undone.": "%d kaydı kalıcı olarak silmek istiyor musunuz? Bu işlem geri alınamaz.",
     "Changes could not be saved. Keep this draft open; use Done or Save to retry.": "Değişiklikler kaydedilemedi. Bu taslağı açık tutun; yeniden denemek için Bitti veya Kaydet'i kullanın.",
     "Wait for the original image to load.": "Özgün görselin yüklenmesini bekleyin.",
     "Image changes could not be saved.": "Görseldeki değişiklikler kaydedilemedi.",
@@ -2701,7 +2692,8 @@
     "Could not restore: %@.": "Geri yüklenemedi: %@.",
     "Working previous shortcuts are kept.": "Önceki çalışan kısayollar korunuyor.",
     "Choose another combination in Settings.": "Ayarlar'dan başka bir kısayol birleşimi seçin.",
-    "Shortcut %@ is unavailable. %@": "%@ kısayolu kullanılamıyor. %@"
+    "Shortcut %@ is unavailable. %@": "%@ kısayolu kullanılamıyor. %@",
+    "They cannot be restored.": "Geri getirilemezler."
   },
   "zh-Hans": {
     "Automatic link metadata needs a named host.": "自动获取链接元数据需要主机名。",
@@ -2796,7 +2788,6 @@
     "Import": "导入",
     "Screenshot": "截图",
     "Hide": "隐藏",
-    "Delete permanently": "永久删除",
     "Try another search or filter.": "请尝试其他搜索词或筛选条件。",
     "Copy something or import a file to get started.": "复制内容或导入文件即可开始使用。",
     "Apply": "应用",
@@ -2868,7 +2859,6 @@
     "Select an annotation first.": "请先选择一条标注。",
     "No annotations to clear.": "没有可清除的标注。",
     "Start image markup first.": "请先开始图像标注。",
-    "Permanently remove %d records? This cannot be undone.": "要永久删除 %d 条记录吗？此操作无法撤销。",
     "Changes could not be saved. Keep this draft open; use Done or Save to retry.": "无法保存更改。请保持草稿打开，使用“完成”或“保存”重试。",
     "Wait for the original image to load.": "请等待原始图像加载。",
     "Image changes could not be saved.": "无法保存图像更改。",
@@ -3039,6 +3029,7 @@
     "Could not restore: %@.": "无法恢复：%@。",
     "Working previous shortcuts are kept.": "正在处理，之前的快捷键将保留。",
     "Choose another combination in Settings.": "请在“设置”中选择其他按键组合。",
-    "Shortcut %@ is unavailable. %@": "快捷键 %@ 不可用。%@"
+    "Shortcut %@ is unavailable. %@": "快捷键 %@ 不可用。%@",
+    "They cannot be restored.": "这些项目将无法恢复。"
   }
 }

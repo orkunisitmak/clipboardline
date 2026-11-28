@@ -10,6 +10,25 @@ import XCTest
         try XCTUnwrap(ActionBarCatalog.entries(context: context, bindings: bindings).first { $0.action == action }?.command)
     }
 
+    func testDeletePermanentlyNeedsATrashSelectionAndEmptyTrashNeedsTheLibrary() throws {
+        let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
+        let bindings = KeyboardBindings(defaults: fixture.defaults)
+        var context = ActionBarCatalog.Context()
+        context.selectedCount = 1; context.kind = .text; context.hasItems = true
+        let shelfDelete = try command(.menu(.deletePermanently), context: context, bindings: bindings)
+        let shelfEmpty = try command(.menu(.emptyTrash), context: context, bindings: bindings)
+        XCTAssertFalse(shelfDelete.isEnabled); XCTAssertFalse(shelfEmpty.isEnabled)
+        context.origin = .library; context.libraryScope = .saved
+        XCTAssertFalse(try command(.menu(.deletePermanently), context: context, bindings: bindings).isEnabled, "A live item is moved to Trash first")
+        XCTAssertTrue(try command(.menu(.emptyTrash), context: context, bindings: bindings).isEnabled)
+        context.libraryScope = .trash; context.isDeleted = true
+        let delete = try command(.menu(.deletePermanently), context: context, bindings: bindings)
+        XCTAssertTrue(delete.isEnabled); XCTAssertEqual(delete.title, L("Delete permanently…"))
+        XCTAssertEqual(try command(.menu(.emptyTrash), context: context, bindings: bindings).title, L("Empty Trash…"))
+        context.selectedCount = 0; context.isDeleted = false
+        XCTAssertFalse(try command(.menu(.deletePermanently), context: context, bindings: bindings).isEnabled)
+        XCTAssertTrue(try command(.menu(.emptyTrash), context: context, bindings: bindings).isEnabled)
+    }
     func testClearFiltersIsDisabledUntilTheLibraryHasAFilter() throws {
         let fixture = try SyntheticFixture(); defer { fixture.cleanup() }
         let bindings = KeyboardBindings(defaults: fixture.defaults)
