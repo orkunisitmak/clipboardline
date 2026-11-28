@@ -29,8 +29,11 @@ class ReleaseVersionTests(unittest.TestCase):
         path.write_text(json.dumps(value), encoding="utf-8")
 
     def windows(self):
-        self.write("windows/package.json", {"version": "1.7.2", "clipboardLineBuild": 64})
-        self.write("windows/package-lock.json", {"version": "1.7.2", "packages": {"": {"version": "1.7.2"}}})
+        self.write("windows/package.json", {"version": "1.7.2", "clipboardLineBuild": 64,
+                                            "devDependencies": {"electron": "44.9.1"}})
+        self.write("windows/package-lock.json", {"version": "1.7.2", "packages": {
+            "": {"version": "1.7.2", "devDependencies": {"electron": "44.9.1"}},
+            "node_modules/electron": {"version": "44.9.1"}}})
 
     def test_private_mac_checkout_can_omit_windows(self):
         self.assertEqual(guard.check_release_version(self.root), "1.7.2")
@@ -57,20 +60,24 @@ class ReleaseVersionTests(unittest.TestCase):
 
     def test_lock_top_version_drift_is_rejected(self):
         self.windows()
-        self.write("windows/package-lock.json", {"version": "1.7.1", "packages": {"": {"version": "1.7.2"}}})
+        lock = json.loads((self.root / "windows/package-lock.json").read_text())
+        lock["version"] = "1.7.1"
+        self.write("windows/package-lock.json", lock)
         with self.assertRaisesRegex(guard.ReleaseVersionError, "windows/package-lock.json version"):
             guard.check_release_version(self.root)
 
     def test_lock_root_package_drift_is_rejected(self):
         self.windows()
-        self.write("windows/package-lock.json", {"version": "1.7.2", "packages": {"": {"version": "1.7.1"}}})
-        with self.assertRaisesRegex(guard.ReleaseVersionError, 'packages\[""\] version'):
+        lock = json.loads((self.root / "windows/package-lock.json").read_text())
+        lock["packages"][""]["version"] = "1.7.1"
+        self.write("windows/package-lock.json", lock)
+        with self.assertRaisesRegex(guard.ReleaseVersionError, r'packages\[""\] version'):
             guard.check_release_version(self.root)
 
     def test_missing_lock_root_package_is_rejected(self):
         self.windows()
         self.write("windows/package-lock.json", {"version": "1.7.2", "packages": []})
-        with self.assertRaisesRegex(guard.ReleaseVersionError, 'packages\[""\] version'):
+        with self.assertRaisesRegex(guard.ReleaseVersionError, r'packages\[""\] version'):
             guard.check_release_version(self.root)
 
     def test_public_checkout_must_include_windows(self):
@@ -81,6 +88,38 @@ class ReleaseVersionTests(unittest.TestCase):
         self.write("windows/package.json", {"version": "1.7.2"})
         with self.assertRaisesRegex(guard.ReleaseVersionError, "Cannot read windows/package-lock.json"):
             guard.check_release_version(self.root)
+
+    def test_vulnerable_or_unpinned_electron_is_rejected(self):
+        for version in ["44.9.0", "44.8.9", "44.9.1-beta.1", "^44.9.1"]:
+            with self.subTest(version=version):
+                self.windows()
+                package = json.loads((self.root / "windows/package.json").read_text())
+                package["devDependencies"]["electron"] = version
+                self.write("windows/package.json", package)
+                with self.assertRaisesRegex(guard.ReleaseVersionError, "Electron"):
+                    guard.check_release_version(self.root, require_windows=True)
+
+    def test_lockfile_and_installed_electron_must_match_the_pin(self):
+        self.windows()
+        lock = json.loads((self.root / "windows/package-lock.json").read_text())
+        lock["packages"]["node_modules/electron"]["version"] = "44.9.0"
+        self.write("windows/package-lock.json", lock)
+        with self.assertRaisesRegex(guard.ReleaseVersionError, "Electron 44.9.1"):
+            guard.check_release_version(self.root, require_windows=True)
+        self.windows()
+        self.write("windows/node_modules/electron/package.json", {"version": "44.9.0"})
+        with self.assertRaisesRegex(guard.ReleaseVersionError, "Electron 44.9.1"):
+            guard.check_release_version(self.root, require_windows=True, require_installed_electron=True)
+        self.write("windows/node_modules/electron/package.json", {"version": "44.9.2"})
+        with self.assertRaisesRegex(guard.ReleaseVersionError, "Installed Windows Electron differs"):
+            guard.check_release_version(self.root, require_installed_electron=True)
+        self.write("windows/node_modules/electron/package.json", {"version": "44.9.1"})
+        self.assertEqual(guard.check_release_version(self.root, require_installed_electron=True), "1.7.2")
+        lock = json.loads((self.root / "windows/package-lock.json").read_text())
+        lock["packages"]["node_modules/electron"]["version"] = "44.9.2"
+        self.write("windows/package-lock.json", lock)
+        with self.assertRaisesRegex(guard.ReleaseVersionError, "versions differ"):
+            guard.check_release_version(self.root, require_windows=True)
 
     def test_missing_mac_version_is_rejected(self):
         self.write("upstream-state.json", {})
@@ -118,6 +157,16 @@ class ReleaseVersionTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 1)
         self.assertIn("windows/package.json", result.stderr)
+
+    def test_cli_require_installed_electron_rejects_safe_mismatch(self):
+        self.windows()
+        self.write("windows/node_modules/electron/package.json", {"version": "44.9.2"})
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.root),
+             "--require-windows", "--require-installed-electron"],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Installed Windows Electron differs", result.stderr)
 
     def test_cli_selected_publisher_version_cannot_bypass_shared_version(self):
         command = [sys.executable, str(SCRIPT), "--root", str(self.root), "--expected-version"]
