@@ -23,6 +23,7 @@ const {MediaJobs,MAXIMUM_VIDEO_BYTES}=require('./lib/media.cjs');
 const {copyFiles,cancelFileCopies}=require('./lib/native-files.cjs');
 const {exportCopies}=require('./lib/export-copies.cjs');
 const {decodeTextFile}=require('./lib/text-file.cjs');
+const {FolderWatchers}=require('./lib/folder-watchers.cjs');
 const native = require('./lib/native.cjs');
 const {PasteTargetTracker}=require('./lib/paste-target.cjs');
 const {DragFiles}=require('./lib/drag-files.cjs');
@@ -31,11 +32,11 @@ const {Updates,AutomaticUpdateScheduler} = require('./lib/updates.cjs');
 const {GlobalShortcuts}=require('./lib/global-shortcuts.cjs');
 const {ImageSearch,modelPaths}=require('./lib/image-search.cjs');
 const {createOcrQueue}=require('./lib/ocr-queue.cjs');
-const {StatusTray,trayIcon,translated}=require('./lib/status-summary.cjs');
+const {StatusTray,trayIcon,translated,translatedKnown,languageCode}=require('./lib/status-summary.cjs');
 const {WindowBounds}=require('./lib/window-bounds.cjs');
 const {MotionBridge}=require('./lib/shelf-motion.cjs');
 const {shouldStartHidden,shouldShowOnSecondInstance,applyLoginItemSetting,migrateLoginItemSetting}=require('./lib/login-launch.cjs');
-const {folderKey,watchedFolders,shelfRevealPatch}=require('./lib/watch-folders.cjs');
+const {watchedFolders,shelfRevealPatch}=require('./lib/watch-folders.cjs');
 const BUILD_NUMBER=Number(require('./package.json').clipboardLineBuild)||63;
 const testMode = process.argv.includes('--test-mode');
 const testFolder = process.argv.find(value=>value.startsWith('--test-data='))?.slice('--test-data='.length);
@@ -47,7 +48,7 @@ if(development){const directory=path.join(app.getPath('appData'),'ClipBoardLine 
 app.setName(development?'ClipBoardLine Dev':'ClipBoardLine');
 protocol.registerSchemesAsPrivileged([{scheme:'appmedia',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
 let window,store,tray,trayPresentation,updates,updateScheduler,monitor,clipboardTimer,retentionTimer,updateTimer,updateLaunchTimer,previous=null,view='shelves',message='',viewEvent=null;
-let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,watchers=[],normalBounds=null,normalMaximized=false,applyingBounds=false;
+let lastGeneration={sequence:0},ownFingerprint='',capturing=false,pendingClipboard=false,showing=0,closing=false,folderWatchers=null,normalBounds=null,normalMaximized=false,applyingBounds=false;
 let pastePromise=null,hidePromise=null,pasteGeneration=0;
 let lastBroadcastLibraryRevision=-1,windowSurface=null;
 let visibilityGeneration=0,desiredVisible=false;
@@ -96,6 +97,7 @@ function broadcast({surfaceOnly=false}={}) {
   if(window&&!window.isDestroyed()){window.webContents.send('clipboardline:changed',packet);if(!packet.surfaceOnly)lastBroadcastLibraryRevision=store.revision;}
   return packet;
 }
+function mainText(key,...values){return translatedKnown(languageCode(store?.data.settings.language,app.getLocale()),key,...values);}
 function notify(text) { message=text;broadcast(); }
 function openUpdates(){return show('settings',{settingsTab:'updates'});}
 function refreshTray(){
@@ -115,7 +117,7 @@ function createTray(){
 
 function updateAvailable(manifest){
   refreshTray();if(testMode||!store.data.settings.autoCheckUpdates||!Notification.isSupported())return;
-  const notice=new Notification({title:'ClipBoardLine update available',body:`ClipBoardLine ${manifest.version} is ready. Click to review and install.`,silent:true});notice.on('click',()=>void openUpdates());notice.show();
+  const notice=new Notification({title:mainText('ClipBoardLine update available'),body:mainText('ClipBoardLine %@ is ready. Click to review and install.',manifest.version),silent:true});notice.on('click',()=>void openUpdates());notice.show();
 }
 async function launchInstaller(file,args){const child=spawn(file,args,{detached:true,stdio:'ignore',windowsHide:true});await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});child.unref();}
 function trusted(event) {
@@ -298,7 +300,7 @@ async function recognize(id,quiet=false) {
     if(!verifiedOcrModels.has(destination)){if(!validFile(destination,expected)){if(!validFile(source,expected))throw new Error(`OCR source model invalid for ${language}`);fs.copyFileSync(source,destination);if(!validFile(destination,expected))throw new Error(`OCR model integrity verification failed for ${language}`);}verifiedOcrModels.add(destination);}
   }
   const worker=await createWorker(['eng','tur'],1,{langPath:languageDirectory,cachePath:languageDirectory,cacheMethod:'none',gzip:true});
-  try{let image=nativeImage.createFromPath(file);const size=image.getSize(),scale=Math.min(1,2400/Math.max(size.width,size.height));if(scale<1)image=image.resize({width:Math.round(size.width*scale),height:Math.round(size.height*scale)});const result=await worker.recognize(image.toPNG());if(!store.data.items.includes(item)||(item.renderedFile||item.imageFile)!==fingerprint)throw new Error('Image changed during recognition');item.ocrText=String(result.data.text||'').slice(0,1024*1024);store.persist();if(!quiet)notify(item.ocrText?'Image text ready':'No text found');else broadcast();return{text:item.ocrText,id};}
+  try{let image=nativeImage.createFromPath(file);const size=image.getSize(),scale=Math.min(1,2400/Math.max(size.width,size.height));if(scale<1)image=image.resize({width:Math.round(size.width*scale),height:Math.round(size.height*scale)});const result=await worker.recognize(image.toPNG());if(!store.data.items.includes(item)||(item.renderedFile||item.imageFile)!==fingerprint)throw new Error('Image changed during recognition');item.ocrText=String(result.data.text||'').slice(0,1024*1024);store.persist();if(!quiet)notify(item.ocrText?'Image text ready':'No text found in this image.');else broadcast();return{text:item.ocrText,id};}
   finally{await worker.terminate();}
 }
 // Win+Shift+S, PrtSc and Win+PrtSc save into the Screenshots known folder,
@@ -307,7 +309,7 @@ async function recognize(id,quiet=false) {
 // folder names survive any console code page. Each reconfigure re-resolves it
 // off the main path; watchers are rebuilt only when the folder changes, and a
 // failed lookup retries after a minute.
-let activeFolders=new Set(),systemScreenshots=null,resolvingScreenshots=false,screenshotRetry=null;
+let systemScreenshots=null,resolvingScreenshots=false,screenshotRetry=null;
 function resolveSystemScreenshotFolder() {
   if(resolvingScreenshots)return;resolvingScreenshots=true;clearTimeout(screenshotRetry);
   const ready=folder=>{try{if(folder&&path.isAbsolute(folder)){fs.mkdirSync(folder,{recursive:true});if(fs.statSync(folder).isDirectory())return folder;}}catch{}return null;};
@@ -327,12 +329,8 @@ function systemScreenshotFolder(resolve) {
   return systemScreenshots;
 }
 function configureWatchers(resolve=true) {
-  for(const watcher of watchers)watcher.close();watchers=[];
-  const folders=watchedFolders(store.data.settings,systemScreenshotFolder(resolve));
-  // A debounced import still pending when its folder stops being watched (for
-  // example the screenshot setting is turned off) is dropped when it fires.
-  activeFolders=new Set(folders.map(folder=>folderKey(folder)));
-  for(const folder of folders){try{if(!fs.statSync(folder).isDirectory())continue;const timers=new Map();const watcher=fs.watch(folder,(_event,name)=>{if(!name||!/[.](png|jpe?g|webp|bmp|mov|mp4)$/i.test(name))return;clearTimeout(timers.get(name));timers.set(name,setTimeout(()=>{timers.delete(name);if(!activeFolders.has(folderKey(folder)))return;try{const file=path.join(folder,path.basename(name));const item=importFile(file);Promise.resolve(item).then(record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}).catch(err=>{console.warn('Watch folder import error:',err?.message||err);});}catch(err){console.warn('Watch folder item error:',err?.message||err);}},700));});watcher.on('error',err=>{console.warn('Watch folder watcher error:',err?.message||err);});watchers.push(watcher);}catch(err){console.warn('Watch folder configure error:',err?.message||err);}}
+  folderWatchers??=new FolderWatchers({importFile,notify,closing:()=>closing,imported:record=>{broadcast();if(store.data.settings.openAfterScreenshot)void show('shelves',{selectId:record.id,kind:'image'});}});
+  folderWatchers.configure(watchedFolders(store.data.settings,systemScreenshotFolder(resolve)));
 }
 let shortcutRegistry,shortcutRecording=null;
 function finishShortcutRecording(token=null){
@@ -358,7 +356,7 @@ function configureShortcuts(previousPreferences=null) {
   if(rejected.length){
     if(previousPreferences)store.modify('setSettings',{patch:{shortcuts:Object.fromEntries(rejected.map(value=>[value.action,previousPreferences[value.action]||'']))}});
     const unrestored=rejected.filter(value=>value.restorationFailed).map(value=>value.action);
-    message='Shortcut '+rejected.map(value=>value.shortcut).join(', ')+' is unavailable. '+(unrestored.length?'Could not restore: '+unrestored.join(', ')+'.':rejected.some(value=>value.previous)?'Working previous shortcuts are kept.':'Choose another combination in Settings.');
+    message=(rejected.length===1?`Shortcut ${rejected[0].shortcut} is unavailable. `:`Shortcuts ${rejected.map(value=>value.shortcut).join(', ')} are unavailable. `)+(unrestored.length?'Could not restore: '+unrestored.join(', ')+'.':rejected.some(value=>value.previous)?'Working previous shortcuts are kept.':'Choose another combination in Settings.');
   }
   return rejected;
 }
@@ -406,7 +404,7 @@ async function command(action,payload={}) {
   }
   else if(action==='capture')result=await capture();
   else if(action==='newNote'){result={id:store.createNote(payload).id};}
-  else if(action==='import'){const response=await dialog.showOpenDialog(window,{properties:['openFile','multiSelections'],filters:[{name:'Images, recordings and text',extensions:['png','jpg','jpeg','webp','bmp','mov','mp4','txt','md']}]});const imported=[],failures=[];for(const file of response.filePaths){try{const item=await importFile(file);imported.push(item.id);if(item.kind==='link')void enrich(item.id);}catch(error){failures.push(path.basename(file)+': '+error.message);}}result={ids:imported,failed:failures.length};if(failures.length)message=(imported.length?`Imported ${imported.length} · failed ${failures.length}. `:'')+failures[0];}
+  else if(action==='import'){const response=await dialog.showOpenDialog(window,{properties:['openFile','multiSelections'],filters:[{name:mainText('Images, recordings and text'),extensions:['png','jpg','jpeg','webp','bmp','mov','mp4','txt','md']}]});const imported=[],failures=[];for(const file of response.filePaths){try{const item=await importFile(file);imported.push(item.id);if(item.kind==='link')void enrich(item.id);}catch(error){failures.push({filename:path.basename(file),error:error.message});}}result={ids:imported,failed:failures.length};if(failures.length){const [first,...others]=failures;const localizedError=mainText(first.error);const summary=imported.length?mainText('Imported %d · failed %d. %@: %@',imported.length,failures.length,first.filename,localizedError):`${first.filename}: ${localizedError}`;message=[summary,...others.map(failure=>`${failure.filename}: ${mainText(failure.error)}`)].join('; ');}}
   else if(action==='searchImages'){if(!imageSearch)throw new Error('Offline image search is unavailable.');result=await imageSearch.search(payload.query,payload.eligibleIds);}
   else if(action==='ocr')result=await ocr(payload.id);
   else if(action==='copyOCR'){const recognized=await ocr(payload.id);if(!recognized.text.trim())throw new Error('No text found in this image.');await writeClipboard([{kind:'text',text:recognized.text}]);result=recognized;notify('Recognized text copied');}
@@ -497,7 +495,7 @@ else app.whenReady().then(async()=>{
   updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>!development&&!testMode&&store.data.settings.autoCheckUpdates});
   const searchPaths=modelPaths({packaged:app.isPackaged,resourcesPath:process.resourcesPath,sourceDirectory:__dirname});
   let ortModule=null,runtimeDirectory=null;try{ortModule=require.resolve('onnxruntime-web/wasm').replace(/app[.]asar([\\/])/,'app.asar.unpacked$1');runtimeDirectory=path.dirname(ortModule);}catch{}
-  imageSearch=new ImageSearch({...searchPaths,ortModule,runtimeDirectory,cacheDirectory:path.join(store.directory,'image-search'),items:()=>store.data.items,readImage:readSemanticImage,changed:()=>broadcast()});refreshImageSearch();
+  imageSearch=new ImageSearch({...searchPaths,ortModule,runtimeDirectory,cacheDirectory:path.join(store.directory,'image-search'),items:()=>store.data.items,readImage:readSemanticImage,changed:()=>broadcast({surfaceOnly:true})});refreshImageSearch();
   protocol.handle('appmedia',async request=>{
     try{
       if(testMode&&mediaDiagnostics.length<100)mediaDiagnostics.push({method:request.method,origin:request.headers.get('Origin'),initiator:request.initiatorOrigin??null});
@@ -554,7 +552,7 @@ else app.whenReady().then(async()=>{
   windowReady=true;if(!startHidden)await show('shelves');
   // Test hooks are main-process only and require an explicit isolated data path.
   if(testMode&&testFolder)global.__clipboardLineTest={store,command,state,readClipboard,writeClipboard,clipboardContent,privateClipboard,importFile,getMediaJobs:()=>mediaJobs,getWindow:()=>window,getTray:()=>({tray,presentation:trayPresentation}),getTarget:()=>previous,setTarget:value=>{previous=value;},getObservedTarget:()=>pasteTargets.reenter(),getCaptureAdmissionState:()=>({capturing,pendingClipboard}),getShortcutRecordingState:()=>({token:shortcutRecording?.token||null,suspended:shortcutRegistry?.suspended||false}),getImageSearch:()=>imageSearch,getMediaDiagnostics:()=>mediaDiagnostics.map(value=>({...value})),enableShortcuts:configureShortcuts,getUpdates:()=>updates,setUpdates:value=>{updates=value;updates.changed=()=>broadcast();updates.available=updateAvailable;updateScheduler=new AutomaticUpdateScheduler(updates,{enabled:()=>store.data.settings.autoCheckUpdates});},getUpdateScheduler:()=>updateScheduler,capture,native};
-}).catch(error=>{dialog.showErrorBox('ClipBoardLine could not start',error.message);app.exit(1);});
+}).catch(error=>{dialog.showErrorBox(mainText('ClipBoardLine could not start'),mainText(error.message));app.exit(1);});
 app.on('second-instance',(_event,commandLine)=>{if(!shouldShowOnSecondInstance({commandLine}))return;startHidden=false;if(window&&windowReady)void show('shelves');});
 app.on('activate',()=>{if(window)void show('shelves');});
-app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();watchers.forEach(w=>w.close());shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
+app.on('before-quit',()=>{closing=true;visibilityGeneration++;shelfMotion.cancel();trayPresentation?.dispose();tray?.destroy();cancelRecordingTrims();mediaJobs?.dispose();dragFiles?.dispose();clearTimeout(imageSearchTimer);void imageSearch?.stop();clearInterval(clipboardTimer);clearInterval(retentionTimer);clearInterval(updateTimer);clearTimeout(updateLaunchTimer);monitor?.kill();folderWatchers?.close();shortcutRegistry?.dispose();globalShortcut.unregisterAll();});
