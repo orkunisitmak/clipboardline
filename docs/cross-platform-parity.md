@@ -128,6 +128,12 @@ unmounted volume, to stay in the saved list while it is skipped, so adding or re
 watched folder does not forget it.
 `watched-folder-failures` records the shared failure notice for an image that
 cannot be imported from a watched folder.
+`copy-new-captures` adds the Settings toggle "Copy new screenshots to the clipboard", off by
+default. With it on, a new still screenshot or watched-folder image also lands on the clipboard
+as if its card had been copied; clipboard arrivals and recordings never copy themselves, and a
+capture during a direct paste or within one second after it only hangs, so the target app still
+pastes what was chosen. Its evidence is `CaptureCopyTests` on macOS and `capture-copy.test.cjs`
+on Windows.
 
 System screenshots reach the Images shelf by default on both platforms. macOS follows the
 screenshot location set in the system and has no switch for it. Windows watches the Screenshots

@@ -267,6 +267,7 @@ private struct SettingsView: View {
             Section {
                 Toggle(L("Handle screenshots"), isOn: model.binding(get: { Inbox.isEnabled }, set: model.setScreenshots))
                     .disabled(!model.allowsSystemChanges)
+                Toggle(L("Copy new screenshots to the clipboard"), isOn: model.binding(get: { line.copiesNewCaptures }, set: { line.copiesNewCaptures = $0 }))
             } header: { Text(L("Screenshots")) } footer: {
                 Text(L("Screenshots hang instantly and skip the Desktop. Your macOS screenshot settings are restored when the app quits."))
             }
@@ -285,7 +286,7 @@ private struct SettingsView: View {
                 Button(L("Add Folder…")) { model.addFolder(); model.refresh() }
                     .disabled(AppDelegate.extraFolders.count >= AppDelegate.maxExtraFolders || !model.allowsSystemChanges)
             } header: { Text(L("Also watch folders")) } footer: {
-                Text(L("Watch up to three folders for new images. Removing a folder leaves its files untouched."))
+                Text(L("Watch up to three folders for new images. Removing a folder leaves its files untouched.") + " " + L("With Copy new screenshots to the clipboard on, new images here are copied too."))
             }
         }
     }
