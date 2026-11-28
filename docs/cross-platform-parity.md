@@ -64,6 +64,9 @@ Windows folder picker uses the same entry; the macOS folder picker keeps its own
 declared character set (byte-order mark, `Content-Type`, XHTML declaration, early
 `<meta charset>`), falling back to windows-1252, so windows-1254 pages show their
 Turkish letters.
+`link-preview-unclosed-blocks` requires a link preview to ignore comments and script, style and
+textarea elements the way a browser parses them: an unclosed one hides the rest of the page, while a
+custom element such as `<script-widget>` or a marker inside a meta attribute value starts nothing.
 `image-recopy-dedupe` requires copying the same image again to keep one Library item,
 moved to the front with its pin, name, tags and folders.
 `note-survives-matching-copy` requires a note made with New note to stay as it is when

@@ -102,6 +102,12 @@
         "windows": "meta in lib/network.cjs reads quoted attribute values whole; link-metadata-embed.test.cjs covers it."
       },
       {
+        "id": "link-preview-unclosed-blocks",
+        "behavior": "A link preview reads the page the way a browser parses it: the title and image never come from inside a comment or a script, style or textarea element, and one that is never closed hides the rest of the page. <!--> and <!---> are empty comments, and a comment ends at --> or --!>. Only the exact names open these elements, so a custom element such as <script-widget> hides nothing, and a marker inside a meta tag's attribute value starts nothing. A script, style or textarea tag without its closing > also hides nothing.",
+        "macos": "PublicLinkHTMLMetadata drops comments and script, style and textarea elements, unclosed ones to the end of the page; PublicLinkPolicyTests.testUnclosedBlocksHideTheRestOfThePage, testCustomElementsNamedLikeRawTextStartNothing and testMarkersInsideMetaAttributesStartNothing cover it.",
+        "windows": "withoutNonMetadata in lib/network.cjs drops comments and script, style and textarea elements, unclosed ones to the end of the page; link-metadata-embed.test.cjs covers it."
+      },
+      {
         "id": "link-blank-thumbnail",
         "behavior": "A link preview whose Open Graph image is empty or only whitespace has no thumbnail; a valid relative image URL is resolved against the page address.",
         "macos": "PublicLinkHTMLMetadata drops a whitespace-only og:image before resolving it; PublicLinkNetworkTests.testWhitespaceOnlyOpenGraphImageGivesNoThumbnailAndValidOneIsKept covers it.",

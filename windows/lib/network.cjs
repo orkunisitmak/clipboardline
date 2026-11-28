@@ -101,32 +101,40 @@ function decodeHTML(bytes, type = '') {
 // Bidirectional marks, embeddings, overrides and isolates can reorder a title to spoof another one; joiners stay.
 // As on macOS, drop control characters except whitespace (U+0085 counts as whitespace).
 const collapse = value => value.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '').replace(/[\s\u0085]+/g, ' ').trim();
-// Yields [start, end] of each `opening…>` tag body of at most `limit` characters. Every tag shares the
-// next '>' instead of rescanning for it, so a page of unclosed tags costs one pass, not one per tag (#39).
-// With `quoted`, a '>' inside a quoted attribute value belongs to the value; a tag whose quotes do not close within
-// `limit` ends at its first '>' instead. Quoted scans of tags that fail can overlap, so together they get a fixed
-// number of steps to keep the pass linear.
-function* tags(html, opening, limit, quoted = false) {
-  const pattern = new RegExp(opening, 'gi'); let close = -1, steps = quoted ? 4 * 512 * 1024 : 0;
-  for (let match; (match = pattern.exec(html));) {
-    const start = pattern.lastIndex; if (close < start) close = html.indexOf('>', start);
-    if (close < 0) return;
-    let end = -1;
+// Returns where the `…>` tag body starting at `start` ends, or -1 for a body longer than `limit` characters.
+// Starts must not decrease: every tag shares the next '>' instead of rescanning for it, so a page of unclosed tags
+// costs one pass, not one per tag (#39). With `quoted`, a '>' inside a quoted attribute value belongs to the value;
+// a tag whose quotes do not close within `limit` ends at its first '>' instead. Quoted scans of tags that fail can
+// overlap, so together they get a fixed number of steps to keep the pass linear.
+function tagEnds(html, limit, quoted = false) {
+  let close = -1, steps = quoted ? 4 * 512 * 1024 : 0;
+  return start => {
+    if (close < start) { close = html.indexOf('>', start); if (close < 0) close = Infinity; }
+    if (close === Infinity) return -1;
     for (let index = start, quote = ''; index < html.length && index - start <= limit && steps-- > 0; index++) {
       const char = html[index];
       if (quote) { if (char === quote) quote = ''; }
       else if (char === '"' || char === "'") quote = char;
-      else if (char === '>') { end = index; break; }
+      else if (char === '>') return index;
       else if (char === '<') break;
     }
-    if (end < 0) { if (close - start > limit) continue; end = close; }
-    yield [start, end]; pattern.lastIndex = end + 1;
+    return close - start > limit ? -1 : close;
+  };
+}
+// Yields [start, end] of each `opening…>` tag body, ended as tagEnds ends it.
+function* tags(html, opening, limit, quoted = false) {
+  const pattern = new RegExp(opening, 'gi'), endOf = tagEnds(html, limit, quoted);
+  for (let match; (match = pattern.exec(html));) {
+    const start = pattern.lastIndex, end = endOf(start);
+    if (end >= 0) { yield [start, end]; pattern.lastIndex = end + 1; }
   }
 }
-// The first <title> whose </title> follows within 2000 characters; the closing marker is shared the same way.
+const metaTag = '<meta\\b', metaLimit = 4096;
+// The first <title> whose </title> follows within 2000 characters. Each title tag reuses the </title> found last
+// while it is still ahead, so a page of title tags that are never closed costs one pass, not one per tag.
 function titleText(html) {
   const ending = /<\/title>/gi; let end = -1;
-  for (const [, close] of tags(html, '<title', Infinity)) {
+  for (const [, close] of tags(html, '<title(?=[\\s/>])', Infinity, true)) {
     if (end <= close) { ending.lastIndex = close + 1; end = ending.exec(html)?.index ?? -1; }
     if (end < 0) return '';
     if (end - close - 1 <= 2000) return html.slice(close + 1, end);
@@ -134,7 +142,7 @@ function titleText(html) {
   return '';
 }
 function meta(html, name) {
-  for (const [start, close] of tags(html, '<meta\\b', 4096, true)) {
+  for (const [start, close] of tags(html, metaTag, metaLimit, true)) {
     const attributes = {};
     // A name without a value still consumes its whole run, so a long run is not retried from every character.
     for (const attr of html.slice(start, close).matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
@@ -143,6 +151,39 @@ function meta(html, name) {
     if ([attributes.property, attributes.name].some(key => String(key).toLowerCase() === name)) return entities(attributes.content || '');
   }
   return '';
+}
+// Comments and script, style and textarea elements never supply the title or image. As in a browser, an unclosed one
+// hides the rest of the page; a script, style or textarea start tag that never gets its '>' starts nothing. A name
+// counts only before ASCII whitespace, '/' or '>', so <script-widget> is an ordinary element. A meta tag is kept whole,
+// ending where meta() ends it, so a marker inside one of its quoted values starts nothing. Every search resumes from
+// the last one, so the pass stays linear.
+function withoutNonMetadata(html) {
+  const opener = new RegExp(`(${metaTag})|<(?:(!--)|(script|style|textarea)(?=[\\t\\n\\f\\r />]))`, 'gi');
+  const metaEnd = tagEnds(html, metaLimit, true), found = new Map();
+  // The first match of `source` at or after `from`; the last match is reused while it is still ahead.
+  const next = (source, from) => {
+    let last = found.get(source);
+    if (!last || (last.index >= 0 && last.index < from)) {
+      const pattern = new RegExp(source, 'gi'); pattern.lastIndex = from; const match = pattern.exec(html);
+      found.set(source, last = match ? {index: match.index, end: match.index + match[0].length} : {index: -1});
+    }
+    return last;
+  };
+  let kept = '', from = 0;
+  for (let match; (match = opener.exec(html));) {
+    const body = opener.lastIndex; let stop;
+    if (match[1]) { const end = metaEnd(body); if (end >= 0) opener.lastIndex = end + 1; continue; }
+    if (match[2]) {
+      // <!--> and <!---> are empty comments; any other comment ends at the first --> or --!>.
+      if (html[body] === '>') stop = body + 1; else if (html.startsWith('->', body)) stop = body + 2;
+      else stop = next('--!?>', body).end ?? html.length;
+    } else {
+      const tag = next('>', body); if (tag.index < 0) continue;
+      stop = next(`</${match[3].toLowerCase()}[\\t\\n\\f\\r ]*>`, tag.end).end ?? html.length;
+    }
+    kept += html.slice(from, match.index); from = opener.lastIndex = stop;
+  }
+  return kept + html.slice(from);
 }
 async function linkMetadata(input, fetcher = metadataFetch) {
   metadataGuard(new URL(input));
@@ -156,7 +197,7 @@ async function linkMetadata(input, fetcher = metadataFetch) {
     return {title: prefix(String(data.title || '').trim(), 500)||url.hostname, author: prefix(String(data.author_name || '').trim(), 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
   }
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
-  const html = decodeHTML(response.bytes, response.type);
+  const html = withoutNonMetadata(decodeHTML(response.bytes, response.type));
   // Collapse layout whitespace only in display text; og:image stays a URL.
   const title = collapse(meta(html, 'og:title')) || collapse(meta(html, 'twitter:title')) || collapse(entities(titleText(html).replace(/<[^>]*>/g, ''))) || url.hostname;
   // Take the first image the thumbnail fetch would not refuse outright, so an HTTP secure_url does not hide a valid og:image.
