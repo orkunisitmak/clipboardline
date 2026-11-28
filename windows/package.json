@@ -10,6 +10,7 @@
     "start": "electron .",
     "test": "node --test --test-concurrency=1 tests/*.test.cjs",
     "test:electron": "node tests/electron-smoke.cjs",
+    "test:library-keyboard": "node tests/library-keyboard-browser.cjs",
     "dist": "electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
