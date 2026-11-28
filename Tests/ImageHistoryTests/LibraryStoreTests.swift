@@ -316,6 +316,18 @@ import XCTest
         try library.restore([item.id]); try library.prune(); XCTAssertNil(try library.item(item.id)?.deletedAt)
         f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(item.id)?.deletedAt != nil)
     }
+    func testRecapturedLinkMovesToFrontWithAnUnchangedClock() throws {
+        let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
+        let urlA = URL(string: "https://example.com/a")!, urlB = URL(string: "https://example.com/b")!, urlC = URL(string: "https://example.com/c")!
+        let a = try library.captureLink(urlA), b = try library.captureLink(urlB)
+        XCTAssertEqual(try library.shelfItems(.link).map(\.id), [b.id, a.id])
+        // Recopying A on the exact same clock tick must move A ahead of B, and a new link C must stay ahead of A.
+        let again = try library.captureLink(urlA)
+        XCTAssertEqual(again.id, a.id)
+        XCTAssertEqual(try library.shelfItems(.link).map(\.id), [a.id, b.id])
+        let c = try library.captureLink(urlC)
+        XCTAssertEqual(try library.shelfItems(.link).map(\.id), [c.id, a.id, b.id])
+    }
     func testUndoTakeDownDoesNotHangATextOrLinkTwiceAfterItWasCopiedAgain() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let text = try XCTUnwrap(library.captureText("Hang once")), link = try library.captureLink(URL(string: "https://example.com/hang-once")!)
