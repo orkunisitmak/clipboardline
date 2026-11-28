@@ -15,7 +15,7 @@
   "dependencies": {
     "@tesseract.js-data/eng": "1.0.0",
     "@tesseract.js-data/tur": "1.0.0",
-    "onnxruntime-web": "1.30.0",
+    "onnxruntime-web": "1.31.1",
     "tesseract.js": "7.0.0"
   },
   "devDependencies": {
