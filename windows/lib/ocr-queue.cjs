@@ -37,4 +37,3 @@ function createOcrQueue(options){
  return {queue,queueOCR:id=>queue.enqueue(id)};
 }
 module.exports={OcrQueue,createOcrQueue};
-
