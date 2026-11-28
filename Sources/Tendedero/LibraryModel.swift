@@ -403,8 +403,8 @@ import Combine
     func favorite() {
         guard flushEdits(), !selectionInTrash else { return }
         let targets = actionIDs, pinning = !((try? store.allPinned(targets)) ?? true)
-        // Pinning saves a recent copy and unpinning leaves Pinned, so the selection would vanish: move it to the neighbour, as Move to Trash does.
-        let leaves = (query.scope == .recent && pinning) || (query.scope == .favorites && !pinning)
+        // Pinning saves a recent copy and unpinning leaves a Pinned-only view, so the selection would vanish: move it to the neighbour, as Move to Trash does.
+        let leaves = (query.scope == .recent && pinning) || (showingPinnedOnly && !pinning)
         if leaves, !targets.isEmpty { pendingKeyboardSelection = (neighbour(excluding: Set(targets)), query) }
         do { try store.toggleFavorite(targets) } catch { pendingKeyboardSelection = nil; notice = error.localizedDescription }
     }
