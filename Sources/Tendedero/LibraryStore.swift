@@ -841,13 +841,16 @@ extension String {
         if record.kind == .link, let normalized = record.normalizedURL {
             return try !db.rows("SELECT 1 FROM items WHERE normalized=? AND kind='link' AND deleted IS NULL AND shelf=1 AND id<>?", [.text(normalized)] + id).isEmpty
         }
-        guard record.kind == .text, let text = record.text else { return false }
+        guard record.createdAsNote != true, record.kind == .text, let text = record.text else { return false }
         let key = TextIdentity.key(text)
         // A rollback app can edit text while this app stays open; repair the index after another connection writes, as captureText does.
         let observed = try db.rows("PRAGMA data_version").first?["data_version"]?.number
         if observed != textIdentityDataVersion { try db.transaction { try repairTextIdentity() }; textIdentityDataVersion = observed }
         for row in try db.rows("SELECT i.id FROM text_identity t JOIN items i ON i.id=t.item WHERE t.digest=? AND i.kind='text' AND i.deleted IS NULL AND i.shelf=1 AND i.id<>?", [.blob(Self.textDigest(text))] + id) {
-            if let other = row["id"]?.string.flatMap(UUID.init(uuidString:)), let candidate = try item(other)?.text, TextIdentity.key(candidate).utf8.elementsEqual(key.utf8) { return true }
+            if let other = row["id"]?.string.flatMap(UUID.init(uuidString:)),
+               let candidate = try item(other), candidate.createdAsNote != true,
+               let candidateText = candidate.text,
+               TextIdentity.key(candidateText).utf8.elementsEqual(key.utf8) { return true }
         }
         return false
     }
